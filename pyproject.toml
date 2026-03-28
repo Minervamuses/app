@@ -1,0 +1,25 @@
+[project]
+name = "kms"
+version = "0.1.0"
+description = "Multi-layer RAG knowledge management system for research labs"
+requires-python = ">=3.12"
+dependencies = [
+    "tiktoken>=0.9.0",
+    "langchain>=0.3.0",
+    "langchain-chroma>=0.2.0",
+    "langchain-ollama>=0.3.0",
+    "chromadb>=1.0.0",
+    "openai>=1.0.0",
+]
+
+[tool.poetry]
+packages = [{include = "kms"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+]
