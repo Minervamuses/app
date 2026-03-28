@@ -22,6 +22,9 @@ class KMSConfig:
     # Embedding
     embed_model: str = "bge-m3"
 
+    # LLM
+    llm_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+
     # Retrieval
     default_k: int = 10
 

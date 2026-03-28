@@ -5,13 +5,14 @@ import time
 
 from openai import OpenAI, RateLimitError
 
+from kms.config import KMSConfig
 from kms.llm.base import BaseLLM
 
 
 class OpenRouterLLM(BaseLLM):
     """LLM provider via OpenRouter API."""
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str | None = None, config: KMSConfig | None = None):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set")
@@ -19,7 +20,8 @@ class OpenRouterLLM(BaseLLM):
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
         )
-        self.model = model_name
+        config = config or KMSConfig()
+        self.model = model_name or config.llm_model
 
     def invoke(
         self,
