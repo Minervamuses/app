@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "kms"
+version = "0.1.0"
+description = "Multi-layer RAG knowledge management system for research labs"
+authors = ["Minervamuses"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+
+tiktoken = "^0.12.0"
+chromadb = "^1.5.0"
+langchain = "^1.2.0"
+langchain-core = "^1.2.0"
+langchain-chroma = "^1.1.0"
+langchain-ollama = "^1.0.0"
+openai = "^2.30.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
