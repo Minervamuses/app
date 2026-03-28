@@ -1,6 +1,7 @@
 """Ingest a project repo into the KMS."""
 
 import argparse
+import json
 from pathlib import Path
 
 from kms.chunker.token import TokenChunker
@@ -8,6 +9,7 @@ from kms.config import KMSConfig
 from kms.store.chroma_store import ChromaStore
 from kms.store.document_store import DocumentStore
 from kms.store.json_store import JSONStore
+from kms.tagger.llm_tagger import LLMTagger
 
 # File extensions to ingest as text
 TEXT_EXTENSIONS = {
@@ -50,44 +52,65 @@ def _should_ingest(path: Path) -> bool:
     """Check if a file should be ingested."""
     if path.suffix.lower() in TEXT_EXTENSIONS:
         return True
-    # Also ingest extensionless files that look like text configs
     if path.name in {"Makefile", "Dockerfile", "Procfile", ".gitignore", ".env.example"}:
         return True
     return False
 
 
-def _make_pid(file_path: Path, repo_root: Path) -> str:
-    """Create a pid from the file's relative path."""
-    rel = file_path.relative_to(repo_root)
-    return str(rel).replace("/", "--").replace("\\", "--").lower()
-
-
-def ingest_file(
-    file_path: Path,
-    pid: str,
-    chunker: TokenChunker,
-    store: DocumentStore,
-) -> int:
-    """Ingest a single file. Returns chunk count."""
+def _get_file_preview(path: Path) -> str:
+    """Get the first non-empty line of a file."""
     try:
-        text = file_path.read_text(encoding="utf-8")
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    return stripped[:120]
+        return ""
     except (UnicodeDecodeError, PermissionError):
-        return 0
+        return ""
 
-    if not text.strip():
-        return 0
 
-    docs = chunker.chunk(text, pid)
-    if docs:
-        store.add(docs)
-    return len(docs)
+def _collect_folders(root: Path) -> dict[str, list[Path]]:
+    """Group ingestable files by their parent directory."""
+    folders: dict[str, list[Path]] = {}
+    for file_path in sorted(root.rglob("*")):
+        if not file_path.is_file():
+            continue
+        parts = file_path.relative_to(root).parts
+        if any(part in SKIP_DIRS for part in parts):
+            continue
+        if not _should_ingest(file_path):
+            continue
+        folder_rel = str(file_path.parent.relative_to(root))
+        if folder_rel == ".":
+            folder_rel = ""
+        folders.setdefault(folder_rel, []).append(file_path)
+    return folders
+
+
+def _tag_folders(folders: dict[str, list[Path]], root: Path, config: KMSConfig) -> dict[str, list[str]]:
+    """Use LLM to tag each folder with hierarchical labels."""
+    tagger = LLMTagger(config)
+    folder_tags: dict[str, list[str]] = {}
+
+    print(f"Tagging {len(folders)} folders...")
+    for folder_rel, files in sorted(folders.items()):
+        file_names = [f.name for f in files]
+        file_previews = {f.name: _get_file_preview(f) for f in files[:10]}
+
+        folder_display = folder_rel or "(root)"
+        tags = tagger.tag(folder_rel or "(project root)", file_names, file_previews)
+        folder_tags[folder_rel] = tags
+        print(f"  {folder_display} -> {tags}")
+
+    return folder_tags
 
 
 def ingest_repo(
     repo_root: str | None = None,
     config: KMSConfig | None = None,
 ) -> tuple[int, int]:
-    """Ingest all text files in the parent repo, excluding app/.
+    """Ingest all text files in the parent repo with LLM-assigned layer tags.
 
     Args:
         repo_root: Path to repo root. Defaults to parent of app/.
@@ -102,6 +125,18 @@ def ingest_repo(
     if not root.is_dir():
         raise FileNotFoundError(f"Repo root not found: {root}")
 
+    # Phase 1: Collect and tag folders
+    folders = _collect_folders(root)
+    folder_tags = _tag_folders(folders, root, config)
+
+    # Save tags for inspection
+    tags_path = Path(config.persist_dir) / "folder_tags.json"
+    tags_path.parent.mkdir(parents=True, exist_ok=True)
+    with tags_path.open("w", encoding="utf-8") as f:
+        json.dump(folder_tags, f, ensure_ascii=False, indent=2)
+    print(f"\nFolder tags saved to {tags_path}")
+
+    # Phase 2: Chunk and store with enriched metadata
     chunker = TokenChunker(config)
     chroma = ChromaStore(config.raw_collection, config)
     json_store = JSONStore(config.raw_json_path())
@@ -110,24 +145,39 @@ def ingest_repo(
     files_ingested = 0
     total_chunks = 0
 
-    for file_path in sorted(root.rglob("*")):
-        if not file_path.is_file():
-            continue
+    print(f"\nIngesting files...")
+    for folder_rel, files in sorted(folders.items()):
+        tags = folder_tags.get(folder_rel, [])
+        for file_path in files:
+            try:
+                text = file_path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
 
-        # Skip files inside excluded directories
-        parts = file_path.relative_to(root).parts
-        if any(part in SKIP_DIRS for part in parts):
-            continue
+            if not text.strip():
+                continue
 
-        if not _should_ingest(file_path):
-            continue
+            rel_path = str(file_path.relative_to(root))
+            docs = chunker.chunk(text, rel_path)
 
-        pid = _make_pid(file_path, root)
-        count = ingest_file(file_path, pid, chunker, store)
-        if count > 0:
-            files_ingested += 1
-            total_chunks += count
-            print(f"  {pid} ({count} chunks)")
+            # Enrich metadata with layer tags and file info
+            for doc in docs:
+                doc.metadata["file_path"] = rel_path
+                doc.metadata["file_type"] = file_path.suffix.lower()
+                doc.metadata["folder"] = folder_rel
+                doc.metadata["tags"] = tags
+                if len(tags) >= 1:
+                    doc.metadata["layer_1"] = tags[0]
+                if len(tags) >= 2:
+                    doc.metadata["layer_2"] = tags[1]
+                if len(tags) >= 3:
+                    doc.metadata["layer_3"] = tags[2]
+
+            if docs:
+                store.add(docs)
+                files_ingested += 1
+                total_chunks += len(docs)
+                print(f"  {rel_path} ({len(docs)} chunks)")
 
     return files_ingested, total_chunks
 
@@ -137,7 +187,7 @@ def ingest_single(
     pid: str | None = None,
     config: KMSConfig | None = None,
 ) -> tuple[str, int]:
-    """Ingest a single file.
+    """Ingest a single file (no LLM tagging).
 
     Args:
         file_path: Path to the source file.
@@ -160,8 +210,18 @@ def ingest_single(
     json_store = JSONStore(config.raw_json_path())
     store = DocumentStore(chroma, json_store)
 
-    count = ingest_file(path, pid_val, chunker, store)
-    return pid_val, count
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, PermissionError):
+        return pid_val, 0
+
+    if not text.strip():
+        return pid_val, 0
+
+    docs = chunker.chunk(text, pid_val)
+    if docs:
+        store.add(docs)
+    return pid_val, len(docs)
 
 
 def main():
@@ -183,7 +243,7 @@ def main():
         pid, count = ingest_single(args.target, pid=args.pid)
         print(f"ingested pid={pid}, chunks={count}")
     else:
-        print(f"Ingesting repo...")
+        print("Ingesting repo...")
         files, chunks = ingest_repo(repo_root=args.repo)
         print(f"\nDone: {files} files, {chunks} chunks")
 

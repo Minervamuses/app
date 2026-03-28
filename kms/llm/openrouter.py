@@ -30,8 +30,8 @@ class OpenRouterLLM(BaseLLM):
         temperature: float | None = None,
     ) -> str:
         """Send a prompt to the LLM and return the response."""
-        max_retries = 5
-        delay = 5.0
+        max_retries = 10
+        delay = 10.0
         last_err: Exception | None = None
 
         for _attempt in range(max_retries):
