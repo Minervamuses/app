@@ -1,6 +1,6 @@
 """Vector retriever — semantic similarity search via ChromaDB."""
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from kms.retriever.base import BaseRetriever
 from kms.store.chroma_store import ChromaStore

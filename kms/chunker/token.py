@@ -1,7 +1,7 @@
 """Token-based chunker — GraphRAG-style sliding window over tokens."""
 
 import tiktoken
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from kms.chunker.base import BaseChunker
 from kms.config import KMSConfig

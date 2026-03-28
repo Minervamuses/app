@@ -1,7 +1,7 @@
 """Abstract base class for chunkers."""
 
 from abc import ABC, abstractmethod
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 
 class BaseChunker(ABC):
