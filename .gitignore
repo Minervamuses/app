@@ -8,3 +8,15 @@ build/
 store/
 *.sqlite3
 poetry.lock
+
+# Agent / AI tool configs
+CLAUDE.md
+AGENTS.md
+.claude/
+.opencode/
+.cursor/
+.cursorrules
+.github/copilot-instructions.md
+
+# Windows zone identifier
+*:Zone.Identifier
