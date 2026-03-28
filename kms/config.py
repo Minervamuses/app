@@ -1,6 +1,10 @@
 """Central configuration for the KMS pipeline."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
+
+# Resolve store path relative to app/ directory (parent of kms/)
+_APP_DIR = Path(__file__).resolve().parents[1]
 
 
 @dataclass
@@ -8,7 +12,7 @@ class KMSConfig:
     """Central configuration for the KMS pipeline."""
 
     # Storage
-    persist_dir: str = "./store"
+    persist_dir: str = str(_APP_DIR / "store")
 
     # Chunking
     chunk_size: int = 1200
