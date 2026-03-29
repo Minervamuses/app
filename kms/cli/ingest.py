@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from kms.chunker.token import TokenChunker
@@ -10,6 +11,50 @@ from kms.store.chroma_store import ChromaStore
 from kms.store.document_store import DocumentStore
 from kms.store.json_store import JSONStore
 from kms.tagger.llm_tagger import LLMTagger
+
+# Regex for YYYYMMDD date folders (e.g. Research_notes/20260306/)
+_DATE_RE = re.compile(r"(\d{4})(\d{2})(\d{2})")
+
+# Map file suffixes / path patterns to a purpose label
+_PURPOSE_MAP = [
+    (lambda p: "/test" in str(p).lower() or p.name.startswith("test_"), "test"),
+    (lambda p: p.suffix.lower() in {".md", ".txt", ".rst"} and "research_notes" in str(p).lower(), "research-log"),
+    (lambda p: p.suffix.lower() in {".md", ".txt", ".rst"}, "documentation"),
+    (lambda p: p.name in {"Makefile", "Dockerfile", "docker-compose.yaml", "docker-compose.yml",
+                          ".gitignore", ".env.example"} or p.suffix.lower() in {".toml", ".yml", ".yaml", ".ini", ".cfg", ".conf"}, "config"),
+    (lambda p: p.suffix.lower() in {".sql", ".pck", ".pkb", ".pks", ".plsql"}, "legacy-reference"),
+    (lambda p: p.suffix.lower() in {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".c", ".cpp"}, "implementation"),
+]
+
+
+def _extract_date(rel_path: str) -> str:
+    """Extract YYYY-MM-DD date from path if a YYYYMMDD folder exists."""
+    for part in Path(rel_path).parts:
+        m = _DATE_RE.fullmatch(part)
+        if m:
+            return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    return ""
+
+
+def _extract_module(rel_path: str) -> str:
+    """Extract top-level directory as module name."""
+    parts = Path(rel_path).parts
+    return parts[0] if parts else ""
+
+
+def _extract_submodule(rel_path: str) -> str:
+    """Extract second-level directory as submodule name."""
+    parts = Path(rel_path).parts
+    return parts[1] if len(parts) > 1 else ""
+
+
+def _extract_purpose(file_path: Path, rel_path: str) -> str:
+    """Classify file purpose from its path and extension."""
+    for matcher, label in _PURPOSE_MAP:
+        if matcher(file_path):
+            return label
+    return "other"
+
 
 # File extensions to ingest as text
 TEXT_EXTENSIONS = {
@@ -160,18 +205,22 @@ def ingest_repo(
             rel_path = str(file_path.relative_to(root))
             docs = chunker.chunk(text, rel_path)
 
-            # Enrich metadata with layer tags and file info
+            # Enrich metadata
+            date = _extract_date(rel_path)
+            module = _extract_module(rel_path)
+            submodule = _extract_submodule(rel_path)
+            purpose = _extract_purpose(file_path, rel_path)
+
             for doc in docs:
                 doc.metadata["file_path"] = rel_path
                 doc.metadata["file_type"] = file_path.suffix.lower()
                 doc.metadata["folder"] = folder_rel
                 doc.metadata["tags"] = tags
-                if len(tags) >= 1:
-                    doc.metadata["layer_1"] = tags[0]
-                if len(tags) >= 2:
-                    doc.metadata["layer_2"] = tags[1]
-                if len(tags) >= 3:
-                    doc.metadata["layer_3"] = tags[2]
+                doc.metadata["module"] = module
+                doc.metadata["submodule"] = submodule
+                doc.metadata["purpose"] = purpose
+                if date:
+                    doc.metadata["date"] = date
 
             if docs:
                 store.add(docs)
