@@ -1,16 +1,20 @@
 """OpenRouter LLM provider."""
 
+import json
 import os
 import time
 
 from openai import OpenAI, RateLimitError
 
 from kms.config import KMSConfig
-from kms.llm.base import BaseLLM
+from kms.llm.base import BaseLLM, ChatResponse, ToolCall
 
 
 class OpenRouterLLM(BaseLLM):
     """LLM provider via OpenRouter API."""
+
+    MAX_RETRIES = 10
+    INITIAL_DELAY = 10.0
 
     def __init__(self, model_name: str | None = None, config: KMSConfig | None = None):
         api_key = os.getenv("OPENROUTER_API_KEY")
@@ -23,6 +27,21 @@ class OpenRouterLLM(BaseLLM):
         config = config or KMSConfig()
         self.model = model_name or config.llm_model
 
+    def _call_with_retry(self, **kwargs):
+        """Call the OpenAI API with exponential backoff on rate limits."""
+        delay = self.INITIAL_DELAY
+        last_err: Exception | None = None
+
+        for _attempt in range(self.MAX_RETRIES):
+            try:
+                return self.client.chat.completions.create(**kwargs)
+            except RateLimitError as e:
+                last_err = e
+                time.sleep(delay)
+                delay *= 2
+
+        raise RuntimeError(f"Failed after {self.MAX_RETRIES} retries") from last_err
+
     def invoke(
         self,
         prompt: str,
@@ -30,25 +49,49 @@ class OpenRouterLLM(BaseLLM):
         temperature: float | None = None,
     ) -> str:
         """Send a prompt to the LLM and return the response."""
-        max_retries = 10
-        delay = 10.0
-        last_err: Exception | None = None
+        kwargs: dict = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
 
-        for _attempt in range(max_retries):
-            try:
-                kwargs: dict = {
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                }
-                if temperature is not None:
-                    kwargs["temperature"] = temperature
+        resp = self._call_with_retry(**kwargs)
+        return resp.choices[0].message.content.strip()
 
-                resp = self.client.chat.completions.create(**kwargs)
-                return resp.choices[0].message.content.strip()
-            except RateLimitError as e:
-                last_err = e
-                time.sleep(delay)
-                delay *= 2
+    def chat(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+    ) -> ChatResponse:
+        """Send a multi-turn conversation with optional tool definitions."""
+        kwargs: dict = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if tools:
+            kwargs["tools"] = tools
 
-        raise RuntimeError(f"Failed after {max_retries} retries") from last_err
+        resp = self._call_with_retry(**kwargs)
+        msg = resp.choices[0].message
+
+        # Parse tool calls if present
+        tool_calls = []
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                tool_calls.append(ToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments),
+                ))
+
+        return ChatResponse(
+            content=msg.content,
+            tool_calls=tool_calls,
+        )
