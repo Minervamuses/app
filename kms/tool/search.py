@@ -9,6 +9,11 @@ from kms.store.chroma_store import ChromaStore
 from kms.tool.base import BaseTool
 
 
+def _date_to_int(date_str: str) -> int:
+    """Convert 'YYYY-MM-DD' to YYYYMMDD integer for ChromaDB numeric filtering."""
+    return int(date_str.replace("-", ""))
+
+
 class SearchTool(BaseTool):
     """Search the knowledge base by semantic similarity with metadata filters."""
 
@@ -148,9 +153,10 @@ class SearchTool(BaseTool):
         if "purpose" in arguments:
             conditions.append({"purpose": {"$eq": arguments["purpose"]}})
         if "date_from" in arguments:
-            conditions.append({"date": {"$gte": arguments["date_from"]}})
+            # Convert YYYY-MM-DD string to YYYYMMDD int for ChromaDB numeric comparison
+            conditions.append({"date": {"$gte": _date_to_int(arguments["date_from"])}})
         if "date_to" in arguments:
-            conditions.append({"date": {"$lte": arguments["date_to"]}})
+            conditions.append({"date": {"$lte": _date_to_int(arguments["date_to"])}})
         if "tags" in arguments:
             # Tags are stored as string repr of list, use $contains for substring match
             tag_conditions = [{"tags": {"$contains": t}} for t in arguments["tags"]]

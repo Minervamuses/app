@@ -27,13 +27,17 @@ _PURPOSE_MAP = [
 ]
 
 
-def _extract_date(rel_path: str) -> str:
-    """Extract YYYY-MM-DD date from path if a YYYYMMDD folder exists."""
+def _extract_date(rel_path: str) -> int:
+    """Extract date as YYYYMMDD integer from path if a date folder exists.
+
+    Returns 0 if no date folder is found.  Stored as int so ChromaDB
+    supports $gte/$lte range queries.
+    """
     for part in Path(rel_path).parts:
         m = _DATE_RE.fullmatch(part)
         if m:
-            return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-    return ""
+            return int(f"{m.group(1)}{m.group(2)}{m.group(3)}")
+    return 0
 
 
 def _extract_module(rel_path: str) -> str:
@@ -219,8 +223,7 @@ def ingest_repo(
                 doc.metadata["module"] = module
                 doc.metadata["submodule"] = submodule
                 doc.metadata["purpose"] = purpose
-                if date:
-                    doc.metadata["date"] = date
+                doc.metadata["date"] = date
 
             if docs:
                 store.add(docs)
