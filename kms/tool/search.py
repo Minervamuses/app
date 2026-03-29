@@ -152,8 +152,8 @@ class SearchTool(BaseTool):
         if "date_to" in arguments:
             conditions.append({"date": {"$lte": arguments["date_to"]}})
         if "tags" in arguments:
-            # Match any of the requested tags
-            tag_conditions = [{"tags": {"$eq": t}} for t in arguments["tags"]]
+            # Tags are stored as string repr of list, use $contains for substring match
+            tag_conditions = [{"tags": {"$contains": t}} for t in arguments["tags"]]
             if len(tag_conditions) == 1:
                 conditions.append(tag_conditions[0])
             elif tag_conditions:
