@@ -1,197 +1,115 @@
-"""Multi-turn conversational query interface for the KMS."""
+"""Multi-turn conversational query interface for the KMS.
+
+Uses tool-calling: the LLM decides when and how to search the knowledge
+base, can search multiple times per turn, and synthesizes answers from
+retrieved results.
+
+Usage:
+    python -m kms.cli.chat
+    python -m kms.cli.chat --max-turns 10
+    python -m kms.cli.chat -h
+"""
 
 import argparse
 import json
 
 from kms.config import KMSConfig
 from kms.llm.openrouter import OpenRouterLLM
-from kms.retriever.vector import VectorRetriever
-from kms.store.chroma_store import ChromaStore
+from kms.tool.search import SearchTool
 
-SYSTEM_PROMPT = """You are a research lab knowledge assistant. You help users find information across multiple research projects.
+SYSTEM_PROMPT = """You are a research lab knowledge assistant. You help users find information across multiple research projects stored in a knowledge base.
 
-You have access to a knowledge base with documents tagged by layers:
-- layer_1: broad category (e.g. research-notes, source-code, web-frontend, documentation, tests, data, legacy-code)
-- layer_2: topic (e.g. scoring, mutation, database, progress-reports, setup)
-- layer_3: specific subtopic
+When answering questions:
+1. If the user's question is vague, ask clarifying questions first — do NOT search blindly.
+2. When you have enough context, use the search tool to find relevant information.
+3. You can search multiple times with different queries or filters to gather comprehensive results.
+4. After searching, synthesize a clear answer based on the results. Cite file paths when relevant.
+5. If results aren't helpful, try different search terms or broader/narrower filters.
 
-Available layer_1 values: {layer_1_values}
+Do NOT make up information. Only answer based on search results or your conversation with the user."""
 
-Your job:
-1. When the user's question is vague, ask clarifying questions to narrow down what they want (topic? time range? code or notes?)
-2. When you have enough context, respond with a SEARCH command so the system can retrieve relevant chunks
-3. After receiving search results, synthesize a clear answer for the user
-
-To trigger a search, output a JSON block like this:
-```search
-{{"query": "the search query", "filters": {{"layer_1": "research-notes"}}, "k": 5}}
-```
-
-Filter keys can be: layer_1, layer_2, layer_3, file_type (e.g. ".py", ".md")
-Only include filters you are confident about. Omit filters to search broadly.
-
-After search results are provided, answer the user's question based on them. If the results aren't helpful, you can search again with different terms or filters.
-
-Do NOT make up information. Only answer based on search results."""
+# Max tool calls per turn to prevent runaway loops
+DEFAULT_MAX_TOOL_ROUNDS = 5
 
 
 class ChatSession:
-    """Multi-turn conversational retrieval session."""
+    """Multi-turn conversational retrieval session with tool calling."""
 
-    def __init__(self, config: KMSConfig):
+    def __init__(self, config: KMSConfig, max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS):
         self.config = config
         self.llm = OpenRouterLLM(config=config)
-        self.chroma = ChromaStore(config.raw_collection, config)
-        self.retriever = VectorRetriever(self.chroma)
-        self.history: list[dict[str, str]] = []
-
-        # Load available layer values for the system prompt
-        self.layer_1_values = self._get_layer_values()
-
-    def _get_layer_values(self) -> str:
-        """Get unique layer_1 values from stored tags."""
-        tags_path = self.config.persist_dir + "/folder_tags.json"
-        try:
-            with open(tags_path, "r") as f:
-                folder_tags = json.load(f)
-            layer_1s = set()
-            for tags in folder_tags.values():
-                if tags:
-                    layer_1s.add(tags[0])
-            return ", ".join(sorted(layer_1s))
-        except FileNotFoundError:
-            return "(unknown — no folder_tags.json found)"
-
-    def _build_messages(self, user_input: str) -> list[dict]:
-        """Build message list for LLM call."""
-        system = SYSTEM_PROMPT.format(layer_1_values=self.layer_1_values)
-        messages = [{"role": "system", "content": system}]
-        messages.extend(self.history)
-        messages.append({"role": "user", "content": user_input})
-        return messages
-
-    def _search(self, search_cmd: dict) -> str:
-        """Execute a search and return formatted results."""
-        query = search_cmd.get("query", "")
-        filters = search_cmd.get("filters", {})
-        k = search_cmd.get("k", 5)
-
-        # Use pid_filter if layer filters are specified
-        # For now, retrieve broadly and filter by metadata
-        docs = self.retriever.retrieve(query, k=k * 3)
-
-        # Apply metadata filters
-        filtered = []
-        for doc in docs:
-            match = True
-            for key, val in filters.items():
-                if doc.metadata.get(key) != val:
-                    match = False
-                    break
-            if match:
-                filtered.append(doc)
-
-        results = filtered[:k]
-
-        if not results:
-            return "No results found for this search."
-
-        parts = []
-        for i, doc in enumerate(results, 1):
-            pid = doc.metadata.get("pid", "?")
-            chunk_id = doc.metadata.get("chunk_id", "?")
-            tags = doc.metadata.get("tags", [])
-            preview = doc.page_content[:500]
-            parts.append(f"[Result {i}] {pid} (chunk {chunk_id}, tags: {tags})\n{preview}")
-
-        return "\n\n".join(parts)
-
-    def _parse_search_command(self, text: str) -> dict | None:
-        """Extract search command from LLM response."""
-        marker = "```search"
-        if marker not in text:
-            return None
-
-        try:
-            start = text.index(marker) + len(marker)
-            end = text.index("```", start)
-            json_str = text[start:end].strip()
-            return json.loads(json_str)
-        except (ValueError, json.JSONDecodeError):
-            return None
+        self.search_tool = SearchTool(config)
+        self.tools = [self.search_tool.schema()]
+        self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self.max_tool_rounds = max_tool_rounds
 
     def turn(self, user_input: str) -> str:
-        """Process one conversation turn. Returns the final response to show the user."""
-        self.history.append({"role": "user", "content": user_input})
+        """Process one conversation turn. Returns the final text response."""
+        self.messages.append({"role": "user", "content": user_input})
 
-        # Call LLM
-        messages = self._build_messages("")
-        # Remove the duplicate — last history entry is the user message
-        messages = messages[:-1]
-
-        response = self.llm.invoke(
-            prompt=self._format_messages(messages),
-            max_tokens=1024,
-            temperature=0.3,
-        )
-
-        # Check if LLM wants to search
-        search_cmd = self._parse_search_command(response)
-
-        if search_cmd:
-            # Execute search
-            search_results = self._search(search_cmd)
-
-            # Show user what we're searching for
-            filters_str = json.dumps(search_cmd.get("filters", {}))
-            print(f"  [searching: \"{search_cmd['query']}\" filters={filters_str}]")
-
-            # Feed results back to LLM for synthesis
-            self.history.append({"role": "assistant", "content": response})
-            self.history.append({"role": "user", "content": f"Search results:\n\n{search_results}"})
-
-            messages = self._format_messages(
-                [{"role": "system", "content": SYSTEM_PROMPT.format(layer_1_values=self.layer_1_values)}]
-                + self.history
-            )
-
-            final_response = self.llm.invoke(
-                prompt=messages,
+        for _round in range(self.max_tool_rounds):
+            response = self.llm.chat(
+                messages=self.messages,
+                tools=self.tools,
                 max_tokens=1024,
                 temperature=0.3,
             )
 
-            self.history.append({"role": "assistant", "content": final_response})
-            return final_response
-        else:
-            # LLM is asking a clarifying question or responding directly
-            self.history.append({"role": "assistant", "content": response})
-            return response
+            if not response.has_tool_calls:
+                # LLM is done — either a clarifying question or final answer
+                text = response.content or ""
+                self.messages.append({"role": "assistant", "content": text})
+                return text
 
-    def _format_messages(self, messages: list[dict]) -> str:
-        """Format messages into a single prompt string for the LLM."""
-        parts = []
-        for msg in messages:
-            role = msg["role"]
-            content = msg["content"]
-            if role == "system":
-                parts.append(f"[System]\n{content}")
-            elif role == "user":
-                parts.append(f"[User]\n{content}")
-            elif role == "assistant":
-                parts.append(f"[Assistant]\n{content}")
-        return "\n\n".join(parts)
+            # Build assistant message with tool calls for the message history
+            assistant_msg: dict = {"role": "assistant", "content": response.content or ""}
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments),
+                    },
+                }
+                for tc in response.tool_calls
+            ]
+            self.messages.append(assistant_msg)
+
+            # Execute each tool call and add results
+            for tc in response.tool_calls:
+                print(f"  [search: \"{tc.arguments.get('query', '')}\"", end="")
+                filters = {k: v for k, v in tc.arguments.items() if k not in ("query", "k")}
+                if filters:
+                    print(f" filters={json.dumps(filters)}", end="")
+                print("]")
+
+                result = self.search_tool.execute(tc.arguments)
+                self.messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                })
+
+        # Safety fallback — shouldn't normally reach here
+        return "(Reached maximum search rounds. Please try a more specific question.)"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Conversational query interface for the KMS.")
-    parser.add_argument("-k", type=int, default=5, help="Max results per search (default: 5)")
+    parser = argparse.ArgumentParser(
+        description="Conversational query interface for the KMS. "
+        "Uses tool-calling to let the LLM search the knowledge base."
+    )
+    parser.add_argument(
+        "--max-turns", type=int, default=DEFAULT_MAX_TOOL_ROUNDS,
+        help=f"Max search rounds per turn (default: {DEFAULT_MAX_TOOL_ROUNDS})",
+    )
     args = parser.parse_args()
 
     config = KMSConfig()
-    session = ChatSession(config)
+    session = ChatSession(config, max_tool_rounds=args.max_turns)
 
-    print("KMS Chat. Type 'q' to quit.\n")
+    print("KMS Chat (tool-calling mode). Type 'q' to quit.\n")
 
     while True:
         try:
