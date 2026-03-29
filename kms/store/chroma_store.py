@@ -49,9 +49,23 @@ class ChromaStore(BaseStore):
         if results["ids"]:
             self._store.delete(ids=results["ids"])
 
-    def as_retriever(self, k: int, pid_filter: list[str] | None = None):
-        """Return a LangChain-compatible retriever for vector search."""
-        search_kwargs = {"k": k}
-        if pid_filter:
+    def as_retriever(
+        self,
+        k: int,
+        pid_filter: list[str] | None = None,
+        where: dict | None = None,
+    ):
+        """Return a LangChain-compatible retriever for vector search.
+
+        Args:
+            k: Number of results.
+            pid_filter: Legacy pid filter (shortcut for where={"pid": {"$in": ...}}).
+            where: Arbitrary ChromaDB where clause for metadata filtering.
+                   Supports $eq, $ne, $gt, $gte, $lt, $lte, $in, $and, $or.
+        """
+        search_kwargs: dict = {"k": k}
+        if where:
+            search_kwargs["filter"] = where
+        elif pid_filter:
             search_kwargs["filter"] = {"pid": {"$in": pid_filter}}
         return self._store.as_retriever(search_kwargs=search_kwargs)

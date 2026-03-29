@@ -17,7 +17,8 @@ class VectorRetriever(BaseRetriever):
         query: str,
         k: int,
         pid_filter: list[str] | None = None,
+        where: dict | None = None,
     ) -> list[Document]:
         """Retrieve top-k documents by semantic similarity."""
-        retriever = self.chroma_store.as_retriever(k, pid_filter)
+        retriever = self.chroma_store.as_retriever(k, pid_filter, where)
         return retriever.invoke(query)
