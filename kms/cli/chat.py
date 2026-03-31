@@ -15,18 +15,29 @@ import json
 
 from kms.config import KMSConfig
 from kms.llm.openrouter import OpenRouterLLM
+from kms.tool.context import ContextTool
+from kms.tool.explore import ExploreTool
 from kms.tool.search import SearchTool
 
-SYSTEM_PROMPT = """You are a research lab knowledge assistant. You help users find information across multiple research projects stored in a knowledge base.
+SYSTEM_PROMPT = """You are a knowledge base assistant. You help users find information stored in an indexed repository.
 
-When answering questions:
-1. If the user's question is vague, ask clarifying questions first — do NOT search blindly.
-2. When you have enough context, use the search tool to find relevant information.
-3. You can search multiple times with different queries or collections to gather comprehensive results.
-4. After 1-3 searches, STOP searching and synthesize an answer from what you have. Do not keep searching for perfection.
-5. If results aren't helpful, try ONE more search with different terms, then answer with what you have.
+You have three tools:
 
-Do NOT make up information. Only answer based on search results or your conversation with the user."""
+1. **explore** — Discover what's in the knowledge base: categories, tags, date ranges, folder summaries.
+   Use this first when you're unsure what the knowledge base contains.
+
+2. **search** — Semantic search with optional filters (category, file_type, date range).
+   Use specific queries. You can search multiple times with different queries or filters.
+
+3. **get_context** — Expand a search result by retrieving surrounding chunks from the same file.
+   Use when a result looks relevant but you need more context.
+
+Workflow:
+- If the question is vague or you don't know the structure of the knowledge base, start with explore.
+- Use search with appropriate filters based on what you learned from explore.
+- Use get_context if you need to see more around a promising result.
+- After 1-3 searches, synthesize your answer. Don't keep searching for perfection.
+- Do NOT make up information. Only answer based on tool results or your conversation with the user."""
 
 # Max tool calls per turn to prevent runaway loops
 DEFAULT_MAX_TOOL_ROUNDS = 8
@@ -39,7 +50,14 @@ class ChatSession:
         self.config = config
         self.llm = OpenRouterLLM(config=config)
         self.search_tool = SearchTool(config)
-        self.tools = [self.search_tool.schema()]
+        self.explore_tool = ExploreTool(config)
+        self.context_tool = ContextTool(config)
+        self._tool_map = {
+            "search": self.search_tool,
+            "explore": self.explore_tool,
+            "get_context": self.context_tool,
+        }
+        self.tools = [t.schema() for t in self._tool_map.values()]
         self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
         self.max_tool_rounds = max_tool_rounds
 
@@ -78,13 +96,13 @@ class ChatSession:
 
             # Execute each tool call and add results
             for tc in response.tool_calls:
-                print(f"  [search: \"{tc.arguments.get('query', '')}\"", end="")
-                filters = {k: v for k, v in tc.arguments.items() if k not in ("query", "k")}
-                if filters:
-                    print(f" filters={json.dumps(filters)}", end="")
-                print("]")
+                print(f"  [{tc.name}: {json.dumps(tc.arguments, ensure_ascii=False)}]")
 
-                result = self.search_tool.execute(tc.arguments)
+                tool = self._tool_map.get(tc.name)
+                if tool is None:
+                    result = f"Unknown tool: {tc.name}"
+                else:
+                    result = tool.execute(tc.arguments)
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
