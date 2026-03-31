@@ -15,7 +15,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from kms.chunker.token import TokenChunker
-from kms.config import KMSConfig, GENERAL_COLLECTION, SUMMARY_COLLECTION
+from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
 from kms.store.chroma_store import ChromaStore
 from kms.store.document_store import DocumentStore
 from kms.store.json_store import JSONStore
@@ -74,29 +74,6 @@ def _extract_date(rel_path: str) -> int:
     return 0
 
 
-def _sanitize_collection_name(name: str) -> str:
-    """Sanitize a directory name into a valid ChromaDB collection name.
-
-    ChromaDB requires: 3-63 chars, starts/ends with alphanumeric,
-    only alphanumeric, underscores, hyphens.
-    """
-    sanitized = name.lower().replace(" ", "_").replace("-", "_")
-    # Strip non-alphanumeric/underscore chars
-    sanitized = "".join(c for c in sanitized if c.isalnum() or c == "_")
-    # Ensure minimum length
-    if len(sanitized) < 3:
-        sanitized = sanitized + "___"[:3 - len(sanitized)]
-    return sanitized[:63]
-
-
-def _get_collection(rel_path: str) -> str:
-    """Map a file's relative path to its collection — top-level dir name."""
-    parts = Path(rel_path).parts
-    if not parts or len(parts) == 1:
-        return GENERAL_COLLECTION
-    return _sanitize_collection_name(parts[0])
-
-
 def _should_ingest(path: Path) -> bool:
     """Check if a file should be ingested."""
     if path.suffix.lower() in TEXT_EXTENSIONS:
@@ -152,13 +129,11 @@ def _tag_folders(folders: dict[str, list[Path]], root: Path, config: KMSConfig) 
 
         folder_display = folder_rel or "(root)"
         meta = tagger.tag(folder_rel or "(project root)", file_names, file_previews)
-        collection = _get_collection(folder_rel + "/dummy") if folder_rel else GENERAL_COLLECTION
         folder_meta[folder_rel] = {
             "tags": meta.tags,
             "summary": meta.summary,
-            "collection": collection,
         }
-        print(f"  [{collection}] {folder_display} -> {meta.tags}")
+        print(f"  {folder_display} -> {meta.tags}")
         print(f"    summary: {meta.summary}")
 
     return folder_meta
@@ -168,12 +143,12 @@ def ingest_repo(
     repo_root: str | None = None,
     config: KMSConfig | None = None,
 ) -> tuple[int, int]:
-    """Ingest all text files in the parent repo into per-directory collections.
+    """Ingest all text files into a single 'knowledge' collection with rich metadata.
 
     Creates:
-    - One ChromaDB collection per top-level directory (auto-discovered)
-    - A summaries collection with one entry per folder
+    - One ChromaDB collection ('knowledge') with category/tags metadata per chunk
     - A JSON backup of all chunks
+    - folder_meta.json with per-folder tags and summaries
 
     Args:
         repo_root: Path to repo root. Defaults to parent of app/.
@@ -192,50 +167,27 @@ def ingest_repo(
     folders = _collect_folders(root)
     folder_meta = _tag_folders(folders, root, config)
 
-    # Save folder metadata for inspection
+    # Save folder metadata
     meta_path = Path(config.persist_dir) / "folder_meta.json"
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     with meta_path.open("w", encoding="utf-8") as f:
         json.dump(folder_meta, f, ensure_ascii=False, indent=2)
     print(f"\nFolder metadata saved to {meta_path}")
 
-    # Phase 2: Ingest folder summaries into summaries collection
-    summary_store = ChromaStore(SUMMARY_COLLECTION, config)
-    summary_docs = []
-    for folder_rel, meta in folder_meta.items():
-        summary = meta["summary"]
-        if not summary:
-            continue
-        date = _extract_date(folder_rel)
-        collection = _get_collection(folder_rel + "/dummy")
-        summary_docs.append(Document(
-            page_content=summary,
-            metadata={
-                "folder": folder_rel or "(root)",
-                "tags": str(meta["tags"]),
-                "collection": collection,
-                "date": date,
-                "pid": f"summary:{folder_rel or 'root'}",
-                "chunk_id": 0,
-            },
-        ))
-    summary_store.add(summary_docs)
-    print(f"Ingested {len(summary_docs)} folder summaries into '{SUMMARY_COLLECTION}' collection")
-
-    # Phase 3: Chunk files and store into per-module collections
+    # Phase 2: Chunk + write to single collection
     chunker = TokenChunker(config)
     json_store = JSONStore(config.raw_json_path())
-
-    # Cache ChromaStore instances per collection
-    collection_stores: dict[str, ChromaStore] = {}
+    chroma = ChromaStore(KNOWLEDGE_COLLECTION, config)
 
     files_ingested = 0
     total_chunks = 0
-    collection_counts: dict[str, int] = {}
 
     print(f"\nIngesting files...")
     for folder_rel, files in sorted(folders.items()):
         meta = folder_meta.get(folder_rel, {"tags": [], "summary": ""})
+        tags = meta.get("tags", [])
+        category = tags[0] if tags else "unknown"
+
         for file_path in files:
             try:
                 text = file_path.read_text(encoding="utf-8")
@@ -246,33 +198,24 @@ def ingest_repo(
                 continue
 
             rel_path = str(file_path.relative_to(root))
-            collection_name = _get_collection(rel_path)
             date = _extract_date(rel_path)
-
-            # Get or create ChromaStore for this collection
-            if collection_name not in collection_stores:
-                collection_stores[collection_name] = ChromaStore(collection_name, config)
 
             docs = chunker.chunk(text, rel_path)
 
-            # Enrich metadata (minimal — no more purpose/module/tags as filters)
             for doc in docs:
                 doc.metadata["file_path"] = rel_path
                 doc.metadata["file_type"] = file_path.suffix.lower()
                 doc.metadata["folder"] = folder_rel
                 doc.metadata["date"] = date
+                doc.metadata["category"] = category
+                doc.metadata["tags"] = json.dumps(tags)
 
             if docs:
-                collection_stores[collection_name].add(docs)
+                chroma.add(docs)
                 json_store.add(docs)
                 files_ingested += 1
                 total_chunks += len(docs)
-                collection_counts[collection_name] = collection_counts.get(collection_name, 0) + len(docs)
-                print(f"  [{collection_name}] {rel_path} ({len(docs)} chunks)")
-
-    print(f"\nCollection breakdown:")
-    for name, count in sorted(collection_counts.items()):
-        print(f"  {name}: {count} chunks")
+                print(f"  [{category}] {rel_path} ({len(docs)} chunks)")
 
     return files_ingested, total_chunks
 
@@ -282,7 +225,7 @@ def ingest_single(
     pid: str | None = None,
     config: KMSConfig | None = None,
 ) -> tuple[str, int]:
-    """Ingest a single file into its module's collection (no LLM tagging).
+    """Ingest a single file into the knowledge collection (no LLM tagging).
 
     Args:
         file_path: Path to the source file.
@@ -301,7 +244,7 @@ def ingest_single(
     pid_val = pid or path.stem.lower().replace(" ", "-").replace("_", "-")
 
     chunker = TokenChunker(config)
-    chroma = ChromaStore(config.raw_collection, config)
+    chroma = ChromaStore(KNOWLEDGE_COLLECTION, config)
     json_store = JSONStore(config.raw_json_path())
     store = DocumentStore(chroma, json_store)
 
