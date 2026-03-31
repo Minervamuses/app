@@ -1,9 +1,8 @@
-"""Search tool — semantic search across multiple collections."""
+"""Search tool — semantic search with metadata filtering."""
 
 import json
-from pathlib import Path
 
-from kms.config import KMSConfig, SUMMARY_COLLECTION
+from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
 from kms.retriever.vector import VectorRetriever
 from kms.store.chroma_store import ChromaStore
 from kms.tool.base import BaseTool
@@ -14,57 +13,28 @@ def _date_to_int(date_str: str) -> int:
     return int(date_str.replace("-", ""))
 
 
-def _load_collections(config: KMSConfig) -> list[str]:
-    """Discover available collections from folder_meta.json.
-
-    Collections are auto-generated from top-level directory names during
-    ingest, so this adapts to any repo structure.
-    """
-    meta_path = Path(config.persist_dir) / "folder_meta.json"
-    collections = {SUMMARY_COLLECTION}
-    try:
-        with open(meta_path) as f:
-            folder_meta = json.load(f)
-        for entry in folder_meta.values():
-            col = entry.get("collection")
-            if col:
-                collections.add(col)
-    except FileNotFoundError:
-        pass
-    return sorted(collections)
-
-
 class SearchTool(BaseTool):
-    """Search the knowledge base across multiple collections."""
+    """Semantic search across the knowledge base with metadata filters."""
 
     def __init__(self, config: KMSConfig):
         self.config = config
-        self._retrievers: dict[str, VectorRetriever] = {}
-        self._collections = _load_collections(config)
-
-    def _get_retriever(self, collection: str) -> VectorRetriever:
-        """Get or create a retriever for a collection."""
-        if collection not in self._retrievers:
-            store = ChromaStore(collection, self.config)
-            self._retrievers[collection] = VectorRetriever(store)
-        return self._retrievers[collection]
+        store = ChromaStore(KNOWLEDGE_COLLECTION, config)
+        self._retriever = VectorRetriever(store)
 
     def schema(self) -> dict:
         """Return the OpenAI-format tool definition."""
-        content_collections = [c for c in self._collections if c != SUMMARY_COLLECTION]
-        collection_list = "\n".join(f"- {c}" for c in self._collections)
-
         return {
             "type": "function",
             "function": {
                 "name": "search",
                 "description": (
-                    "Search the lab knowledge base by semantic similarity. "
-                    "Pick which collection(s) to search. "
-                    "You can call this tool multiple times with different queries or collections.\n\n"
-                    f"Available collections:\n{collection_list}\n\n"
-                    f"'{SUMMARY_COLLECTION}' contains folder-level overviews of the entire project. "
-                    "Other collections correspond to top-level directories in the repo."
+                    "Search the knowledge base by semantic similarity with optional metadata filters. "
+                    "Use the 'explore' tool first if you're unsure what categories or tags are available.\n\n"
+                    "Tips:\n"
+                    "- Use 'category' to narrow by broad type (e.g. 'source-code', 'research-notes')\n"
+                    "- Use 'date_from'/'date_to' for time-bounded queries\n"
+                    "- Use 'file_type' to filter by extension (e.g. '.py', '.md')\n"
+                    "- You can call this multiple times with different queries or filters"
                 ),
                 "parameters": {
                     "type": "object",
@@ -73,28 +43,25 @@ class SearchTool(BaseTool):
                             "type": "string",
                             "description": "Semantic search query — describe what you're looking for.",
                         },
-                        "collections": {
-                            "type": "array",
-                            "items": {
-                                "type": "string",
-                                "enum": self._collections,
-                            },
-                            "description": (
-                                "Which collection(s) to search. "
-                                "Defaults to all content collections (excluding summaries)."
-                            ),
+                        "category": {
+                            "type": "string",
+                            "description": "Filter by category (the broad first-tag, e.g. 'source-code', 'research-notes').",
+                        },
+                        "file_type": {
+                            "type": "string",
+                            "description": "Filter by file extension (e.g. '.py', '.md', '.sql').",
                         },
                         "date_from": {
                             "type": "string",
-                            "description": "Start date inclusive (YYYY-MM-DD). For time-bounded queries.",
+                            "description": "Start date inclusive (YYYY-MM-DD).",
                         },
                         "date_to": {
                             "type": "string",
-                            "description": "End date inclusive (YYYY-MM-DD). For time-bounded queries.",
+                            "description": "End date inclusive (YYYY-MM-DD).",
                         },
                         "k": {
                             "type": "integer",
-                            "description": "Number of results to return per collection (default 5).",
+                            "description": "Number of results (default 5).",
                         },
                     },
                     "required": ["query"],
@@ -103,45 +70,41 @@ class SearchTool(BaseTool):
         }
 
     def execute(self, arguments: dict) -> str:
-        """Execute the search across selected collections."""
+        """Execute the search with optional metadata filters."""
         query = arguments["query"]
         k = arguments.get("k", 5)
-        collections = arguments.get("collections", None)
+        where = self._build_where(arguments)
 
-        # Default: search all content collections (not summaries)
-        if not collections:
-            collections = [c for c in self._collections if c != SUMMARY_COLLECTION]
+        docs = self._retriever.retrieve(query, k=k, where=where)
 
-        # Build date filter if specified
-        where = self._build_date_where(arguments)
-
-        all_parts = []
-        for collection in collections:
-            if collection not in self._collections:
-                continue
-            retriever = self._get_retriever(collection)
-            docs = retriever.retrieve(query, k=k, where=where)
-
-            if not docs:
-                continue
-
-            for i, doc in enumerate(docs, 1):
-                meta = doc.metadata
-                header = f"[{collection}/{i}] {meta.get('file_path', meta.get('folder', '?'))}"
-                date = meta.get("date")
-                if date and date != 0:
-                    header += f" (date={date})"
-                preview = doc.page_content[:600]
-                all_parts.append(f"{header}\n{preview}")
-
-        if not all_parts:
+        if not docs:
             return "No results found."
 
-        return "\n\n".join(all_parts)
+        parts = []
+        for i, doc in enumerate(docs, 1):
+            meta = doc.metadata
+            header = f"[{i}] {meta.get('file_path', '?')}"
+            cat = meta.get("category", "?")
+            header += f" (category={cat})"
+            date = meta.get("date")
+            if date and date != 0:
+                header += f" (date={date})"
+            pid = meta.get("pid", "?")
+            chunk_id = meta.get("chunk_id", "?")
+            header += f" [pid={pid}, chunk_id={chunk_id}]"
+            preview = doc.page_content[:600]
+            parts.append(f"{header}\n{preview}")
 
-    def _build_date_where(self, arguments: dict) -> dict | None:
-        """Build a date range where clause if dates are specified."""
+        return "\n\n".join(parts)
+
+    def _build_where(self, arguments: dict) -> dict | None:
+        """Build a ChromaDB where clause from the filter arguments."""
         conditions = []
+
+        if "category" in arguments:
+            conditions.append({"category": {"$eq": arguments["category"]}})
+        if "file_type" in arguments:
+            conditions.append({"file_type": {"$eq": arguments["file_type"]}})
         if "date_from" in arguments:
             conditions.append({"date": {"$gte": _date_to_int(arguments["date_from"])}})
         if "date_to" in arguments:
