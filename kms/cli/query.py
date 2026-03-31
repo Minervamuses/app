@@ -2,7 +2,7 @@
 
 import argparse
 
-from kms.config import KMSConfig
+from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
 from kms.retriever.vector import VectorRetriever
 from kms.store.chroma_store import ChromaStore
 
@@ -23,7 +23,7 @@ def query_once(
         List of dicts with pid, chunk_id, score, and text preview.
     """
     config = config or KMSConfig()
-    chroma = ChromaStore(config.raw_collection, config)
+    chroma = ChromaStore(KNOWLEDGE_COLLECTION, config)
     retriever = VectorRetriever(chroma)
     docs = retriever.retrieve(question, k)
 
@@ -39,7 +39,7 @@ def query_once(
 
 def interactive(config: KMSConfig, k: int = 5) -> None:
     """Run an interactive query loop."""
-    chroma = ChromaStore(config.raw_collection, config)
+    chroma = ChromaStore(KNOWLEDGE_COLLECTION, config)
     retriever = VectorRetriever(chroma)
 
     print(f"KMS Query (k={k}). Type 'q' to quit.\n")
