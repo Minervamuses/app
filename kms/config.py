@@ -6,6 +6,18 @@ from pathlib import Path
 # Resolve store path relative to app/ directory (parent of kms/)
 _APP_DIR = Path(__file__).resolve().parents[1]
 
+# Map top-level directory names to collection names.
+# Directories not listed here go into "general".
+MODULE_TO_COLLECTION: dict[str, str] = {
+    "Research_notes": "research_notes",
+    "pidna2": "source_code",
+    "web": "web",
+    "PiDNA1": "legacy",
+    "docs": "docs",
+}
+
+SUMMARY_COLLECTION = "summaries"
+
 
 @dataclass
 class KMSConfig:
