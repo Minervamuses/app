@@ -6,11 +6,8 @@ from pathlib import Path
 # Resolve store path relative to app/ directory (parent of kms/)
 _APP_DIR = Path(__file__).resolve().parents[1]
 
-# Reserved collection name for folder summaries
-SUMMARY_COLLECTION = "summaries"
-
-# Collection name for root-level files not in any directory
-GENERAL_COLLECTION = "general"
+# Single collection for all knowledge chunks
+KNOWLEDGE_COLLECTION = "knowledge"
 
 
 @dataclass
