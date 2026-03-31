@@ -1,8 +1,9 @@
 """Search tool — semantic search across multiple collections."""
 
 import json
+from pathlib import Path
 
-from kms.config import KMSConfig, MODULE_TO_COLLECTION, SUMMARY_COLLECTION
+from kms.config import KMSConfig, SUMMARY_COLLECTION
 from kms.retriever.vector import VectorRetriever
 from kms.store.chroma_store import ChromaStore
 from kms.tool.base import BaseTool
@@ -13,8 +14,24 @@ def _date_to_int(date_str: str) -> int:
     return int(date_str.replace("-", ""))
 
 
-# All available collections the agent can search
-ALL_COLLECTIONS = [SUMMARY_COLLECTION] + sorted(set(MODULE_TO_COLLECTION.values())) + ["general"]
+def _load_collections(config: KMSConfig) -> list[str]:
+    """Discover available collections from folder_meta.json.
+
+    Collections are auto-generated from top-level directory names during
+    ingest, so this adapts to any repo structure.
+    """
+    meta_path = Path(config.persist_dir) / "folder_meta.json"
+    collections = {SUMMARY_COLLECTION}
+    try:
+        with open(meta_path) as f:
+            folder_meta = json.load(f)
+        for entry in folder_meta.values():
+            col = entry.get("collection")
+            if col:
+                collections.add(col)
+    except FileNotFoundError:
+        pass
+    return sorted(collections)
 
 
 class SearchTool(BaseTool):
@@ -23,6 +40,7 @@ class SearchTool(BaseTool):
     def __init__(self, config: KMSConfig):
         self.config = config
         self._retrievers: dict[str, VectorRetriever] = {}
+        self._collections = _load_collections(config)
 
     def _get_retriever(self, collection: str) -> VectorRetriever:
         """Get or create a retriever for a collection."""
@@ -33,6 +51,9 @@ class SearchTool(BaseTool):
 
     def schema(self) -> dict:
         """Return the OpenAI-format tool definition."""
+        content_collections = [c for c in self._collections if c != SUMMARY_COLLECTION]
+        collection_list = "\n".join(f"- {c}" for c in self._collections)
+
         return {
             "type": "function",
             "function": {
@@ -41,14 +62,9 @@ class SearchTool(BaseTool):
                     "Search the lab knowledge base by semantic similarity. "
                     "Pick which collection(s) to search. "
                     "You can call this tool multiple times with different queries or collections.\n\n"
-                    "Collections:\n"
-                    f"- summaries: folder-level overviews of the entire project ({SUMMARY_COLLECTION})\n"
-                    "- research_notes: research logs, progress reports, investigation notes\n"
-                    "- source_code: core Python implementation (pidna2/)\n"
-                    "- web: frontend (React) and backend (FastAPI)\n"
-                    "- legacy: PiDNA1 PL/SQL reference code\n"
-                    "- docs: documentation, plans, specifications\n"
-                    "- general: root-level files (README, paper, etc.)"
+                    f"Available collections:\n{collection_list}\n\n"
+                    f"'{SUMMARY_COLLECTION}' contains folder-level overviews of the entire project. "
+                    "Other collections correspond to top-level directories in the repo."
                 ),
                 "parameters": {
                     "type": "object",
@@ -61,9 +77,12 @@ class SearchTool(BaseTool):
                             "type": "array",
                             "items": {
                                 "type": "string",
-                                "enum": ALL_COLLECTIONS,
+                                "enum": self._collections,
                             },
-                            "description": "Which collection(s) to search. Defaults to all content collections.",
+                            "description": (
+                                "Which collection(s) to search. "
+                                "Defaults to all content collections (excluding summaries)."
+                            ),
                         },
                         "date_from": {
                             "type": "string",
@@ -91,13 +110,15 @@ class SearchTool(BaseTool):
 
         # Default: search all content collections (not summaries)
         if not collections:
-            collections = [c for c in ALL_COLLECTIONS if c != SUMMARY_COLLECTION]
+            collections = [c for c in self._collections if c != SUMMARY_COLLECTION]
 
         # Build date filter if specified
         where = self._build_date_where(arguments)
 
         all_parts = []
         for collection in collections:
+            if collection not in self._collections:
+                continue
             retriever = self._get_retriever(collection)
             docs = retriever.retrieve(query, k=k, where=where)
 

@@ -15,7 +15,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from kms.chunker.token import TokenChunker
-from kms.config import KMSConfig, MODULE_TO_COLLECTION, SUMMARY_COLLECTION
+from kms.config import KMSConfig, GENERAL_COLLECTION, SUMMARY_COLLECTION
 from kms.store.chroma_store import ChromaStore
 from kms.store.document_store import DocumentStore
 from kms.store.json_store import JSONStore
@@ -74,11 +74,27 @@ def _extract_date(rel_path: str) -> int:
     return 0
 
 
+def _sanitize_collection_name(name: str) -> str:
+    """Sanitize a directory name into a valid ChromaDB collection name.
+
+    ChromaDB requires: 3-63 chars, starts/ends with alphanumeric,
+    only alphanumeric, underscores, hyphens.
+    """
+    sanitized = name.lower().replace(" ", "_").replace("-", "_")
+    # Strip non-alphanumeric/underscore chars
+    sanitized = "".join(c for c in sanitized if c.isalnum() or c == "_")
+    # Ensure minimum length
+    if len(sanitized) < 3:
+        sanitized = sanitized + "___"[:3 - len(sanitized)]
+    return sanitized[:63]
+
+
 def _get_collection(rel_path: str) -> str:
-    """Map a file's relative path to its target collection name."""
+    """Map a file's relative path to its collection — top-level dir name."""
     parts = Path(rel_path).parts
-    module = parts[0] if parts else ""
-    return MODULE_TO_COLLECTION.get(module, "general")
+    if not parts or len(parts) == 1:
+        return GENERAL_COLLECTION
+    return _sanitize_collection_name(parts[0])
 
 
 def _should_ingest(path: Path) -> bool:
@@ -136,8 +152,13 @@ def _tag_folders(folders: dict[str, list[Path]], root: Path, config: KMSConfig) 
 
         folder_display = folder_rel or "(root)"
         meta = tagger.tag(folder_rel or "(project root)", file_names, file_previews)
-        folder_meta[folder_rel] = {"tags": meta.tags, "summary": meta.summary}
-        print(f"  {folder_display} -> {meta.tags}")
+        collection = _get_collection(folder_rel + "/dummy") if folder_rel else GENERAL_COLLECTION
+        folder_meta[folder_rel] = {
+            "tags": meta.tags,
+            "summary": meta.summary,
+            "collection": collection,
+        }
+        print(f"  [{collection}] {folder_display} -> {meta.tags}")
         print(f"    summary: {meta.summary}")
 
     return folder_meta
@@ -147,10 +168,10 @@ def ingest_repo(
     repo_root: str | None = None,
     config: KMSConfig | None = None,
 ) -> tuple[int, int]:
-    """Ingest all text files in the parent repo into per-module collections.
+    """Ingest all text files in the parent repo into per-directory collections.
 
     Creates:
-    - One ChromaDB collection per module (research_notes, source_code, etc.)
+    - One ChromaDB collection per top-level directory (auto-discovered)
     - A summaries collection with one entry per folder
     - A JSON backup of all chunks
 
