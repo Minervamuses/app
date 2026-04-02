@@ -4,10 +4,34 @@ import json
 import os
 import time
 
+from langchain_openai import ChatOpenAI
 from openai import OpenAI, RateLimitError
 
 from kms.config import KMSConfig
 from kms.llm.base import BaseLLM, ChatResponse, ToolCall
+
+
+def get_chat_model(config: KMSConfig | None = None) -> ChatOpenAI:
+    """Return a ChatOpenAI pointed at OpenRouter for use with LangGraph.
+
+    Args:
+        config: KMS configuration. Uses default if None.
+
+    Returns:
+        ChatOpenAI instance configured for OpenRouter.
+    """
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+    config = config or KMSConfig()
+    return ChatOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+        model=config.llm_model,
+        temperature=0.3,
+        max_tokens=1024,
+        max_retries=10,
+    )
 
 
 class OpenRouterLLM(BaseLLM):
