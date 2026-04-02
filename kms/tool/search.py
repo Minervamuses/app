@@ -1,11 +1,11 @@
 """Search tool — semantic search with metadata filtering."""
 
-import json
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 
 from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
 from kms.retriever.vector import VectorRetriever
 from kms.store.chroma_store import ChromaStore
-from kms.tool.base import BaseTool
 
 
 def _date_to_int(date_str: str) -> int:
@@ -13,69 +13,62 @@ def _date_to_int(date_str: str) -> int:
     return int(date_str.replace("-", ""))
 
 
-class SearchTool(BaseTool):
-    """Semantic search across the knowledge base with metadata filters."""
+def _build_where(
+    category: str | None,
+    file_type: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> dict | None:
+    """Build a ChromaDB where clause from filter arguments."""
+    conditions = []
+    if category:
+        conditions.append({"category": {"$eq": category}})
+    if file_type:
+        conditions.append({"file_type": {"$eq": file_type}})
+    if date_from:
+        conditions.append({"date": {"$gte": _date_to_int(date_from)}})
+    if date_to:
+        conditions.append({"date": {"$lte": _date_to_int(date_to)}})
 
-    def __init__(self, config: KMSConfig):
-        self.config = config
-        store = ChromaStore(KNOWLEDGE_COLLECTION, config)
-        self._retriever = VectorRetriever(store)
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"$and": conditions}
 
-    def schema(self) -> dict:
-        """Return the OpenAI-format tool definition."""
-        return {
-            "type": "function",
-            "function": {
-                "name": "search",
-                "description": (
-                    "Search the knowledge base by semantic similarity with optional metadata filters. "
-                    "Use the 'explore' tool first if you're unsure what categories or tags are available.\n\n"
-                    "Tips:\n"
-                    "- Use 'category' to narrow by broad type (e.g. 'source-code', 'research-notes')\n"
-                    "- Use 'date_from'/'date_to' for time-bounded queries\n"
-                    "- Use 'file_type' to filter by extension (e.g. '.py', '.md')\n"
-                    "- You can call this multiple times with different queries or filters"
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Semantic search query — describe what you're looking for.",
-                        },
-                        "category": {
-                            "type": "string",
-                            "description": "Filter by category (the broad first-tag, e.g. 'source-code', 'research-notes').",
-                        },
-                        "file_type": {
-                            "type": "string",
-                            "description": "Filter by file extension (e.g. '.py', '.md', '.sql').",
-                        },
-                        "date_from": {
-                            "type": "string",
-                            "description": "Start date inclusive (YYYY-MM-DD).",
-                        },
-                        "date_to": {
-                            "type": "string",
-                            "description": "End date inclusive (YYYY-MM-DD).",
-                        },
-                        "k": {
-                            "type": "integer",
-                            "description": "Number of results (default 5).",
-                        },
-                    },
-                    "required": ["query"],
-                },
-            },
-        }
 
-    def execute(self, arguments: dict) -> str:
-        """Execute the search with optional metadata filters."""
-        query = arguments["query"]
-        k = arguments.get("k", 5)
-        where = self._build_where(arguments)
+class SearchInput(BaseModel):
+    """Input schema for the search tool."""
 
-        docs = self._retriever.retrieve(query, k=k, where=where)
+    query: str = Field(description="Semantic search query — describe what you're looking for.")
+    category: str | None = Field(None, description="Filter by category (e.g. 'source-code', 'research-notes').")
+    file_type: str | None = Field(None, description="Filter by file extension (e.g. '.py', '.md', '.sql').")
+    date_from: str | None = Field(None, description="Start date inclusive (YYYY-MM-DD).")
+    date_to: str | None = Field(None, description="End date inclusive (YYYY-MM-DD).")
+    k: int = Field(5, description="Number of results (default 5).")
+
+
+def create_search_tool(config: KMSConfig):
+    """Create a LangChain search tool bound to the given config."""
+    store = ChromaStore(KNOWLEDGE_COLLECTION, config)
+    retriever = VectorRetriever(store)
+
+    @tool("search", args_schema=SearchInput)
+    def search(
+        query: str,
+        category: str | None = None,
+        file_type: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        k: int = 5,
+    ) -> str:
+        """Search the knowledge base by semantic similarity with optional metadata filters.
+
+        Use the 'explore' tool first if you're unsure what categories or tags are available.
+        You can call this multiple times with different queries or filters.
+        """
+        where = _build_where(category, file_type, date_from, date_to)
+        docs = retriever.retrieve(query, k=k, where=where)
 
         if not docs:
             return "No results found."
@@ -97,21 +90,4 @@ class SearchTool(BaseTool):
 
         return "\n\n".join(parts)
 
-    def _build_where(self, arguments: dict) -> dict | None:
-        """Build a ChromaDB where clause from the filter arguments."""
-        conditions = []
-
-        if "category" in arguments:
-            conditions.append({"category": {"$eq": arguments["category"]}})
-        if "file_type" in arguments:
-            conditions.append({"file_type": {"$eq": arguments["file_type"]}})
-        if "date_from" in arguments:
-            conditions.append({"date": {"$gte": _date_to_int(arguments["date_from"])}})
-        if "date_to" in arguments:
-            conditions.append({"date": {"$lte": _date_to_int(arguments["date_to"])}})
-
-        if not conditions:
-            return None
-        if len(conditions) == 1:
-            return conditions[0]
-        return {"$and": conditions}
+    return search
