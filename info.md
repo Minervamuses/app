@@ -6,6 +6,8 @@
 
 ## Pipeline 1：Ingest（建索引）
 
+![Ingest Pipeline](ingest_pipeline.svg)
+
 這條 pipeline 只跑一次（或資料更新時重跑），目的是把 repo 裡的檔案變成可搜尋的 chunks。流程四步：
 
 1. `_collect_folders()` 掃描 repo，按 `TEXT_EXTENSIONS` 過濾、按 `SKIP_DIRS` 排除，把檔案按**所在目錄**分組。
@@ -21,6 +23,8 @@
 ---
 
 ## Pipeline 2：Chat（Agent 查詢）
+
+![Agent Loop](agent_loop.svg)
 
 整個 `graph.py` 只定義了兩個 node 和一條 conditional edge，LangGraph 會自動處理循環：
 
