@@ -1,6 +1,5 @@
 """OpenRouter LLM provider."""
 
-import json
 import os
 import time
 
@@ -8,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from openai import OpenAI, RateLimitError
 
 from kms.config import KMSConfig
-from kms.llm.base import BaseLLM, ChatResponse, ToolCall
+from kms.llm.base import BaseLLM
 
 
 def get_chat_model(config: KMSConfig | None = None) -> ChatOpenAI:
@@ -35,7 +34,7 @@ def get_chat_model(config: KMSConfig | None = None) -> ChatOpenAI:
 
 
 class OpenRouterLLM(BaseLLM):
-    """LLM provider via OpenRouter API."""
+    """LLM provider via OpenRouter API. Used by LLMTagger for simple prompt→text calls."""
 
     MAX_RETRIES = 10
     INITIAL_DELAY = 10.0
@@ -83,39 +82,3 @@ class OpenRouterLLM(BaseLLM):
 
         resp = self._call_with_retry(**kwargs)
         return resp.choices[0].message.content.strip()
-
-    def chat(
-        self,
-        messages: list[dict],
-        tools: list[dict] | None = None,
-        max_tokens: int = 1024,
-        temperature: float | None = None,
-    ) -> ChatResponse:
-        """Send a multi-turn conversation with optional tool definitions."""
-        kwargs: dict = {
-            "model": self.model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-        }
-        if temperature is not None:
-            kwargs["temperature"] = temperature
-        if tools:
-            kwargs["tools"] = tools
-
-        resp = self._call_with_retry(**kwargs)
-        msg = resp.choices[0].message
-
-        # Parse tool calls if present
-        tool_calls = []
-        if msg.tool_calls:
-            for tc in msg.tool_calls:
-                tool_calls.append(ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    arguments=json.loads(tc.function.arguments),
-                ))
-
-        return ChatResponse(
-            content=msg.content,
-            tool_calls=tool_calls,
-        )
