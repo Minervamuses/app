@@ -1,8 +1,8 @@
 """Multi-turn conversational query interface for the KMS.
 
-Uses tool-calling: the LLM decides when and how to search the knowledge
-base, can search multiple times per turn, and synthesizes answers from
-retrieved results.
+Uses LangGraph to orchestrate tool-calling: the LLM decides when and how
+to search the knowledge base, can search multiple times per turn, and
+synthesizes answers from retrieved results.
 
 Usage:
     python -m kms.cli.chat
@@ -11,13 +11,11 @@ Usage:
 """
 
 import argparse
-import json
 
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from kms.agent.graph import build_graph
 from kms.config import KMSConfig
-from kms.llm.openrouter import OpenRouterLLM
-from kms.tool.context import ContextTool
-from kms.tool.explore import ExploreTool
-from kms.tool.search import SearchTool
 
 SYSTEM_PROMPT = """You are a knowledge base assistant. You help users find information stored in an indexed repository.
 
@@ -39,95 +37,49 @@ Workflow:
 - After 1-3 searches, synthesize your answer. Don't keep searching for perfection.
 - Do NOT make up information. Only answer based on tool results or your conversation with the user."""
 
-# Max tool calls per turn to prevent runaway loops
-DEFAULT_MAX_TOOL_ROUNDS = 8
+DEFAULT_RECURSION_LIMIT = 16
 
 
 class ChatSession:
-    """Multi-turn conversational retrieval session with tool calling."""
+    """Multi-turn conversational retrieval session backed by LangGraph."""
 
-    def __init__(self, config: KMSConfig, max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS):
-        self.config = config
-        self.llm = OpenRouterLLM(config=config)
-        self.search_tool = SearchTool(config)
-        self.explore_tool = ExploreTool(config)
-        self.context_tool = ContextTool(config)
-        self._tool_map = {
-            "search": self.search_tool,
-            "explore": self.explore_tool,
-            "get_context": self.context_tool,
+    def __init__(self, config: KMSConfig, recursion_limit: int = DEFAULT_RECURSION_LIMIT):
+        self.graph = build_graph(config)
+        self.recursion_limit = recursion_limit
+        self.run_config = {
+            "configurable": {"thread_id": "default"},
+            "recursion_limit": recursion_limit,
         }
-        self.tools = [t.schema() for t in self._tool_map.values()]
-        self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        self.max_tool_rounds = max_tool_rounds
+        # Seed conversation with system prompt
+        self.graph.invoke(
+            {"messages": [SystemMessage(content=SYSTEM_PROMPT)]},
+            config=self.run_config,
+        )
 
     def turn(self, user_input: str) -> str:
         """Process one conversation turn. Returns the final text response."""
-        self.messages.append({"role": "user", "content": user_input})
-
-        for _round in range(self.max_tool_rounds):
-            response = self.llm.chat(
-                messages=self.messages,
-                tools=self.tools,
-                max_tokens=1024,
-                temperature=0.3,
-            )
-
-            if not response.has_tool_calls:
-                # LLM is done — either a clarifying question or final answer
-                text = response.content or ""
-                self.messages.append({"role": "assistant", "content": text})
-                return text
-
-            # Build assistant message with tool calls for the message history
-            assistant_msg: dict = {"role": "assistant", "content": response.content or ""}
-            assistant_msg["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": json.dumps(tc.arguments),
-                    },
-                }
-                for tc in response.tool_calls
-            ]
-            self.messages.append(assistant_msg)
-
-            # Execute each tool call and add results
-            for tc in response.tool_calls:
-                print(f"  [{tc.name}: {json.dumps(tc.arguments, ensure_ascii=False)}]")
-
-                tool = self._tool_map.get(tc.name)
-                if tool is None:
-                    result = f"Unknown tool: {tc.name}"
-                else:
-                    result = tool.execute(tc.arguments)
-                self.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result,
-                })
-
-        # Safety fallback — shouldn't normally reach here
-        return "(Reached maximum search rounds. Please try a more specific question.)"
+        result = self.graph.invoke(
+            {"messages": [HumanMessage(content=user_input)]},
+            config=self.run_config,
+        )
+        return result["messages"][-1].content or ""
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Conversational query interface for the KMS. "
-        "Uses tool-calling to let the LLM search the knowledge base."
+        "Uses LangGraph with tool-calling to let the LLM search the knowledge base."
     )
     parser.add_argument(
-        "--max-turns", type=int, default=DEFAULT_MAX_TOOL_ROUNDS,
-        help=f"Max search rounds per turn (default: {DEFAULT_MAX_TOOL_ROUNDS})",
+        "--max-turns", type=int, default=DEFAULT_RECURSION_LIMIT,
+        help=f"Max recursion depth per turn (default: {DEFAULT_RECURSION_LIMIT})",
     )
     args = parser.parse_args()
 
     config = KMSConfig()
-    session = ChatSession(config, max_tool_rounds=args.max_turns)
+    session = ChatSession(config, recursion_limit=args.max_turns)
 
-    print("KMS Chat (tool-calling mode). Type 'q' to quit.\n")
+    print("KMS Chat (LangGraph mode). Type 'q' to quit.\n")
 
     while True:
         try:
