@@ -81,4 +81,5 @@ class OpenRouterLLM(BaseLLM):
             kwargs["temperature"] = temperature
 
         resp = self._call_with_retry(**kwargs)
-        return resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        return content.strip() if content else ""
