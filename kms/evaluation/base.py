@@ -29,7 +29,10 @@ class EvalResult:
         """Return a human-readable summary of the evaluation."""
         lines = [f"=== {self.name} ({self.total} cases) ==="]
         for metric, value in self.scores.items():
-            lines.append(f"  {metric}: {value:.2%}")
+            if metric.endswith("_raw"):
+                lines.append(f"  {metric}: {value:.2f}")
+            else:
+                lines.append(f"  {metric}: {value:.2%}")
         return "\n".join(lines)
 
 
