@@ -13,6 +13,8 @@ import re
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
+from langgraph.errors import GraphRecursionError
+
 from kms.agent.graph import build_graph
 from kms.cli.chat import SYSTEM_PROMPT
 from kms.config import KMSConfig
@@ -160,22 +162,25 @@ class EndToEndEvaluator(BaseEvaluator):
             thread_id = str(uuid.uuid4())
             run_config = {
                 "configurable": {"thread_id": thread_id},
-                "recursion_limit": 16,
+                "recursion_limit": 32,
             }
 
-            result = graph.invoke(
-                {"messages": [
-                    SystemMessage(content=SYSTEM_PROMPT),
-                    HumanMessage(content=case["question"]),
-                ]},
-                config=run_config,
-            )
-
-            # result["messages"] includes all intermediate steps
-            actual_answer = result["messages"][-1].content or ""
+            try:
+                result = graph.invoke(
+                    {"messages": [
+                        SystemMessage(content=SYSTEM_PROMPT),
+                        HumanMessage(content=case["question"]),
+                    ]},
+                    config=run_config,
+                )
+                all_messages = result["messages"]
+                actual_answer = all_messages[-1].content or ""
+            except GraphRecursionError:
+                all_messages = []
+                actual_answer = "(agent hit recursion limit)"
 
             # Chunk hit rate
-            found_chunks = _extract_found_chunks(result["messages"])
+            found_chunks = _extract_found_chunks(all_messages)
             required = case.get("required_chunks", [])
             if required:
                 required_set = {(c["pid"], c["chunk_id"]) for c in required}
