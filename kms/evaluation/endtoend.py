@@ -68,7 +68,8 @@ class EndToEndEvaluator(BaseEvaluator):
 
     def __init__(self, config: KMSConfig | None = None):
         self.config = config or KMSConfig()
-        self._llm = OpenRouterLLM(config=self.config)
+        self._gen_llm = OpenRouterLLM(model_name=self.config.gen_llm_model, config=self.config)
+        self._judge_llm = OpenRouterLLM(model_name=self.config.judge_llm_model, config=self.config)
 
     def generate(self, n: int = 15, output_path: str | None = None) -> list[dict]:
         """Generate synthesis questions from groups of related chunks.
@@ -122,7 +123,7 @@ class EndToEndEvaluator(BaseEvaluator):
             prompt = GENERATE_PROMPT.format(chunk_texts=chunk_texts)
 
             try:
-                response = self._llm.invoke(prompt, max_tokens=500, temperature=0.0)
+                response = self._gen_llm.invoke(prompt, max_tokens=500, temperature=0.0)
                 data = _extract_json(response)
             except (ValueError, json.JSONDecodeError):
                 continue
@@ -198,7 +199,7 @@ class EndToEndEvaluator(BaseEvaluator):
             )
 
             try:
-                judge_response = self._llm.invoke(judge_prompt, max_tokens=200, temperature=0.0)
+                judge_response = self._judge_llm.invoke(judge_prompt, max_tokens=200, temperature=0.0)
                 judge_data = _extract_json(judge_response)
                 score = int(judge_data.get("score", 0))
                 score = max(0, min(3, score))
