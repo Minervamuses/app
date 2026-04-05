@@ -18,9 +18,13 @@ def _build_where(
     file_type: str | None,
     date_from: str | None,
     date_to: str | None,
+    folder_prefix: str | None = None,
 ) -> dict | None:
     """Build a ChromaDB where clause from filter arguments."""
     conditions = []
+    if folder_prefix:
+        prefix = folder_prefix.rstrip("/")
+        conditions.append({"folder": {"$contains": prefix}})
     if category:
         conditions.append({"category": {"$eq": category}})
     if file_type:
@@ -41,6 +45,7 @@ class SearchInput(BaseModel):
     """Input schema for the search tool."""
 
     query: str = Field(description="Semantic search query — describe what you're looking for.")
+    folder_prefix: str | None = Field(None, description="Filter by folder path prefix (e.g. 'Research_notes' or 'pidna2/src'). Matches the folder and all subfolders.")
     category: str | None = Field(None, description="Filter by category (e.g. 'source-code', 'research-notes').")
     file_type: str | None = Field(None, description="Filter by file extension (e.g. '.py', '.md', '.sql').")
     date_from: str | None = Field(None, description="Start date inclusive (YYYY-MM-DD).")
@@ -56,6 +61,7 @@ def create_search_tool(config: KMSConfig):
     @tool("search", args_schema=SearchInput)
     def search(
         query: str,
+        folder_prefix: str | None = None,
         category: str | None = None,
         file_type: str | None = None,
         date_from: str | None = None,
@@ -67,7 +73,7 @@ def create_search_tool(config: KMSConfig):
         Use the 'explore' tool first if you're unsure what categories or tags are available.
         You can call this multiple times with different queries or filters.
         """
-        where = _build_where(category, file_type, date_from, date_to)
+        where = _build_where(category, file_type, date_from, date_to, folder_prefix)
         docs = retriever.retrieve(query, k=k, where=where)
 
         if not docs:
