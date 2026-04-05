@@ -28,6 +28,10 @@ class KMSConfig:
     # LLM
     llm_model: str = "google/gemini-3-flash-preview"
 
+    # Evaluation LLMs
+    gen_llm_model: str = "google/gemini-3.1-pro-preview"
+    judge_llm_model: str = "openai/gpt-5.2"
+
     # Retrieval
     default_k: int = 10
 
