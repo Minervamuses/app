@@ -140,7 +140,7 @@ class BehaviorEvaluator(BaseEvaluator):
             }
 
             # Support both single-turn ("question") and multi-turn ("messages")
-            questions = case.get("messages", [case["question"]])
+            questions = case.get("messages") or [case["question"]]
 
             # First turn with system prompt
             result = graph.invoke(
