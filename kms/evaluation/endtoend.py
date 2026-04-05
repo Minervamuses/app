@@ -179,6 +179,9 @@ class EndToEndEvaluator(BaseEvaluator):
             except GraphRecursionError:
                 all_messages = []
                 actual_answer = "(agent hit recursion limit)"
+            except Exception as exc:
+                all_messages = []
+                actual_answer = f"(agent error: {type(exc).__name__}: {exc})"
 
             # Chunk hit rate
             found_chunks = _extract_found_chunks(all_messages)
