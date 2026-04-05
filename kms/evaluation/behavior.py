@@ -128,6 +128,8 @@ class BehaviorEvaluator(BaseEvaluator):
         coverage_total = 0
         no_tool_correct = 0
         no_tool_total = 0
+        filter_correct = 0
+        filter_total = 0
         details = []
 
         for case in cases:
@@ -141,7 +143,7 @@ class BehaviorEvaluator(BaseEvaluator):
             questions = case.get("messages", [case["question"]])
 
             # First turn with system prompt
-            graph.invoke(
+            result = graph.invoke(
                 {"messages": [
                     SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=questions[0]),
@@ -150,20 +152,19 @@ class BehaviorEvaluator(BaseEvaluator):
             )
             # Subsequent turns in the same thread
             for followup in questions[1:]:
-                graph.invoke(
+                result = graph.invoke(
                     {"messages": [HumanMessage(content=followup)]},
                     config=run_config,
                 )
 
-            # Get full message history across all turns
-            full_state = graph.get_state(run_config)
-            tool_calls = _extract_tool_calls(full_state.values["messages"])
+            # MemorySaver accumulates all messages; last result has full history
+            tool_calls = _extract_tool_calls(result["messages"])
             actual_tools = [tc["name"] for tc in tool_calls]
             actual_args = [tc["args"] for tc in tool_calls]
             actual_count = len(actual_tools)
 
             case_detail = {
-                "question": case["question"],
+                "question": case.get("question") or case.get("messages", [""])[0],
                 "actual_tools": actual_tools,
                 "actual_count": actual_count,
                 "scores": {},
@@ -206,6 +207,8 @@ class BehaviorEvaluator(BaseEvaluator):
                     all(f in args for f in expected_filters)
                     for args in search_args
                 ) if search_args else False
+                filter_total += 1
+                filter_correct += filter_used
                 case_detail["scores"]["filters_used"] = filter_used
 
             details.append(case_detail)
@@ -219,6 +222,8 @@ class BehaviorEvaluator(BaseEvaluator):
         }
         if coverage_total:
             scores["tools_coverage"] = coverage_correct / coverage_total
+        if filter_total:
+            scores["filter_accuracy"] = filter_correct / filter_total
 
         return EvalResult(
             name="Behavior",
