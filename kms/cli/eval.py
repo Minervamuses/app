@@ -1,11 +1,10 @@
-"""Evaluation CLI — run retrieval, behavior, and end-to-end evaluations.
+"""Evaluation CLI — run behavior and end-to-end evaluations.
 
 Usage:
-    python -m kms.cli.eval --suite retrieval --generate 30
     python -m kms.cli.eval --suite behavior
     python -m kms.cli.eval --suite e2e --generate 15
     python -m kms.cli.eval --all --generate 5
-    python -m kms.cli.eval --suite retrieval --cases store/eval/retrieval_cases.json
+    python -m kms.cli.eval --suite e2e --cases store/eval/e2e_cases.json
     python -m kms.cli.eval --all --generate 5 --output store/eval/
     python -m kms.cli.eval -h
 """
@@ -18,9 +17,8 @@ from kms.config import KMSConfig
 from kms.evaluation.base import EvalResult
 from kms.evaluation.behavior import BehaviorEvaluator
 from kms.evaluation.endtoend import EndToEndEvaluator
-from kms.evaluation.retrieval import RetrievalEvaluator
 
-SUITE_NAMES = ("retrieval", "behavior", "e2e")
+SUITE_NAMES = ("behavior", "e2e")
 
 
 def _run_suite(
@@ -32,9 +30,7 @@ def _run_suite(
 ) -> EvalResult:
     """Run a single evaluation suite and return the result."""
 
-    if suite == "retrieval":
-        evaluator = RetrievalEvaluator(config)
-    elif suite == "behavior":
+    if suite == "behavior":
         evaluator = BehaviorEvaluator(config)
     elif suite == "e2e":
         evaluator = EndToEndEvaluator(config)
@@ -81,7 +77,7 @@ def _run_suite(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run KMS evaluation suites: retrieval, behavior, and end-to-end."
+        description="Run KMS evaluation suites: behavior and end-to-end."
     )
     parser.add_argument(
         "--suite", choices=SUITE_NAMES,
@@ -89,11 +85,11 @@ def main():
     )
     parser.add_argument(
         "--all", action="store_true",
-        help="Run all three suites.",
+        help="Run both suites.",
     )
     parser.add_argument(
         "--generate", type=int, metavar="N",
-        help="Generate N test cases (for retrieval and e2e). Behavior always uses built-in cases.",
+        help="Generate N test cases (for e2e). Behavior always uses built-in cases.",
     )
     parser.add_argument(
         "--cases", type=str, metavar="PATH",
@@ -121,7 +117,7 @@ def main():
             suite=suite,
             config=config,
             generate_n=args.generate,
-            cases_path=args.cases if not args.all else None,  # --cases only for single suite
+            cases_path=args.cases if not args.all else None,
             output_dir=args.output,
         )
         results.append(result)
