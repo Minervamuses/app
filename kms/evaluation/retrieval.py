@@ -30,7 +30,7 @@ Content:
 Return a JSON object with:
 1. "question": a natural question (in the language of the content)
 2. "expected_query": the best semantic search query for finding this chunk
-3. "expected_filters": metadata filters that would help narrow results (object with optional keys: category, file_type, date_from, date_to, folder_prefix)
+3. "expected_filters": metadata filters that would help narrow results (object with optional keys: category, file_type, date_from, date_to)
 4. "difficulty": "easy", "medium", or "hard"
 
 Return ONLY the JSON object, no explanation."""
@@ -136,7 +136,6 @@ class RetrievalEvaluator(BaseEvaluator):
                 file_type=filters.get("file_type"),
                 date_from=filters.get("date_from"),
                 date_to=filters.get("date_to"),
-                folder_prefix=filters.get("folder_prefix"),
             )
             docs_filtered = retriever.retrieve(query, k=k, where=where)
             hit_filtered = any(
