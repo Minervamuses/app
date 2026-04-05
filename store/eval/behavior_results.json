@@ -1,0 +1,106 @@
+{
+  "name": "Behavior",
+  "total": 8,
+  "scores": {
+    "first_tool_accuracy": 0.8,
+    "tool_count_accuracy": 1.0,
+    "no_tool_accuracy": 1.0,
+    "tools_coverage": 1.0,
+    "filter_accuracy": 0.5
+  },
+  "details": [
+    {
+      "question": "What's in the knowledge base?",
+      "actual_tools": [
+        "explore"
+      ],
+      "actual_count": 1,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "Show me the available categories and tags.",
+      "actual_tools": [
+        "explore"
+      ],
+      "actual_count": 1,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "How does the scoring module work?",
+      "actual_tools": [
+        "search",
+        "search"
+      ],
+      "actual_count": 2,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "What research notes were written in March?",
+      "actual_tools": [
+        "search",
+        "explore"
+      ],
+      "actual_count": 2,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true,
+        "filters_used": true
+      }
+    },
+    {
+      "question": "How does the embedding module work?",
+      "actual_tools": [
+        "search",
+        "explore",
+        "search",
+        "get_context"
+      ],
+      "actual_count": 4,
+      "scores": {
+        "count_ok": true,
+        "tools_covered": true
+      }
+    },
+    {
+      "question": "Thanks, that's all I needed.",
+      "actual_tools": [],
+      "actual_count": 0,
+      "scores": {
+        "no_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "Hello!",
+      "actual_tools": [],
+      "actual_count": 0,
+      "scores": {
+        "no_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "Find all Python files related to database models.",
+      "actual_tools": [
+        "explore",
+        "search",
+        "get_context"
+      ],
+      "actual_count": 3,
+      "scores": {
+        "first_tool": false,
+        "count_ok": true,
+        "filters_used": false
+      }
+    }
+  ]
+}

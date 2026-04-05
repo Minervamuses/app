@@ -1,0 +1,86 @@
+[
+  {
+    "question": "What's in the knowledge base?",
+    "expected_first_tool": "explore",
+    "expected_tool_count": {
+      "min": 1,
+      "max": 2
+    },
+    "rationale": "Unknown KB structure, should explore first"
+  },
+  {
+    "question": "Show me the available categories and tags.",
+    "expected_first_tool": "explore",
+    "expected_tool_count": {
+      "min": 1,
+      "max": 1
+    },
+    "rationale": "Explicitly asking for KB overview"
+  },
+  {
+    "question": "How does the scoring module work?",
+    "expected_first_tool": "search",
+    "expected_tool_count": {
+      "min": 1,
+      "max": 4
+    },
+    "rationale": "Specific technical question, direct search"
+  },
+  {
+    "question": "What research notes were written in March?",
+    "expected_first_tool": "search",
+    "expected_filters_include": [
+      "date_from"
+    ],
+    "expected_tool_count": {
+      "min": 1,
+      "max": 3
+    },
+    "rationale": "Clear time + category signal, should filter"
+  },
+  {
+    "messages": [
+      "How does the embedding module work?",
+      "Show me more context around that result."
+    ],
+    "expected_tools_include": [
+      "search",
+      "get_context"
+    ],
+    "expected_tool_count": {
+      "min": 2,
+      "max": 6
+    },
+    "rationale": "Multi-turn: first search, then ask for context expansion"
+  },
+  {
+    "question": "Thanks, that's all I needed.",
+    "expected_first_tool": null,
+    "expected_tool_count": {
+      "min": 0,
+      "max": 0
+    },
+    "rationale": "Chitchat, should not call any tool"
+  },
+  {
+    "question": "Hello!",
+    "expected_first_tool": null,
+    "expected_tool_count": {
+      "min": 0,
+      "max": 0
+    },
+    "rationale": "Greeting, no tool needed"
+  },
+  {
+    "question": "Find all Python files related to database models.",
+    "expected_first_tool": "search",
+    "expected_filters_include": [
+      "file_type"
+    ],
+    "expected_tool_count": {
+      "min": 1,
+      "max": 3
+    },
+    "rationale": "Specific file type + topic, should use file_type filter"
+  }
+]

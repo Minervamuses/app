@@ -5,7 +5,8 @@ __pycache__/
 dist/
 build/
 .venv/
-/store/
+/store/*
+!/store/eval/
 *.sqlite3
 poetry.lock
 
