@@ -163,7 +163,7 @@ class EndToEndEvaluator(BaseEvaluator):
                 "recursion_limit": 16,
             }
 
-            graph.invoke(
+            result = graph.invoke(
                 {"messages": [
                     SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=case["question"]),
@@ -171,13 +171,11 @@ class EndToEndEvaluator(BaseEvaluator):
                 config=run_config,
             )
 
-            # Get full message history for chunk hit analysis
-            full_state = graph.get_state(run_config)
-            all_messages = full_state.values["messages"]
-            actual_answer = all_messages[-1].content or ""
+            # result["messages"] includes all intermediate steps
+            actual_answer = result["messages"][-1].content or ""
 
             # Chunk hit rate
-            found_chunks = _extract_found_chunks(all_messages)
+            found_chunks = _extract_found_chunks(result["messages"])
             required = case.get("required_chunks", [])
             if required:
                 required_set = {(c["pid"], c["chunk_id"]) for c in required}
