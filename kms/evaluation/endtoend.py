@@ -123,7 +123,7 @@ class EndToEndEvaluator(BaseEvaluator):
             prompt = GENERATE_PROMPT.format(chunk_texts=chunk_texts)
 
             try:
-                response = self._gen_llm.invoke(prompt, max_tokens=500, temperature=0.0)
+                response = self._gen_llm.invoke(prompt, max_tokens=4096, temperature=0.0)
                 data = _extract_json(response)
             except (ValueError, json.JSONDecodeError):
                 continue
