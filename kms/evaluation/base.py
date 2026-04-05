@@ -1,7 +1,19 @@
 """Abstract base class for evaluators."""
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+
+def _extract_json(text: str) -> dict:
+    """Extract a JSON object from LLM response text, handling code fences."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        cleaned = "\n".join(lines[1:-1]).strip()
+    start = cleaned.index("{")
+    end = cleaned.rindex("}") + 1
+    return json.loads(cleaned[start:end])
 
 
 @dataclass

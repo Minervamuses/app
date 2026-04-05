@@ -10,7 +10,7 @@ import random
 from pathlib import Path
 
 from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
-from kms.evaluation.base import BaseEvaluator, EvalResult
+from kms.evaluation.base import BaseEvaluator, EvalResult, _extract_json
 from kms.llm.openrouter import OpenRouterLLM
 from kms.retriever.vector import VectorRetriever
 from kms.store.chroma_store import ChromaStore
@@ -75,9 +75,7 @@ class RetrievalEvaluator(BaseEvaluator):
 
             try:
                 response = self._llm.invoke(prompt, max_tokens=300, temperature=0.0)
-                start = response.index("{")
-                end = response.rindex("}") + 1
-                data = json.loads(response[start:end])
+                data = _extract_json(response)
             except (ValueError, json.JSONDecodeError):
                 continue
 

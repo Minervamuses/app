@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from kms.agent.graph import build_graph
 from kms.cli.chat import SYSTEM_PROMPT
 from kms.config import KMSConfig
-from kms.evaluation.base import BaseEvaluator, EvalResult
+from kms.evaluation.base import BaseEvaluator, EvalResult, _extract_json
 from kms.llm.openrouter import OpenRouterLLM
 from kms.store.json_store import JSONStore
 
@@ -109,9 +109,7 @@ class EndToEndEvaluator(BaseEvaluator):
 
             try:
                 response = self._llm.invoke(prompt, max_tokens=500, temperature=0.0)
-                start = response.index("{")
-                end = response.rindex("}") + 1
-                data = json.loads(response[start:end])
+                data = _extract_json(response)
             except (ValueError, json.JSONDecodeError):
                 continue
 
@@ -171,9 +169,7 @@ class EndToEndEvaluator(BaseEvaluator):
 
             try:
                 judge_response = self._llm.invoke(judge_prompt, max_tokens=200, temperature=0.0)
-                start = judge_response.index("{")
-                end = judge_response.rindex("}") + 1
-                judge_data = json.loads(judge_response[start:end])
+                judge_data = _extract_json(judge_response)
                 score = int(judge_data.get("score", 0))
                 score = max(0, min(3, score))
                 rationale = judge_data.get("rationale", "")
