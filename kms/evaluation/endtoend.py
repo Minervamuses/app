@@ -9,7 +9,9 @@ import random
 import uuid
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage, SystemMessage
+import re
+
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from kms.agent.graph import build_graph
 from kms.cli.chat import SYSTEM_PROMPT
@@ -47,6 +49,16 @@ Return a JSON object with:
 2. "rationale": brief explanation
 
 Return ONLY the JSON object."""
+
+
+def _extract_found_chunks(messages: list) -> set[tuple[str, int]]:
+    """Extract (pid, chunk_id) pairs from search tool results in messages."""
+    found = set()
+    for msg in messages:
+        if isinstance(msg, ToolMessage) and msg.name == "search":
+            for match in re.finditer(r"pid=([^,\]]+),\s*chunk_id=(\d+)", msg.content):
+                found.add((match.group(1), int(match.group(2))))
+    return found
 
 
 class EndToEndEvaluator(BaseEvaluator):
@@ -141,6 +153,7 @@ class EndToEndEvaluator(BaseEvaluator):
 
         total_score = 0
         score_dist = {0: 0, 1: 0, 2: 0, 3: 0}
+        chunk_hit_rates: list[float] = []
         details = []
 
         for case in cases:
@@ -150,7 +163,7 @@ class EndToEndEvaluator(BaseEvaluator):
                 "recursion_limit": 16,
             }
 
-            result = graph.invoke(
+            graph.invoke(
                 {"messages": [
                     SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=case["question"]),
@@ -158,7 +171,21 @@ class EndToEndEvaluator(BaseEvaluator):
                 config=run_config,
             )
 
-            actual_answer = result["messages"][-1].content or ""
+            # Get full message history for chunk hit analysis
+            full_state = graph.get_state(run_config)
+            all_messages = full_state.values["messages"]
+            actual_answer = all_messages[-1].content or ""
+
+            # Chunk hit rate
+            found_chunks = _extract_found_chunks(all_messages)
+            required = case.get("required_chunks", [])
+            if required:
+                required_set = {(c["pid"], c["chunk_id"]) for c in required}
+                chunk_hits = len(found_chunks & required_set)
+                chunk_hit_rate = chunk_hits / len(required_set)
+                chunk_hit_rates.append(chunk_hit_rate)
+            else:
+                chunk_hit_rate = None
 
             # LLM-as-judge
             judge_prompt = JUDGE_PROMPT.format(
@@ -186,21 +213,29 @@ class EndToEndEvaluator(BaseEvaluator):
                 "actual_answer": actual_answer[:500],
                 "score": score,
                 "rationale": rationale,
+                "chunk_hit_rate": chunk_hit_rate,
+                "found_chunks": [{"pid": p, "chunk_id": c} for p, c in found_chunks],
             })
 
         total = len(cases)
         avg = total_score / total if total else 0
 
+        scores: dict[str, float] = {
+            "avg_score": avg / 3,  # Normalize to 0-1 for consistency
+            "avg_score_raw": avg,  # Raw 0-3 scale
+        }
+        if chunk_hit_rates:
+            scores["chunk_hit_rate"] = sum(chunk_hit_rates) / len(chunk_hit_rates)
+        scores.update({
+            "score_0_pct": score_dist[0] / total if total else 0,
+            "score_1_pct": score_dist[1] / total if total else 0,
+            "score_2_pct": score_dist[2] / total if total else 0,
+            "score_3_pct": score_dist[3] / total if total else 0,
+        })
+
         return EvalResult(
             name="End-to-End",
             total=total,
-            scores={
-                "avg_score": avg / 3,  # Normalize to 0-1 for consistency
-                "avg_score_raw": avg,  # Raw 0-3 scale
-                "score_0_pct": score_dist[0] / total if total else 0,
-                "score_1_pct": score_dist[1] / total if total else 0,
-                "score_2_pct": score_dist[2] / total if total else 0,
-                "score_3_pct": score_dist[3] / total if total else 0,
-            },
+            scores=scores,
             details=details,
         )
