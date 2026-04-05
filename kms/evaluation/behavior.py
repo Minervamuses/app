@@ -73,10 +73,13 @@ class BehaviorEvaluator(BaseEvaluator):
                 "rationale": "Clear time + category signal, should filter",
             },
             {
-                "question": "Can you show me more context around that code?",
-                "expected_tools_include": ["get_context"],
-                "expected_tool_count": {"min": 1, "max": 3},
-                "rationale": "Asking for context expansion after prior search",
+                "messages": [
+                    "How does the embedding module work?",
+                    "Show me more context around that result.",
+                ],
+                "expected_tools_include": ["search", "get_context"],
+                "expected_tool_count": {"min": 2, "max": 6},
+                "rationale": "Multi-turn: first search, then ask for context expansion",
             },
             {
                 "question": "Thanks, that's all I needed.",
@@ -134,16 +137,27 @@ class BehaviorEvaluator(BaseEvaluator):
                 "recursion_limit": 16,
             }
 
-            # Seed with system prompt + question
-            result = graph.invoke(
+            # Support both single-turn ("question") and multi-turn ("messages")
+            questions = case.get("messages", [case["question"]])
+
+            # First turn with system prompt
+            graph.invoke(
                 {"messages": [
                     SystemMessage(content=SYSTEM_PROMPT),
-                    HumanMessage(content=case["question"]),
+                    HumanMessage(content=questions[0]),
                 ]},
                 config=run_config,
             )
+            # Subsequent turns in the same thread
+            for followup in questions[1:]:
+                graph.invoke(
+                    {"messages": [HumanMessage(content=followup)]},
+                    config=run_config,
+                )
 
-            tool_calls = _extract_tool_calls(result["messages"])
+            # Get full message history across all turns
+            full_state = graph.get_state(run_config)
+            tool_calls = _extract_tool_calls(full_state.values["messages"])
             actual_tools = [tc["name"] for tc in tool_calls]
             actual_args = [tc["args"] for tc in tool_calls]
             actual_count = len(actual_tools)
