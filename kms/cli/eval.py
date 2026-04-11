@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+from datetime import datetime
 from pathlib import Path
 
 from kms.config import KMSConfig
@@ -37,6 +38,8 @@ def _run_suite(
     else:
         raise ValueError(f"Unknown suite: {suite}")
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+
     # Load or generate cases
     if cases_path:
         with open(cases_path, encoding="utf-8") as f:
@@ -45,7 +48,7 @@ def _run_suite(
     elif generate_n is not None:
         save_path = None
         if output_dir:
-            save_path = str(Path(output_dir) / f"{suite}_cases.json")
+            save_path = str(Path(output_dir) / f"{suite}_cases_{timestamp}.json")
         cases = evaluator.generate(n=generate_n, output_path=save_path)
         print(f"[{suite}] Generated {len(cases)} cases" + (f" → {save_path}" if save_path else ""))
     elif suite == "behavior":
@@ -61,11 +64,12 @@ def _run_suite(
 
     # Save results
     if output_dir:
-        results_path = Path(output_dir) / f"{suite}_results.json"
+        results_path = Path(output_dir) / f"{suite}_results_{timestamp}.json"
         results_path.parent.mkdir(parents=True, exist_ok=True)
         with open(results_path, "w", encoding="utf-8") as f:
             json.dump({
                 "name": result.name,
+                "timestamp": timestamp,
                 "total": result.total,
                 "scores": result.scores,
                 "details": result.details,

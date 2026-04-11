@@ -1,0 +1,410 @@
+[
+  {
+    "question": "What is the default stale time configured for queries in the React application's entry point, and what is the hex value of the primary color defined in the stylesheet imported by that file?",
+    "reference_answer": "The React application's main entry point configures a QueryClient with a default query stale time of 5 minutes (300,000 milliseconds). This entry point file also imports the global stylesheet `./index.css` to apply styles across the application. Within this imported stylesheet, the theme defines the primary color (`--color-primary`) with the hex value `#0EA5E9`.",
+    "required_chunks": [
+      {
+        "pid": "web/frontend/src/main.tsx",
+        "chunk_id": 0
+      },
+      {
+        "pid": "web/frontend/src/index.css",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "web/frontend/src"
+  },
+  {
+    "question": "In the legacy scoring logic, how does the `_legacy_map_atom` function behave differently for the \"N6\" atom during an identity mutation (\"A\" to \"A\") compared to a purine-to-purine mutation (\"A\" to \"G\")?",
+    "reference_answer": "During an identity mutation (\"A\" to \"A\"), the `_legacy_map_atom` function leaves the \"N6\" atom unchanged as \"N6\" and returns `has_mapping=False` because no mapping row exists for same-base mutations. In contrast, during a purine-to-purine mutation from \"A\" to \"G\", the \"N6\" atom is mapped to \"O6\" and the function returns `has_mapping=True`.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/tests/test_legacy_scoring.py",
+        "chunk_id": 0
+      },
+      {
+        "pid": "pidna2/tests/test_legacy_scoring.py",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2/tests"
+  },
+  {
+    "question": "Which component is imported by the `Button` component to potentially handle its `isLoading` state, and what are the specific size options available for that imported component?",
+    "reference_answer": "The `Button` component imports the `Spinner` component, which is likely used to visually indicate when the `isLoading` prop is set to true. The `Spinner` component accepts a `size` prop with three available options: \"sm\", \"md\", and \"lg\". These size options correspond to specific width and height utility classes applied to the SVG element.",
+    "required_chunks": [
+      {
+        "pid": "web/frontend/src/components/ui/Button.tsx",
+        "chunk_id": 0
+      },
+      {
+        "pid": "web/frontend/src/components/ui/Spinner.tsx",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "web/frontend/src/components/ui"
+  },
+  {
+    "question": "Under the revised parity definition where historical `u_fire` values are not required, what are the high-priority goals for the project, and how do the recent code changes from the March 14 follow-up address them?",
+    "reference_answer": "Under the revised definition, the high-priority goals are to reproduce PiDNA1 Step A PWM generation, clearly separate Step A and Step B in the code, and decide whether Step B Delta G must be an additive composition of Step A outputs. The March 14 follow-up code changes directly address these goals by separating Step A and Step B into distinct code paths (`run_step_a_prediction` and `run_step_b_prediction`). Furthermore, Step B now supports strict legacy-style additive composition from Step A deltas, and the final PFM defaults to the Step A output.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260314/pidna1_methodology_parity_status.md",
+        "chunk_id": 0
+      },
+      {
+        "pid": "Research_notes/20260314/pidna1_methodology_parity_status.md",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260314"
+  },
+  {
+    "question": "Based on the weekly updates, how did the project's technology stack and architecture change from the legacy PiDNA1 system analyzed in December 2025 to the new web implementation in January 2026?",
+    "reference_answer": "In December 2025, the legacy PiDNA1 codebase was analyzed, revealing an architecture based on Oracle, 36 SQL files, 25 PL/SQL packages, and Java integration. By January 2026, the project transitioned to a modern web stack deployed via Docker. The new architecture features a React frontend and a FastAPI backend with Celery, utilizing PostgreSQL, RabbitMQ, and Redis for its services.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/Weekly_Updates.md",
+        "chunk_id": 1
+      },
+      {
+        "pid": "Research_notes/Weekly_Updates.md",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes"
+  },
+  {
+    "question": "How does the PiDNA1 system calculate the values for the DBD-Hunter PWM, and what is the exact structure of the `.pwm` file that is generated?",
+    "reference_answer": "The PiDNA1 system calculates the DBD-Hunter PWM by first computing the `delta_g` for base replacements based on atom-distance and observation counts. These `delta_g` values are then normalized, exponentially transformed, and converted into a probability-like matrix for the four candidate bases. The resulting `.pwm` file is structured with the first line containing the `display_pdb_id` and `sequence_length` separated by a tab, followed by four lines of tab-delimited numerical values, each representing one of the four base indices.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260304/pidna1-pfm-pwm-findings.md",
+        "chunk_id": 2
+      },
+      {
+        "pid": "Research_notes/20260304/pidna1-pfm-pwm-findings.md",
+        "chunk_id": 3
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260304"
+  },
+  {
+    "question": "What changes were made to the prediction pipeline on March 26, 2026, regarding the processing of uploaded structures and the calculation of RMSD values?",
+    "reference_answer": "Uploaded structures are now persisted to the database with a generated ID and flow through the same prediction pipeline paths as DB-loaded structures. Previously, the data from these uploaded files was parsed but discarded. Additionally, RMSD calculations in the inference pipeline will change for all future predictions because the `templates.json` file used by the mutator was replaced with a new V2 output containing filtered, averaged templates.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260326/template_averaging.md",
+        "chunk_id": 1
+      },
+      {
+        "pid": "Research_notes/20260326/upload_to_prediction.md",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260326"
+  },
+  {
+    "question": "When calculating the UFire potential, what is the range of the distance bins used, and how does the code handle missing bins where the observation count is zero?",
+    "reference_answer": "The distance bins used for calculating the UFire potential range from a minimum of 3 (`R_MIN`) to a maximum of 10 (`R_MAX`). To handle missing bins where the observation count is zero, the code adds a pseudocount of 1. This ensures that entries are generated for all bins from r=3 to 10 if an interaction exists, which avoids taking the logarithm of zero.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/src/pidna2/scoring/train_potential.py",
+        "chunk_id": 0
+      },
+      {
+        "pid": "pidna2/src/pidna2/scoring/train_potential.py",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "needs_context",
+    "source_folder": "pidna2/src/pidna2/scoring"
+  },
+  {
+    "question": "How does the unrecoverable status of the historical u_fire database impact the working definition of PiDNA1 methodology parity and the project's resulting priorities?",
+    "reference_answer": "Because the historical u_fire database is unrecoverable, the working definition of parity no longer requires exact historical values. Instead, u_fire can be retrained on a newer dataset provided the training and inference algorithms closely follow the PiDNA1 methodology. Consequently, the project's priority order has shifted, with high priorities now focusing on reproducing Step A PWM generation, clearly separating Step A and Step B in the code, and deciding if Step B Delta G must be an additive composition of Step A outputs.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260314/pidna1_methodology_parity_status.md",
+        "chunk_id": 0
+      },
+      {
+        "pid": "Research_notes/20260314/pidna1_methodology_parity_status.md",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "needs_context",
+    "source_folder": "Research_notes/20260314"
+  },
+  {
+    "question": "Based on the provided PL/SQL packages, how does the handling of output destinations differ between the package created by CYCHEN and the one created by Daniel?",
+    "reference_answer": "The package created by CYCHEN (`PK_PDB_OUTPUT`) handles output destinations by hardcoding the directory alias 'PLSQL_OUTPUT' directly within its `UTL_FILE.FOPEN` call. In contrast, the package created by Daniel (`PK_PDB_JAVAINF`) handles output dynamically by accepting an output directory parameter (`p_output_dir`) in functions such as `get_pro_contact`, `process_s1`, and `process_s2`. While both packages process PDB data, they utilize fundamentally different approaches for specifying where the resulting files or data should be directed.",
+    "required_chunks": [
+      {
+        "pid": "PiDNA1/source_code/plsql/PK_PDB_OUTPUT.pck",
+        "chunk_id": 0
+      },
+      {
+        "pid": "PiDNA1/source_code/plsql/pk_pdb_javainf.pck",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "PiDNA1/source_code/plsql"
+  },
+  {
+    "question": "根據最新的發現與 Java 原始碼修訂，PiDNA2 有哪三個需要立即行動的高優先級實作差距？其中關於 bin r=10 width factor 的問題，PiDNA1 與 PiDNA2 的具體差異為何？",
+    "reference_answer": "PiDNA2 需要立即行動的三個高優先級實作差距包含：per-position ΔG 正規化（需補充 all-zero 轉 0.25 的保護邏輯）、SelectRatio = 0.5 截斷邏輯（含 threshold=0 fallback），以及 bin r=10 的 1.3 width factor 修正。在 bin r=10 的具體差異上，PiDNA1 使用了 `col11=1.3` 的 bin width 修正因子，而 PiDNA2 目前尚未套用此修正，其設定為 `G_NT_DELTA_R={10: 1}`。為了解決此差異，PiDNA2 需要將設定修正為 `G_NT_DELTA_R[10]=1.3`。",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260326/version_a/new_findings.md",
+        "chunk_id": 17
+      },
+      {
+        "pid": "Research_notes/20260326/version_a/research_note_revision.md",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260326/version_a"
+  },
+  {
+    "question": "When working with the UFire potential in pidna2, what environment variable controls the default version loaded for scoring, and what scaling exponent is used to calculate its reference probability during training?",
+    "reference_answer": "The default version of the UFire potential loaded for scoring is controlled by the `UFIRE_VERSION` environment variable, which defaults to 'pdb167'. During the training phase, the reference probability is calculated using a DFIRE scaling exponent of 1.61 (defined as `C_ALPHA`). This exponent is used alongside a bin volume lookup table (`G_NT_DELTA_R`) to account for non-uniform bin volumes.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/src/pidna2/scoring/train_potential.py",
+        "chunk_id": 0
+      },
+      {
+        "pid": "pidna2/src/pidna2/scoring/score.py",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2/src/pidna2/scoring"
+  },
+  {
+    "question": "According to the research notes, what discrepancy exists between the paper's description of PiDNA's matrix generation and the actual PL/SQL source code, and what is the specific format of the files generated by the source code?",
+    "reference_answer": "The paper claims that PiDNA builds a Position Frequency Matrix (PFM) from mutated structures with small energy changes. However, the actual PL/SQL source code contains multiple Position Weight Matrix (PWM) generators that output `.pwm` files instead. The format of these `.pwm` files consists of a first line containing `display_pdb_id<TAB>sequence_length`, followed by four lines of tab-delimited values corresponding to the four base indices.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260304/pidna1-pfm-pwm-findings.md",
+        "chunk_id": 0
+      },
+      {
+        "pid": "Research_notes/20260304/pidna1-pfm-pwm-findings.md",
+        "chunk_id": 3
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260304"
+  },
+  {
+    "question": "Based on the weekly updates, how did the project's database and backend technology stack evolve from the initial analysis of the legacy PiDNA1 codebase in December 2025 to the web stack implementation in January 2026?",
+    "reference_answer": "In December 2025, the team analyzed the legacy PiDNA1 codebase, which relied on an Oracle database, PL/SQL packages, and Java integration, prompting them to consider a Python and PostgreSQL port. By January 2026, this modernization was successfully implemented. The new web stack features a FastAPI and Celery backend, deployed via Docker with PostgreSQL, RabbitMQ, and Redis.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/Weekly_Updates.md",
+        "chunk_id": 0
+      },
+      {
+        "pid": "Research_notes/Weekly_Updates.md",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes"
+  },
+  {
+    "question": "Why is PiDNA2's mutation prediction currently slower than the legacy PiDNA1 system, and what specific computational bottleneck currently dominates the per-variant prediction time?",
+    "reference_answer": "PiDNA2 is slower than PiDNA1 because it performs expensive geometric calculations at runtime, whereas the legacy system pre-computed and stored all atom distances and DNA pairs during an offline structure ingestion phase. In PiDNA2, the primary computational bottleneck at runtime is template alignment, which requires an SVD computation for each mutation. Because this template alignment dominates the per-variant processing time, minor caching optimizations only offer marginal performance gains.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260124/performance_analysis.md",
+        "chunk_id": 0
+      },
+      {
+        "pid": "Research_notes/20260124/performance_analysis.md",
+        "chunk_id": 1
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260124"
+  },
+  {
+    "question": "In the PiDNA1 legacy code, `ScoreTableSeqLogoPanel.java` handles both file generation and calling the mutation enumeration process. What specific identifier does it generate to name the output files, and what is the mathematical formula used for the `u_fire` potential lookups during the independent scoring process it initiates?",
+    "reference_answer": "`ScoreTableSeqLogoPanel.java` generates a per-prediction `uuid` (at line 74) to create unique filenames such as `{pdbId}_{uuid}.ori.score`. It also initiates multi-site mutation enumeration by calling `AllAtomMutation`, which performs independent scoring using `u_fire` lookups. The mathematical formula used to calculate the `u_fire_value` for these lookups is `-1/2.25 * ln(obs/sum/pref)`.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260326/version_b/new_findings.md",
+        "chunk_id": 14
+      },
+      {
+        "pid": "Research_notes/20260326/version_b/research_note_revision.md",
+        "chunk_id": 21
+      },
+      {
+        "pid": "Research_notes/20260326/version_b/new_findings.md",
+        "chunk_id": 16
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260326/version_b"
+  },
+  {
+    "question": "What priority levels are assigned to the missing batch sequence scoring feature and the `ufire.txt.gz` ground truth validation in the parity reassessment, and what specific details are known about how PiDNA1 handled batch scoring and the contents of the `ufire.txt.gz` file?",
+    "reference_answer": "In the parity reassessment report, the `ufire.txt.gz` ground truth validation is assigned a Red priority, while the missing batch sequence scoring (Step 3b) is given a Yellow priority. PiDNA1 handled batch scoring through the `UploadSequencePanel`, which allowed users to upload a text list of sequences for real-time scoring in a Java session—a feature PiDNA2 currently lacks. The `ufire.txt.gz` file contains the complete pre-trained μFIRE potential, consisting of exactly 109,552 entries distributed across 8 distance bins ranging from r=3 to 10.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260326/version_a/new_findings.md",
+        "chunk_id": 6
+      },
+      {
+        "pid": "Research_notes/20260326/version_a/new_findings.md",
+        "chunk_id": 15
+      },
+      {
+        "pid": "Research_notes/20260326/version_a/parity_reassessment.md",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260326/version_a"
+  },
+  {
+    "question": "What are the available alignment methods that can be passed to the `Mutator` class, and what dictionary maps standard base letters to the target residue names used during mutation?",
+    "reference_answer": "The `Mutator` class accepts two alignment methods: 'sugar' (based on RMSD) and 'legacy' (based on Geometric Construction). To map standard base letters to the target residue names expected by the mutator (such as 'DA', 'DT', 'DG', 'DC'), the `RES_MAP` dictionary is used. This dictionary maps 'A' to 'DA', 'C' to 'DC', 'G' to 'DG', and 'T' to 'DT'.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/scripts/predict_specificity.py",
+        "chunk_id": 0
+      },
+      {
+        "pid": "pidna2/scripts/test_mutation.py",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2/scripts"
+  },
+  {
+    "question": "When setting up the PiDNA2 development environment, what command is used to start the local PostgreSQL database, and what are its configured host, port, and username?",
+    "reference_answer": "To start the local PostgreSQL database, you should use the `make db-up` command, which runs `docker compose up -d db` in the background. According to the server configuration, the 'PiDNA Local DB' is hosted on 'db' and operates on port 5432. Additionally, the configured username for this database connection is 'postgres'.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/servers.json",
+        "chunk_id": 0
+      },
+      {
+        "pid": "pidna2/Makefile",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2"
+  },
+  {
+    "question": "How do you obtain an SQLAlchemy session to query the model representing a PDB structure entry, and what are the two possible data sources defined for this model?",
+    "reference_answer": "To obtain an SQLAlchemy session, you should use the `get_session()` function from the `pidna2.core.database` module within a context manager (e.g., `with get_session() as session:`). This session can then be used to query the `Pdb` model, which represents a PDB structure entry. The `Pdb` model defines two possible values for its `source` column: 'pdb' for curated data and 'upload' for user-uploaded data.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/src/pidna2/core/models.py",
+        "chunk_id": 0
+      },
+      {
+        "pid": "pidna2/src/pidna2/core/database.py",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2/src/pidna2/core"
+  },
+  {
+    "question": "What is the range of bins `r` used when generating records for interactions, and what formula and constants are used to calculate the raw reference probability `P_ref(r)` for these bins?",
+    "reference_answer": "When generating records for interactions, entries must be generated for all bins in the range `r=3..10`. The raw reference probability `P_ref(r)` for these bins is calculated using the formula `math.pow(r, C_ALPHA) * G_NT_DELTA_R[r]`. The constant `C_ALPHA` is set to 1.61, and `G_NT_DELTA_R` is a lookup table that accounts for non-uniform bin volume at `r=3`.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/src/pidna2/scoring/train_potential.py",
+        "chunk_id": 1
+      },
+      {
+        "pid": "pidna2/src/pidna2/scoring/train_potential.py",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2/src/pidna2/scoring"
+  },
+  {
+    "question": "When modifying the in-memory structure with `mutate_residue`, is the score automatically calculated, and why is the `calculate_score_delta` method for scoring considered deprecated?",
+    "reference_answer": "The `mutate_residue` method modifies a single residue in the in-memory structure but explicitly does not calculate the score. If you choose to score the mutation using `calculate_score_delta`, it will calculate the new score using an incremental delta approach (native_score - old_interactions + new_interactions). However, this method is deprecated because it scores using recomputed distances from geometrically mutated 3D coordinates, whereas PiDNA1's actual scoring uses atom-name remapping at original distances.",
+    "required_chunks": [
+      {
+        "pid": "pidna2/src/pidna2/mutation/mutator.py",
+        "chunk_id": 1
+      },
+      {
+        "pid": "pidna2/src/pidna2/mutation/mutator.py",
+        "chunk_id": 2
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "pidna2/src/pidna2/mutation"
+  },
+  {
+    "question": "What information is contained in the `ufire.txt.gz` file, and what specific discrepancy does its 11th column reveal regarding how PiDNA1 and PiDNA2 handle distance bins?",
+    "reference_answer": "The `ufire.txt.gz` file contains 109,552 records of pre-calculated μFIRE potential values across 8 distance bins, serving as ground truth data for validation. It consists of 11 columns, with the 11th column specifically representing the `bin_width_factor`. This column reveals a critical discrepancy: PiDNA1 applies a 1.3 width factor correction for the r=10 distance bin, whereas PiDNA2 has not yet implemented this correction and currently uses a value of 1.",
+    "required_chunks": [
+      {
+        "pid": "Research_notes/20260326/version_a/new_findings.md",
+        "chunk_id": 14
+      },
+      {
+        "pid": "Research_notes/20260326/version_a/new_findings.md",
+        "chunk_id": 17
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "Research_notes/20260326/version_a"
+  },
+  {
+    "question": "What is the default stale time configured for queries in the React application's entry point, and what is the hex value of the primary color defined in the stylesheet imported by that file?",
+    "reference_answer": "The React application's main entry point configures a QueryClient with a default query stale time of 5 minutes (300,000 milliseconds). This entry point file also imports the global stylesheet `./index.css` to apply styles across the application. Within this imported stylesheet, the theme defines the primary color (`--color-primary`) with the hex value `#0EA5E9`.",
+    "required_chunks": [
+      {
+        "pid": "web/frontend/src/main.tsx",
+        "chunk_id": 0
+      },
+      {
+        "pid": "web/frontend/src/index.css",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "web/frontend/src"
+  },
+  {
+    "question": "What error is thrown if the custom hook used to access the wizard context is called outside its provider, and if called correctly to dispatch a SET_STRUCTURE action, how does the state change from its initial values?",
+    "reference_answer": "If the `useWizard` hook is called outside of a `WizardProvider`, it throws the error 'useWizard must be used within a WizardProvider'. When called correctly and a `SET_STRUCTURE` action is dispatched, the reducer updates the `structureId`, `pdbId`, and `chainPairs` properties using the action's payload. Additionally, the `step` property is updated from its initial value of 1 to 2.",
+    "required_chunks": [
+      {
+        "pid": "web/frontend/src/context/useWizard.ts",
+        "chunk_id": 0
+      },
+      {
+        "pid": "web/frontend/src/context/WizardContext.tsx",
+        "chunk_id": 0
+      }
+    ],
+    "question_type": "multi_search",
+    "source_folder": "web/frontend/src/context"
+  }
+]

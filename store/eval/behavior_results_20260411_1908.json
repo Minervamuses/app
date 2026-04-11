@@ -1,0 +1,128 @@
+{
+  "name": "Behavior",
+  "timestamp": "20260411_1908",
+  "total": 8,
+  "scores": {
+    "first_tool_accuracy": 0.6,
+    "tool_count_accuracy": 0.75,
+    "no_tool_accuracy": 1.0,
+    "tools_coverage": 0.0,
+    "filter_accuracy": 1.0
+  },
+  "details": [
+    {
+      "question": "What's in the knowledge base?",
+      "actual_tools": [
+        "explore"
+      ],
+      "actual_count": 1,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "Show me the available categories and tags.",
+      "actual_tools": [
+        "explore"
+      ],
+      "actual_count": 1,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "How does the scoring module work?",
+      "actual_tools": [
+        "explore",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search",
+        "get_context",
+        "search",
+        "get_context",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search",
+        "get_context",
+        "get_context",
+        "get_context",
+        "search"
+      ],
+      "actual_count": 18,
+      "scores": {
+        "first_tool": false,
+        "count_ok": false
+      }
+    },
+    {
+      "question": "What research notes were written in March?",
+      "actual_tools": [
+        "explore",
+        "search"
+      ],
+      "actual_count": 2,
+      "scores": {
+        "first_tool": false,
+        "count_ok": true,
+        "filters_used": true
+      }
+    },
+    {
+      "question": "How does the embedding module work?",
+      "actual_tools": [
+        "explore",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search"
+      ],
+      "actual_count": 10,
+      "scores": {
+        "count_ok": false,
+        "tools_covered": false
+      }
+    },
+    {
+      "question": "Thanks, that's all I needed.",
+      "actual_tools": [],
+      "actual_count": 0,
+      "scores": {
+        "no_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "Hello!",
+      "actual_tools": [],
+      "actual_count": 0,
+      "scores": {
+        "no_tool": true,
+        "count_ok": true
+      }
+    },
+    {
+      "question": "Find all Python files related to database models.",
+      "actual_tools": [
+        "search",
+        "get_context"
+      ],
+      "actual_count": 2,
+      "scores": {
+        "first_tool": true,
+        "count_ok": true,
+        "filters_used": true
+      }
+    }
+  ]
+}

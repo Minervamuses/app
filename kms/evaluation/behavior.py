@@ -11,6 +11,8 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from langgraph.errors import GraphRecursionError
+
 from kms.agent.graph import build_graph
 from kms.cli.chat import SYSTEM_PROMPT
 from kms.config import KMSConfig
@@ -136,26 +138,29 @@ class BehaviorEvaluator(BaseEvaluator):
             thread_id = str(uuid.uuid4())
             run_config = {
                 "configurable": {"thread_id": thread_id},
-                "recursion_limit": 16,
+                "recursion_limit": 32,
             }
 
             # Support both single-turn ("question") and multi-turn ("messages")
             questions = case.get("messages") or [case["question"]]
 
-            # First turn with system prompt
-            result = graph.invoke(
-                {"messages": [
-                    SystemMessage(content=SYSTEM_PROMPT),
-                    HumanMessage(content=questions[0]),
-                ]},
-                config=run_config,
-            )
-            # Subsequent turns in the same thread
-            for followup in questions[1:]:
+            try:
+                # First turn with system prompt
                 result = graph.invoke(
-                    {"messages": [HumanMessage(content=followup)]},
+                    {"messages": [
+                        SystemMessage(content=SYSTEM_PROMPT),
+                        HumanMessage(content=questions[0]),
+                    ]},
                     config=run_config,
                 )
+                # Subsequent turns in the same thread
+                for followup in questions[1:]:
+                    result = graph.invoke(
+                        {"messages": [HumanMessage(content=followup)]},
+                        config=run_config,
+                    )
+            except (GraphRecursionError, Exception):
+                result = {"messages": []}
 
             # MemorySaver accumulates all messages; last result has full history
             tool_calls = _extract_tool_calls(result["messages"])

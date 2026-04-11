@@ -26,11 +26,12 @@ class KMSConfig:
     embed_model: str = "bge-m3"
 
     # LLM
-    llm_model: str = "google/gemini-3-flash-preview"
+    llm_model: str = "z-ai/glm-5"
 
     # Evaluation LLMs
     gen_llm_model: str = "google/gemini-3.1-pro-preview"
     judge_llm_model: str = "openai/gpt-5.2"
+    filter_llm_model: str = "llama3.1:8b"
 
     # Retrieval
     default_k: int = 10

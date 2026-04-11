@@ -9,9 +9,7 @@ import random
 import uuid
 from pathlib import Path
 
-import re
-
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from langgraph.errors import GraphRecursionError
 
@@ -19,8 +17,16 @@ from kms.agent.graph import build_graph
 from kms.cli.chat import SYSTEM_PROMPT
 from kms.config import KMSConfig
 from kms.evaluation.base import BaseEvaluator, EvalResult, _extract_json
+from kms.llm.ollama import OllamaLLM
 from kms.llm.openrouter import OpenRouterLLM
 from kms.store.json_store import JSONStore
+
+FILTER_PROMPT = """Is this text chunk semantically meaningful content that a human would ask questions about? Answer YES or NO only.
+
+Reject: compiled/minified code, lock files, binary data, auto-generated IDs, SQL DDL boilerplate, empty/trivial files.
+Accept: documentation, source code with logic, research notes, config with explanations, test cases with assertions.
+
+{chunk_text}"""
 
 GENERATE_PROMPT = """You are a test-case generator. Below are several related chunks from a knowledge base. Generate a question that requires synthesizing information from multiple chunks to answer.
 
@@ -53,21 +59,12 @@ Return a JSON object with:
 Return ONLY the JSON object."""
 
 
-def _extract_found_chunks(messages: list) -> set[tuple[str, int]]:
-    """Extract (pid, chunk_id) pairs from search tool results in messages."""
-    found = set()
-    for msg in messages:
-        if isinstance(msg, ToolMessage) and msg.name == "search":
-            for match in re.finditer(r"pid=([^,\]]+),\s*chunk_id=(\d+)", msg.content):
-                found.add((match.group(1), int(match.group(2))))
-    return found
-
-
 class EndToEndEvaluator(BaseEvaluator):
     """Evaluate the full pipeline: retrieval + agent behavior + answer quality."""
 
     def __init__(self, config: KMSConfig | None = None):
         self.config = config or KMSConfig()
+        self._filter_llm = OllamaLLM(model_name=self.config.filter_llm_model, config=self.config)
         self._gen_llm = OpenRouterLLM(model_name=self.config.gen_llm_model, config=self.config)
         self._judge_llm = OpenRouterLLM(model_name=self.config.judge_llm_model, config=self.config)
 
@@ -109,6 +106,21 @@ class EndToEndEvaluator(BaseEvaluator):
             docs = eligible[folder]
             sample_size = min(random.randint(2, 4), len(docs))
             sampled = random.sample(docs, sample_size)
+
+            # Filter out non-semantic chunks via local LLM
+            filtered = []
+            for doc in sampled:
+                preview = doc.page_content[:400]
+                verdict = self._filter_llm.invoke(
+                    FILTER_PROMPT.format(chunk_text=preview),
+                    max_tokens=8,
+                    temperature=0.0,
+                )
+                if verdict.strip().upper().startswith("YES"):
+                    filtered.append(doc)
+            if len(filtered) < 2:
+                continue
+            sampled = filtered
 
             chunk_texts = ""
             for i, doc in enumerate(sampled, 1):
@@ -156,7 +168,6 @@ class EndToEndEvaluator(BaseEvaluator):
 
         total_score = 0
         score_dist = {0: 0, 1: 0, 2: 0, 3: 0}
-        chunk_hit_rates: list[float] = []
         details = []
 
         for case in cases:
@@ -182,17 +193,6 @@ class EndToEndEvaluator(BaseEvaluator):
             except Exception as exc:
                 all_messages = []
                 actual_answer = f"(agent error: {type(exc).__name__}: {exc})"
-
-            # Chunk hit rate
-            found_chunks = _extract_found_chunks(all_messages)
-            required = case.get("required_chunks", [])
-            if required:
-                required_set = {(c["pid"], c["chunk_id"]) for c in required}
-                chunk_hits = len(found_chunks & required_set)
-                chunk_hit_rate = chunk_hits / len(required_set)
-                chunk_hit_rates.append(chunk_hit_rate)
-            else:
-                chunk_hit_rate = None
 
             # LLM-as-judge
             judge_prompt = JUDGE_PROMPT.format(
@@ -220,8 +220,6 @@ class EndToEndEvaluator(BaseEvaluator):
                 "actual_answer": actual_answer[:500],
                 "score": score,
                 "rationale": rationale,
-                "chunk_hit_rate": chunk_hit_rate,
-                "found_chunks": [{"pid": p, "chunk_id": c} for p, c in found_chunks],
             })
 
         total = len(cases)
@@ -231,8 +229,6 @@ class EndToEndEvaluator(BaseEvaluator):
             "avg_score": avg / 3,  # Normalize to 0-1 for consistency
             "avg_score_raw": avg,  # Raw 0-3 scale
         }
-        if chunk_hit_rates:
-            scores["chunk_hit_rate"] = sum(chunk_hit_rates) / len(chunk_hit_rates)
         scores.update({
             "score_0_pct": score_dist[0] / total if total else 0,
             "score_1_pct": score_dist[1] / total if total else 0,

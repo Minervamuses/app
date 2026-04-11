@@ -1,0 +1,215 @@
+{
+  "name": "End-to-End",
+  "timestamp": "20260411_1915",
+  "total": 25,
+  "scores": {
+    "avg_score": 0.25333333333333335,
+    "avg_score_raw": 0.76,
+    "score_0_pct": 0.72,
+    "score_1_pct": 0.04,
+    "score_2_pct": 0.0,
+    "score_3_pct": 0.24
+  },
+  "details": [
+    {
+      "question": "What is the default stale time configured for queries in the React application's entry point, and what is the hex value of the primary color defined in the stylesheet imported by that file?",
+      "question_type": "multi_search",
+      "reference_answer": "The React application's main entry point configures a QueryClient with a default query stale time of 5 minutes (300,000 milliseconds). This entry point file also imports the global stylesheet `./index.css` to apply styles across the application. Within this imported stylesheet, the theme defines the primary color (`--color-primary`) with the hex value `#0EA5E9`.",
+      "actual_answer": "Based on my search through the knowledge base, I found the answers to both parts of your question:\n\n## 1. Default Stale Time for Queries\n\nIn the React application's entry point (`web/frontend/src/main.tsx`), the default stale time for queries is configured as:\n\n**5 minutes** (300,000 milliseconds)\n\n```typescript\nconst queryClient = new QueryClient({\n  defaultOptions: {\n    queries: {\n      retry: 1,\n      staleTime: 5 * 60 * 1000, // 5 minutes\n    },\n  },\n});\n```\n\n## 2. Primary Color Hex Value\n\n",
+      "score": 3,
+      "rationale": "The agent correctly states the default query stale time as 5 minutes (300,000 ms) and the primary color hex value as #0EA5E9, matching the reference."
+    },
+    {
+      "question": "In the legacy scoring logic, how does the `_legacy_map_atom` function behave differently for the \"N6\" atom during an identity mutation (\"A\" to \"A\") compared to a purine-to-purine mutation (\"A\" to \"G\")?",
+      "question_type": "multi_search",
+      "reference_answer": "During an identity mutation (\"A\" to \"A\"), the `_legacy_map_atom` function leaves the \"N6\" atom unchanged as \"N6\" and returns `has_mapping=False` because no mapping row exists for same-base mutations. In contrast, during a purine-to-purine mutation from \"A\" to \"G\", the \"N6\" atom is mapped to \"O6\" and the function returns `has_mapping=True`.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only a recursion limit error), so it does not address the differing behavior of `_legacy_map_atom` for N6 in A→A versus A→G."
+    },
+    {
+      "question": "Which component is imported by the `Button` component to potentially handle its `isLoading` state, and what are the specific size options available for that imported component?",
+      "question_type": "multi_search",
+      "reference_answer": "The `Button` component imports the `Spinner` component, which is likely used to visually indicate when the `isLoading` prop is set to true. The `Spinner` component accepts a `size` prop with three available options: \"sm\", \"md\", and \"lg\". These size options correspond to specific width and height utility classes applied to the SVG element.",
+      "actual_answer": "Based on the code in the knowledge base, here's the answer to your question:\n\n## Component Imported by Button for isLoading State\n\nThe `Button` component imports the **`Spinner`** component to handle its `isLoading` state:\n\n```typescript\nimport { Spinner } from \"./Spinner\";\n```\n\nWhen the Button is in a loading state, it renders the Spinner component like this:\n\n```typescript\n{isLoading && <Spinner size=\"sm\" className=\"mr-2\" />}\n```\n\n## Spinner Size Options\n\nThe `Spinner` component accepts a `siz",
+      "score": 3,
+      "rationale": "The agent correctly identifies that Button imports Spinner for the isLoading state and accurately lists the Spinner size options as \"sm\", \"md\", and \"lg\" (including correct corresponding utility classes). This matches the reference."
+    },
+    {
+      "question": "Under the revised parity definition where historical `u_fire` values are not required, what are the high-priority goals for the project, and how do the recent code changes from the March 14 follow-up address them?",
+      "question_type": "multi_search",
+      "reference_answer": "Under the revised definition, the high-priority goals are to reproduce PiDNA1 Step A PWM generation, clearly separate Step A and Step B in the code, and decide whether Step B Delta G must be an additive composition of Step A outputs. The March 14 follow-up code changes directly address these goals by separating Step A and Step B into distinct code paths (`run_step_a_prediction` and `run_step_b_prediction`). Furthermore, Step B now supports strict legacy-style additive composition from Step A deltas, and the final PFM defaults to the Step A output.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only noted a recursion limit), so it does not address the project's high-priority goals or how the March 14 code changes meet them."
+    },
+    {
+      "question": "Based on the weekly updates, how did the project's technology stack and architecture change from the legacy PiDNA1 system analyzed in December 2025 to the new web implementation in January 2026?",
+      "question_type": "multi_search",
+      "reference_answer": "In December 2025, the legacy PiDNA1 codebase was analyzed, revealing an architecture based on Oracle, 36 SQL files, 25 PL/SQL packages, and Java integration. By January 2026, the project transitioned to a modern web stack deployed via Docker. The new architecture features a React frontend and a FastAPI backend with Celery, utilizing PostgreSQL, RabbitMQ, and Redis for its services.",
+      "actual_answer": "Based on the weekly updates and research notes, here's a comprehensive analysis of how the technology stack and architecture evolved from the legacy PiDNA1 system (December 2025 analysis) to the new web implementation (January 2026):\n\n## **Technology Stack Transformation**\n\n### **PiDNA1 Legacy System (Analyzed December 2025)**\n\n**Database & Backend:**\n- **Oracle Database** - Central to the entire architecture\n- **PL/SQL Packages** - 26 packages handling all business logic\n- **Java Stored Procedu",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "How does the PiDNA1 system calculate the values for the DBD-Hunter PWM, and what is the exact structure of the `.pwm` file that is generated?",
+      "question_type": "multi_search",
+      "reference_answer": "The PiDNA1 system calculates the DBD-Hunter PWM by first computing the `delta_g` for base replacements based on atom-distance and observation counts. These `delta_g` values are then normalized, exponentially transformed, and converted into a probability-like matrix for the four candidate bases. The resulting `.pwm` file is structured with the first line containing the `display_pdb_id` and `sequence_length` separated by a tab, followed by four lines of tab-delimited numerical values, each representing one of the four base indices.",
+      "actual_answer": "Based on my analysis of the PiDNA1 source code, I can provide you with detailed information about the DBD-Hunter PWM calculation and file structure.\n\n## DBD-Hunter PWM Calculation Process\n\nThe PWM calculation is implemented in the `PK_PDB_DBDHUNTER` PL/SQL package, specifically in the `gen_dbd_hunter_pwm` function. Here's how it works:\n\n### 1. **Core Algorithm**\n\nFor each position *i* in the DNA sequence (length = L):\n\n```\nFor each base type j ∈ {1,2,3,4} (representing A, C, G, T):\n    1. Calcul",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "What changes were made to the prediction pipeline on March 26, 2026, regarding the processing of uploaded structures and the calculation of RMSD values?",
+      "question_type": "multi_search",
+      "reference_answer": "Uploaded structures are now persisted to the database with a generated ID and flow through the same prediction pipeline paths as DB-loaded structures. Previously, the data from these uploaded files was parsed but discarded. Additionally, RMSD calculations in the inference pipeline will change for all future predictions because the `templates.json` file used by the mutator was replaced with a new V2 output containing filtered, averaged templates.",
+      "actual_answer": "Based on the research notes from March 26, 2026, there were two significant changes to the prediction pipeline:\n\n## 1. Processing of Uploaded Structures\n\n**Before:** The file upload feature (`POST /structures/upload`) parsed structures with gemmi but discarded all data, using a placeholder `structure_id=\"UPLOAD\"`.\n\n**After:** Uploaded structures are now fully integrated into the prediction pipeline:\n\n- **Database persistence:** Uploaded structures are saved to the database with unique IDs (`UPL_",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "When calculating the UFire potential, what is the range of the distance bins used, and how does the code handle missing bins where the observation count is zero?",
+      "question_type": "needs_context",
+      "reference_answer": "The distance bins used for calculating the UFire potential range from a minimum of 3 (`R_MIN`) to a maximum of 10 (`R_MAX`). To handle missing bins where the observation count is zero, the code adds a pseudocount of 1. This ensures that entries are generated for all bins from r=3 to 10 if an interaction exists, which avoids taking the logarithm of zero.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only reported a recursion limit error), so it does not address the distance bin range or the handling of zero-count bins."
+    },
+    {
+      "question": "How does the unrecoverable status of the historical u_fire database impact the working definition of PiDNA1 methodology parity and the project's resulting priorities?",
+      "question_type": "needs_context",
+      "reference_answer": "Because the historical u_fire database is unrecoverable, the working definition of parity no longer requires exact historical values. Instead, u_fire can be retrained on a newer dataset provided the training and inference algorithms closely follow the PiDNA1 methodology. Consequently, the project's priority order has shifted, with high priorities now focusing on reproducing Step A PWM generation, clearly separating Step A and Step B in the code, and deciding if Step B Delta G must be an additive composition of Step A outputs.",
+      "actual_answer": "Based on the research notes, here's how the unrecoverable status of the historical u_fire database impacts the working definition of PiDNA1 methodology parity and project priorities:\n\n## Impact on Working Definition of Parity\n\nThe unrecoverable status of the historical `u_fire` database has led to a **fundamental revision** of what \"methodology parity\" means for the PiDNA2 project:\n\n### Accepted Working Definition (as of 2026-03-14)\n\n**The historical `u_fire` values are no longer the primary blo",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "Based on the provided PL/SQL packages, how does the handling of output destinations differ between the package created by CYCHEN and the one created by Daniel?",
+      "question_type": "multi_search",
+      "reference_answer": "The package created by CYCHEN (`PK_PDB_OUTPUT`) handles output destinations by hardcoding the directory alias 'PLSQL_OUTPUT' directly within its `UTL_FILE.FOPEN` call. In contrast, the package created by Daniel (`PK_PDB_JAVAINF`) handles output dynamically by accepting an output directory parameter (`p_output_dir`) in functions such as `get_pro_contact`, `process_s1`, and `process_s2`. While both packages process PDB data, they utilize fundamentally different approaches for specifying where the resulting files or data should be directed.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive comparison or details (only an error message about hitting a recursion limit), so it does not address the question or match the reference answer."
+    },
+    {
+      "question": "根據最新的發現與 Java 原始碼修訂，PiDNA2 有哪三個需要立即行動的高優先級實作差距？其中關於 bin r=10 width factor 的問題，PiDNA1 與 PiDNA2 的具體差異為何？",
+      "question_type": "multi_search",
+      "reference_answer": "PiDNA2 需要立即行動的三個高優先級實作差距包含：per-position ΔG 正規化（需補充 all-zero 轉 0.25 的保護邏輯）、SelectRatio = 0.5 截斷邏輯（含 threshold=0 fallback），以及 bin r=10 的 1.3 width factor 修正。在 bin r=10 的具體差異上，PiDNA1 使用了 `col11=1.3` 的 bin width 修正因子，而 PiDNA2 目前尚未套用此修正，其設定為 `G_NT_DELTA_R={10: 1}`。為了解決此差異，PiDNA2 需要將設定修正為 `G_NT_DELTA_R[10]=1.3`。",
+      "actual_answer": "根據最新的研究筆記與 Java 原始碼分析，我為您整理出以下關鍵發現：\n\n---\n\n## 三個需要立即行動的高優先級實作差距\n\n### 🔴 1. SelectRatio 50% Cap + using3XRange Fallback（最高優先）\n\n**問題描述**：PiDNA1 限制 favorable sequences 不超過總數的 50%（SelectRatio），且當 best diffScore == 0 時啟用 `3 × position_count` 作為 fallback。PiDNA2 完全缺少這兩段邏輯。\n\n**影響**：這是**唯一影響預測數值正確性**的核心問題，直接影響 PFM/PWM 結果。\n\n**修復工作量**：約 25 行程式碼\n- SelectRatio=0.5 截斷（~15 行）\n- threshold=0 → 3×pickedCount fallback（~10 行）\n\n**關鍵線索檔案**：`ScoreTableSeqLogoPanel.java:28, 153-170`\n\n---\n\n### 🔴 2. Per-position ΔG Normali",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "When working with the UFire potential in pidna2, what environment variable controls the default version loaded for scoring, and what scaling exponent is used to calculate its reference probability during training?",
+      "question_type": "multi_search",
+      "reference_answer": "The default version of the UFire potential loaded for scoring is controlled by the `UFIRE_VERSION` environment variable, which defaults to 'pdb167'. During the training phase, the reference probability is calculated using a DFIRE scaling exponent of 1.61 (defined as `C_ALPHA`). This exponent is used alongside a bin volume lookup table (`G_NT_DELTA_R`) to account for non-uniform bin volumes.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only an error message about recursion limit), so it did not identify the UFIRE_VERSION environment variable or the 1.61 scaling exponent."
+    },
+    {
+      "question": "According to the research notes, what discrepancy exists between the paper's description of PiDNA's matrix generation and the actual PL/SQL source code, and what is the specific format of the files generated by the source code?",
+      "question_type": "multi_search",
+      "reference_answer": "The paper claims that PiDNA builds a Position Frequency Matrix (PFM) from mutated structures with small energy changes. However, the actual PL/SQL source code contains multiple Position Weight Matrix (PWM) generators that output `.pwm` files instead. The format of these `.pwm` files consists of a first line containing `display_pdb_id<TAB>sequence_length`, followed by four lines of tab-delimited values corresponding to the four base indices.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only a recursion limit error), so it does not address the discrepancy or the file format."
+    },
+    {
+      "question": "Based on the weekly updates, how did the project's database and backend technology stack evolve from the initial analysis of the legacy PiDNA1 codebase in December 2025 to the web stack implementation in January 2026?",
+      "question_type": "multi_search",
+      "reference_answer": "In December 2025, the team analyzed the legacy PiDNA1 codebase, which relied on an Oracle database, PL/SQL packages, and Java integration, prompting them to consider a Python and PostgreSQL port. By January 2026, this modernization was successfully implemented. The new web stack features a FastAPI and Celery backend, deployed via Docker with PostgreSQL, RabbitMQ, and Redis.",
+      "actual_answer": "Based on the weekly updates, here's how the project's database and backend technology stack evolved from December 2025 to January 2026:\n\n## **Phase 1: Initial Legacy Analysis (December 8-15, 2025)**\n\n### **Legacy PiDNA1 Architecture Discovered**\nThe reverse engineering of the legacy PiDNA1 codebase revealed an **Oracle-centric architecture**:\n\n**Database & Backend Stack:**\n- **Database:** Oracle Database with PL/SQL packages\n- **Backend Logic:** \n  - PL/SQL stored procedures for all data process",
+      "score": 3,
+      "rationale": "Accurately captures the evolution from a legacy Oracle + PL/SQL + Java-integrated PiDNA1 system in Dec 2025 to a modernized Jan 2026 web stack with PostgreSQL and a Docker-deployed FastAPI + Celery backend using RabbitMQ and Redis. Extra details (e.g., SQLAlchemy, pgAdmin, endpoints) don’t contradict the reference."
+    },
+    {
+      "question": "Why is PiDNA2's mutation prediction currently slower than the legacy PiDNA1 system, and what specific computational bottleneck currently dominates the per-variant prediction time?",
+      "question_type": "multi_search",
+      "reference_answer": "PiDNA2 is slower than PiDNA1 because it performs expensive geometric calculations at runtime, whereas the legacy system pre-computed and stored all atom distances and DNA pairs during an offline structure ingestion phase. In PiDNA2, the primary computational bottleneck at runtime is template alignment, which requires an SVD computation for each mutation. Because this template alignment dominates the per-variant processing time, minor caching optimizations only offer marginal performance gains.",
+      "actual_answer": "Based on my research of the knowledge base, I can now provide you with a comprehensive answer about why PiDNA2's mutation prediction is slower than the legacy PiDNA1 system.\n\n## Why PiDNA2 is Slower Than PiDNA1\n\nThe fundamental performance difference stems from **architectural changes in how mutation predictions are computed**:\n\n### PiDNA1's Efficient Two-Step Architecture\n\n**Step A (PL/SQL `gen_allatom_pwm()`):**\n- Computes atomic-level ΔG calculations **only 4×N times** (once per position × 4 ",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "In the PiDNA1 legacy code, `ScoreTableSeqLogoPanel.java` handles both file generation and calling the mutation enumeration process. What specific identifier does it generate to name the output files, and what is the mathematical formula used for the `u_fire` potential lookups during the independent scoring process it initiates?",
+      "question_type": "multi_search",
+      "reference_answer": "`ScoreTableSeqLogoPanel.java` generates a per-prediction `uuid` (at line 74) to create unique filenames such as `{pdbId}_{uuid}.ori.score`. It also initiates multi-site mutation enumeration by calling `AllAtomMutation`, which performs independent scoring using `u_fire` lookups. The mathematical formula used to calculate the `u_fire_value` for these lookups is `-1/2.25 * ln(obs/sum/pref)`.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only an error about hitting a recursion limit), so it did not identify the UUID-based filename identifier nor the u_fire lookup formula."
+    },
+    {
+      "question": "What priority levels are assigned to the missing batch sequence scoring feature and the `ufire.txt.gz` ground truth validation in the parity reassessment, and what specific details are known about how PiDNA1 handled batch scoring and the contents of the `ufire.txt.gz` file?",
+      "question_type": "multi_search",
+      "reference_answer": "In the parity reassessment report, the `ufire.txt.gz` ground truth validation is assigned a Red priority, while the missing batch sequence scoring (Step 3b) is given a Yellow priority. PiDNA1 handled batch scoring through the `UploadSequencePanel`, which allowed users to upload a text list of sequences for real-time scoring in a Java session—a feature PiDNA2 currently lacks. The `ufire.txt.gz` file contains the complete pre-trained μFIRE potential, consisting of exactly 109,552 entries distributed across 8 distance bins ranging from r=3 to 10.",
+      "actual_answer": "Based on my search of the knowledge base, I can provide you with detailed information about both items from the parity reassessment:\n\n## Priority Levels\n\n| Feature | Priority Level | Rationale |\n|---------|---------------|-----------|\n| **Batch Sequence Scoring** | 🟡 **Medium (中)** | Functional gap, not a correctness issue. New feature addition (~300 lines of code) |\n| **ufire.txt.gz Ground Truth Validation** | 🔴 **High (高)** | Critical for verifying PiDNA2's training output. Enables end-to-end ",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "What are the available alignment methods that can be passed to the `Mutator` class, and what dictionary maps standard base letters to the target residue names used during mutation?",
+      "question_type": "multi_search",
+      "reference_answer": "The `Mutator` class accepts two alignment methods: 'sugar' (based on RMSD) and 'legacy' (based on Geometric Construction). To map standard base letters to the target residue names expected by the mutator (such as 'DA', 'DT', 'DG', 'DC'), the `RES_MAP` dictionary is used. This dictionary maps 'A' to 'DA', 'C' to 'DC', 'G' to 'DG', and 'T' to 'DT'.",
+      "actual_answer": "Perfect! I found the answers to both parts of your question:\n\n## Available Alignment Methods for the `Mutator` Class\n\nThe available alignment methods that can be passed to the `Mutator` class are:\n\n1. **`\"sugar\"`** - Sugar-based alignment method\n2. **`\"legacy\"`** - Legacy alignment method (default)\n\nThis is defined in `pidna2/scripts/predict_specificity.py` where the Mutator is initialized with a method parameter:\n```python\nmutator = Mutator(pdb_id, method=method)\n```\n\nThe method choices are val",
+      "score": 3,
+      "rationale": "The agent correctly identifies both alignment methods ('sugar' and 'legacy') and provides the correct RES_MAP dictionary mapping A/C/G/T to DA/DC/DG/DT. Minor extra context about file locations doesn’t detract from accuracy."
+    },
+    {
+      "question": "When setting up the PiDNA2 development environment, what command is used to start the local PostgreSQL database, and what are its configured host, port, and username?",
+      "question_type": "multi_search",
+      "reference_answer": "To start the local PostgreSQL database, you should use the `make db-up` command, which runs `docker compose up -d db` in the background. According to the server configuration, the 'PiDNA Local DB' is hosted on 'db' and operates on port 5432. Additionally, the configured username for this database connection is 'postgres'.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only a recursion limit error) and did not supply the command or the configured host, port, and username."
+    },
+    {
+      "question": "How do you obtain an SQLAlchemy session to query the model representing a PDB structure entry, and what are the two possible data sources defined for this model?",
+      "question_type": "multi_search",
+      "reference_answer": "To obtain an SQLAlchemy session, you should use the `get_session()` function from the `pidna2.core.database` module within a context manager (e.g., `with get_session() as session:`). This session can then be used to query the `Pdb` model, which represents a PDB structure entry. The `Pdb` model defines two possible values for its `source` column: 'pdb' for curated data and 'upload' for user-uploaded data.",
+      "actual_answer": "Based on my search through the knowledge base, I can answer your question about SQLAlchemy sessions and the PDB structure model.\n\n## Obtaining an SQLAlchemy Session\n\nTo obtain an SQLAlchemy session for querying the PDB model, you use the following pattern:\n\n```python\nfrom sqlalchemy.orm import sessionmaker\nfrom pidna2.core.database import get_engine\n\n# Get the database engine\nengine = get_engine()\n\n# Create a session factory\nSession = sessionmaker(bind=engine)\n\n# Use the session with a context m",
+      "score": 0,
+      "rationale": "Judge parsing failed"
+    },
+    {
+      "question": "What is the range of bins `r` used when generating records for interactions, and what formula and constants are used to calculate the raw reference probability `P_ref(r)` for these bins?",
+      "question_type": "multi_search",
+      "reference_answer": "When generating records for interactions, entries must be generated for all bins in the range `r=3..10`. The raw reference probability `P_ref(r)` for these bins is calculated using the formula `math.pow(r, C_ALPHA) * G_NT_DELTA_R[r]`. The constant `C_ALPHA` is set to 1.61, and `G_NT_DELTA_R` is a lookup table that accounts for non-uniform bin volume at `r=3`.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only a recursion limit error), so it does not mention the bin range r=3..10 or the P_ref(r) formula/constants."
+    },
+    {
+      "question": "When modifying the in-memory structure with `mutate_residue`, is the score automatically calculated, and why is the `calculate_score_delta` method for scoring considered deprecated?",
+      "question_type": "multi_search",
+      "reference_answer": "The `mutate_residue` method modifies a single residue in the in-memory structure but explicitly does not calculate the score. If you choose to score the mutation using `calculate_score_delta`, it will calculate the new score using an incremental delta approach (native_score - old_interactions + new_interactions). However, this method is deprecated because it scores using recomputed distances from geometrically mutated 3D coordinates, whereas PiDNA1's actual scoring uses atom-name remapping at original distances.",
+      "actual_answer": "Based on my search through the knowledge base, I can answer your questions about `mutate_residue` and `calculate_score_delta`:\n\n## 1. Does `mutate_residue` automatically calculate the score?\n\n**No, the score is NOT automatically calculated when using `mutate_residue`.** \n\nFrom the test code in `pidna2/src/tests/test_new_backend.py`, I can see the workflow is:\n\n```python\n# Apply mutation\nmutator.mutate_residue(chain_id, res_seq, new_res)\n\n# Calculate score separately (two options):\nfull_score = m",
+      "score": 1,
+      "rationale": "Correctly states that `mutate_residue` does not automatically calculate the score. However, the explanation for why `calculate_score_delta` is deprecated is largely incorrect/speculative and misses the key reference reason: it recomputes interactions using geometrically mutated 3D coordinates, whereas PiDNA1 scoring relies on atom-name remapping at original distances."
+    },
+    {
+      "question": "What information is contained in the `ufire.txt.gz` file, and what specific discrepancy does its 11th column reveal regarding how PiDNA1 and PiDNA2 handle distance bins?",
+      "question_type": "multi_search",
+      "reference_answer": "The `ufire.txt.gz` file contains 109,552 records of pre-calculated μFIRE potential values across 8 distance bins, serving as ground truth data for validation. It consists of 11 columns, with the 11th column specifically representing the `bin_width_factor`. This column reveals a critical discrepancy: PiDNA1 applies a 1.3 width factor correction for the r=10 distance bin, whereas PiDNA2 has not yet implemented this correction and currently uses a value of 1.",
+      "actual_answer": "(agent hit recursion limit)",
+      "score": 0,
+      "rationale": "The agent provided no substantive answer (only an error message about a recursion limit), so it does not describe the contents of ufire.txt.gz or the 11th-column discrepancy between PiDNA1 and PiDNA2."
+    },
+    {
+      "question": "What is the default stale time configured for queries in the React application's entry point, and what is the hex value of the primary color defined in the stylesheet imported by that file?",
+      "question_type": "multi_search",
+      "reference_answer": "The React application's main entry point configures a QueryClient with a default query stale time of 5 minutes (300,000 milliseconds). This entry point file also imports the global stylesheet `./index.css` to apply styles across the application. Within this imported stylesheet, the theme defines the primary color (`--color-primary`) with the hex value `#0EA5E9`.",
+      "actual_answer": "Based on my search of the knowledge base, I found the answers to both questions:\n\n## 1. Default Stale Time for Queries\n\nIn the React application's entry point (`web/frontend/src/main.tsx`), the default stale time for queries is configured as:\n\n```typescript\nconst queryClient = new QueryClient({\n  defaultOptions: {\n    queries: {\n      retry: 1,\n      staleTime: 5 * 60 * 1000, // 5 minutes\n    },\n  },\n});\n```\n\n**The default stale time is 5 minutes** (or 300,000 milliseconds).\n\n## 2. Primary Color",
+      "score": 3,
+      "rationale": "The agent correctly states the default query staleTime as 5 minutes (300,000 ms) and identifies the imported stylesheet’s primary color hex value as #0EA5E9, matching the reference."
+    },
+    {
+      "question": "What error is thrown if the custom hook used to access the wizard context is called outside its provider, and if called correctly to dispatch a SET_STRUCTURE action, how does the state change from its initial values?",
+      "question_type": "multi_search",
+      "reference_answer": "If the `useWizard` hook is called outside of a `WizardProvider`, it throws the error 'useWizard must be used within a WizardProvider'. When called correctly and a `SET_STRUCTURE` action is dispatched, the reducer updates the `structureId`, `pdbId`, and `chainPairs` properties using the action's payload. Additionally, the `step` property is updated from its initial value of 1 to 2.",
+      "actual_answer": "Based on the code I found in the knowledge base, here are the answers to your questions:\n\n## Error Thrown Outside Provider\n\nWhen the `useWizard` custom hook is called outside its `WizardProvider`, it throws the following error:\n\n```\n\"useWizard must be used within a WizardProvider\"\n```\n\nThis is implemented in `web/frontend/src/context/useWizard.ts`:\n\n```typescript\nexport function useWizard() {\n  const context = useContext(WizardContext);\n  if (context === undefined) {\n    throw new Error(\"useWiza",
+      "score": 3,
+      "rationale": "The agent correctly states the exact error message thrown when useWizard is called outside WizardProvider, and accurately describes the SET_STRUCTURE reducer effects: structureId, pdbId, and chainPairs set from the payload and step advancing from 1 to 2, with other fields unchanged."
+    }
+  ]
+}
