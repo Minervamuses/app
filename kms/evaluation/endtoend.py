@@ -54,6 +54,29 @@ Return a JSON object with:
 
 Return ONLY the JSON object."""
 
+JUDGE_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "judge_score",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "score": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3,
+                },
+                "rationale": {
+                    "type": "string",
+                },
+            },
+            "required": ["score", "rationale"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 class EndToEndEvaluator(BaseEvaluator):
     """Evaluate the full pipeline: retrieval + agent behavior + answer quality."""
@@ -181,26 +204,42 @@ class EndToEndEvaluator(BaseEvaluator):
                 actual_answer=actual_answer,
             )
 
+            judge_response = ""
+            judge_failed = False
             try:
-                judge_response = self._judge_llm.invoke(judge_prompt, max_tokens=200, temperature=0.0)
+                judge_response = self._judge_llm.invoke(
+                    judge_prompt,
+                    max_tokens=300,
+                    temperature=0.0,
+                    response_format=JUDGE_RESPONSE_FORMAT,
+                )
                 judge_data = _extract_json(judge_response)
                 score = int(judge_data.get("score", 0))
                 score = max(0, min(3, score))
                 rationale = judge_data.get("rationale", "")
             except (ValueError, json.JSONDecodeError):
+                judge_failed = True
                 score = 0
                 rationale = "Judge parsing failed"
+            except Exception as exc:
+                judge_failed = True
+                score = 0
+                rationale = f"Judge error: {type(exc).__name__}: {exc}"
 
             total_score += score
             score_dist[score] += 1
-            details.append({
+            detail = {
                 "question": case["question"],
                 "question_type": case.get("question_type"),
                 "reference_answer": case["reference_answer"],
                 "actual_answer": actual_answer[:500],
                 "score": score,
                 "rationale": rationale,
-            })
+            }
+            if judge_failed:
+                detail["judge_failed"] = True
+                detail["judge_raw_response"] = judge_response[:1000]
+            details.append(detail)
 
         total = len(cases)
         avg = total_score / total if total else 0

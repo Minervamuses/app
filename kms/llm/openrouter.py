@@ -2,6 +2,7 @@
 
 import os
 import time
+from typing import Any
 
 from langchain_openai import ChatOpenAI
 from openai import OpenAI, RateLimitError
@@ -70,6 +71,8 @@ class OpenRouterLLM(BaseLLM):
         prompt: str,
         max_tokens: int = 256,
         temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> str:
         """Send a prompt to the LLM and return the response."""
         kwargs: dict = {
@@ -79,6 +82,10 @@ class OpenRouterLLM(BaseLLM):
         }
         if temperature is not None:
             kwargs["temperature"] = temperature
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+        if extra_body is not None:
+            kwargs["extra_body"] = extra_body
 
         resp = self._call_with_retry(**kwargs)
         content = resp.choices[0].message.content
