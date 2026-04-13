@@ -1,6 +1,6 @@
 """Central configuration for the KMS pipeline."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 # Resolve store path relative to app/ directory (parent of kms/)
@@ -35,6 +35,10 @@ class KMSConfig:
 
     # Retrieval
     default_k: int = 10
+
+    # Agent context controls
+    agent_max_messages: int = 20
+    agent_max_tool_interactions: int = 4
 
     # Collection names
     raw_collection: str = "raw"

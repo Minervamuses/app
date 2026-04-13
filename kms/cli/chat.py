@@ -15,6 +15,7 @@ import argparse
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from kms.agent.graph import build_graph
+from kms.agent.history import build_compact_turn, extract_tool_calls, format_tool_counts, trim_message_history
 from kms.config import KMSConfig
 
 SYSTEM_PROMPT = """You are a knowledge base assistant. You help users find information stored in an indexed repository.
@@ -44,25 +45,45 @@ class ChatSession:
     """Multi-turn conversational retrieval session backed by LangGraph."""
 
     def __init__(self, config: KMSConfig, recursion_limit: int = DEFAULT_RECURSION_LIMIT):
+        self.config = config
         self.graph = build_graph(config)
         self.recursion_limit = recursion_limit
-        self.run_config = {
-            "configurable": {"thread_id": "default"},
-            "recursion_limit": recursion_limit,
-        }
-        # Seed conversation with system prompt
-        self.graph.invoke(
-            {"messages": [SystemMessage(content=SYSTEM_PROMPT)]},
-            config=self.run_config,
+        self.history = [SystemMessage(content=SYSTEM_PROMPT)]
+        self.turn_logs: list[dict] = []
+        self.last_tool_calls: list[dict] = []
+
+    def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
+        """Process one turn and return the final answer plus tool-call trace."""
+        input_messages = [*self.history, HumanMessage(content=user_input)]
+        result = self.graph.invoke(
+            {"messages": input_messages},
+            config={"recursion_limit": self.recursion_limit},
         )
+        new_messages = result["messages"][len(input_messages):]
+        tool_calls = extract_tool_calls(new_messages)
+        answer = result["messages"][-1].content or ""
+
+        self.last_tool_calls = tool_calls
+        self.turn_logs.append({
+            "user_input": user_input,
+            "tool_calls": tool_calls,
+            "tool_counts": format_tool_counts(tool_calls),
+        })
+
+        self.history = trim_message_history(
+            self.history + build_compact_turn(user_input, answer),
+            max_messages=self.config.agent_max_messages,
+        )
+        return answer, tool_calls
 
     def turn(self, user_input: str) -> str:
         """Process one conversation turn. Returns the final text response."""
-        result = self.graph.invoke(
-            {"messages": [HumanMessage(content=user_input)]},
-            config=self.run_config,
-        )
-        return result["messages"][-1].content or ""
+        answer, _tool_calls = self._run_turn(user_input)
+        return answer
+
+    def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
+        """Process one turn and return the answer plus normalized tool trace."""
+        return self._run_turn(user_input)
 
 
 def main():

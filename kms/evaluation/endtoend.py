@@ -6,15 +6,11 @@ through the full agent graph, then uses LLM-as-judge to score the output.
 
 import json
 import random
-import uuid
 from pathlib import Path
-
-from langchain_core.messages import HumanMessage, SystemMessage
 
 from langgraph.errors import GraphRecursionError
 
-from kms.agent.graph import build_graph
-from kms.cli.chat import SYSTEM_PROMPT
+from kms.cli.chat import ChatSession
 from kms.config import KMSConfig
 from kms.evaluation.base import BaseEvaluator, EvalResult, _extract_json
 from kms.llm.ollama import OllamaLLM
@@ -164,34 +160,18 @@ class EndToEndEvaluator(BaseEvaluator):
         Returns:
             EvalResult with avg_score (0-3), score_distribution, and per-case details.
         """
-        graph = build_graph(self.config)
-
         total_score = 0
         score_dist = {0: 0, 1: 0, 2: 0, 3: 0}
         details = []
 
         for case in cases:
-            thread_id = str(uuid.uuid4())
-            run_config = {
-                "configurable": {"thread_id": thread_id},
-                "recursion_limit": 32,
-            }
+            session = ChatSession(self.config, recursion_limit=32)
 
             try:
-                result = graph.invoke(
-                    {"messages": [
-                        SystemMessage(content=SYSTEM_PROMPT),
-                        HumanMessage(content=case["question"]),
-                    ]},
-                    config=run_config,
-                )
-                all_messages = result["messages"]
-                actual_answer = all_messages[-1].content or ""
+                actual_answer = session.turn(case["question"])
             except GraphRecursionError:
-                all_messages = []
                 actual_answer = "(agent hit recursion limit)"
             except Exception as exc:
-                all_messages = []
                 actual_answer = f"(agent error: {type(exc).__name__}: {exc})"
 
             # LLM-as-judge

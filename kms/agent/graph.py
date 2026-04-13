@@ -1,9 +1,9 @@
 """LangGraph agent graph for conversational RAG."""
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from kms.agent.history import prepare_messages_for_agent
 from kms.agent.state import AgentState
 from kms.config import KMSConfig
 from kms.llm.openrouter import get_chat_model
@@ -20,7 +20,7 @@ def build_graph(config: KMSConfig):
 
     Returns:
         A compiled LangGraph that accepts AgentState and manages
-        the agent ↔ tools loop with memory checkpointing.
+        the bounded agent ↔ tools loop for a single turn.
     """
     model = get_chat_model(config)
     tools = [
@@ -31,7 +31,12 @@ def build_graph(config: KMSConfig):
     model_with_tools = model.bind_tools(tools)
 
     def agent_node(state: AgentState):
-        return {"messages": [model_with_tools.invoke(state["messages"])]}
+        prompt_messages = prepare_messages_for_agent(
+            state["messages"],
+            max_messages=config.agent_max_messages,
+            max_tool_interactions=config.agent_max_tool_interactions,
+        )
+        return {"messages": [model_with_tools.invoke(prompt_messages)]}
 
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent_node)
@@ -41,4 +46,4 @@ def build_graph(config: KMSConfig):
     graph.add_conditional_edges("agent", tools_condition)
     graph.add_edge("tools", "agent")
 
-    return graph.compile(checkpointer=MemorySaver())
+    return graph.compile()

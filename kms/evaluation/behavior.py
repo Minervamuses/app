@@ -6,27 +6,13 @@ tool count, required tools).
 """
 
 import json
-import uuid
 from pathlib import Path
-
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from langgraph.errors import GraphRecursionError
 
-from kms.agent.graph import build_graph
-from kms.cli.chat import SYSTEM_PROMPT
+from kms.cli.chat import ChatSession
 from kms.config import KMSConfig
 from kms.evaluation.base import BaseEvaluator, EvalResult
-
-
-def _extract_tool_calls(messages: list) -> list[dict]:
-    """Extract tool call names and arguments from a message trace."""
-    calls = []
-    for msg in messages:
-        if isinstance(msg, AIMessage) and msg.tool_calls:
-            for tc in msg.tool_calls:
-                calls.append({"name": tc["name"], "args": tc["args"]})
-    return calls
 
 
 class BehaviorEvaluator(BaseEvaluator):
@@ -121,8 +107,6 @@ class BehaviorEvaluator(BaseEvaluator):
             EvalResult with first_tool_accuracy, tool_count_accuracy,
             tools_coverage, and no_tool_accuracy.
         """
-        graph = build_graph(self.config)
-
         first_tool_correct = 0
         first_tool_total = 0
         count_correct = 0
@@ -135,35 +119,18 @@ class BehaviorEvaluator(BaseEvaluator):
         details = []
 
         for case in cases:
-            thread_id = str(uuid.uuid4())
-            run_config = {
-                "configurable": {"thread_id": thread_id},
-                "recursion_limit": 32,
-            }
-
             # Support both single-turn ("question") and multi-turn ("messages")
             questions = case.get("messages") or [case["question"]]
+            session = ChatSession(self.config, recursion_limit=32)
+            tool_calls: list[dict] = []
 
             try:
-                # First turn with system prompt
-                result = graph.invoke(
-                    {"messages": [
-                        SystemMessage(content=SYSTEM_PROMPT),
-                        HumanMessage(content=questions[0]),
-                    ]},
-                    config=run_config,
-                )
-                # Subsequent turns in the same thread
-                for followup in questions[1:]:
-                    result = graph.invoke(
-                        {"messages": [HumanMessage(content=followup)]},
-                        config=run_config,
-                    )
+                for question in questions:
+                    _answer, turn_calls = session.turn_with_trace(question)
+                    tool_calls.extend(turn_calls)
             except (GraphRecursionError, Exception):
-                result = {"messages": []}
+                tool_calls = []
 
-            # MemorySaver accumulates all messages; last result has full history
-            tool_calls = _extract_tool_calls(result["messages"])
             actual_tools = [tc["name"] for tc in tool_calls]
             actual_args = [tc["args"] for tc in tool_calls]
             actual_count = len(actual_tools)
