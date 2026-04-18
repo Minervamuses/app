@@ -2,13 +2,13 @@
 
 from unittest.mock import patch
 
-from kms.types import Hit
+from rag.types import Hit
 
 
 def test_search_adapter_output_format():
     """Search adapter output should remain byte-identical for one hit."""
-    from kms.adapters.langchain.search import create_search_tool
-    from kms.config import KMSConfig
+    from agent.adapters.langchain.search import create_search_tool
+    from rag.config import KMSConfig
 
     hits = [
         Hit(
@@ -24,7 +24,7 @@ def test_search_adapter_output_format():
         ),
     ]
 
-    with patch("kms.adapters.langchain.search.api_search", return_value=hits):
+    with patch("agent.adapters.langchain.search.api_search", return_value=hits):
         tool = create_search_tool(KMSConfig())
         out = tool.invoke({"query": "x"})
 
@@ -34,10 +34,10 @@ def test_search_adapter_output_format():
 
 def test_search_adapter_empty():
     """Search adapter should preserve the empty-results string."""
-    from kms.adapters.langchain.search import create_search_tool
-    from kms.config import KMSConfig
+    from agent.adapters.langchain.search import create_search_tool
+    from rag.config import KMSConfig
 
-    with patch("kms.adapters.langchain.search.api_search", return_value=[]):
+    with patch("agent.adapters.langchain.search.api_search", return_value=[]):
         tool = create_search_tool(KMSConfig())
         out = tool.invoke({"query": "x"})
 

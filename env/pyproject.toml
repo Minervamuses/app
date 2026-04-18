@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "kms"
+name = "rag"
 version = "0.1.0"
 description = "Multi-layer RAG knowledge management system for research labs"
 authors = ["Minervamuses"]

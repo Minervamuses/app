@@ -6,25 +6,24 @@ from langchain_core.tools import tool
 
 def test_imports():
     """Core modules should import without circular or structural failures."""
-    import kms
-    import kms_agent
-    from kms.config import KMSConfig
+    import rag
+    import agent
+    from rag.config import KMSConfig
 
-    assert kms is not None
-    assert kms_agent is not None
+    assert rag is not None
+    assert agent is not None
     assert KMSConfig is not None
 
-    import kms.retriever.vector
-    import kms.store.chroma_store
-    import kms.agent.graph
-    import kms_agent.agent.graph
-    import kms_agent.evaluation.behavior
+    import rag.retriever.vector
+    import rag.store.chroma_store
+    import agent.graph
+    import agent.evaluation.behavior
 
 
 def test_graph_builds_without_error(monkeypatch, tmp_path):
     """The graph should compile with lightweight test doubles."""
-    from kms.agent.graph import build_graph
-    from kms.config import KMSConfig
+    from agent.graph import build_graph
+    from rag.config import KMSConfig
 
     @tool("explore")
     def fake_explore() -> str:
@@ -48,10 +47,10 @@ def test_graph_builds_without_error(monkeypatch, tmp_path):
         def invoke(self, _messages):
             return AIMessage(content="ok")
 
-    monkeypatch.setattr("kms.agent.graph.get_chat_model", lambda _config: DummyModel())
-    monkeypatch.setattr("kms.agent.graph.create_explore_tool", lambda _config: fake_explore)
-    monkeypatch.setattr("kms.agent.graph.create_search_tool", lambda _config: fake_search)
-    monkeypatch.setattr("kms.agent.graph.create_context_tool", lambda _config: fake_context)
+    monkeypatch.setattr("agent.graph.get_chat_model", lambda _config: DummyModel())
+    monkeypatch.setattr("agent.graph.create_explore_tool", lambda _config: fake_explore)
+    monkeypatch.setattr("agent.graph.create_search_tool", lambda _config: fake_search)
+    monkeypatch.setattr("agent.graph.create_context_tool", lambda _config: fake_context)
 
     cfg = KMSConfig(persist_dir=str(tmp_path))
     graph = build_graph(cfg)
