@@ -6,8 +6,8 @@ from pathlib import Path
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from kms.cli.ingest import _extract_date
 from kms.config import KMSConfig
+from kms.utils.paths import extract_date
 
 
 class ExploreInput(BaseModel):
@@ -51,7 +51,7 @@ def create_explore_tool(config: KMSConfig):
             categories[cat] = categories.get(cat, 0) + 1
             all_tags.update(tags)
 
-            d = _extract_date(folder_rel)
+            d = extract_date(folder_rel)
             if d:
                 dates.append(d)
 

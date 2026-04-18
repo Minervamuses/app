@@ -9,7 +9,6 @@ Usage:
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -20,9 +19,7 @@ from kms.store.chroma_store import ChromaStore
 from kms.store.document_store import DocumentStore
 from kms.store.json_store import JSONStore
 from kms.tagger.llm_tagger import LLMTagger
-
-# Regex for YYYYMMDD date folders (e.g. Research_notes/20260306/)
-_DATE_RE = re.compile(r"(\d{4})(\d{2})(\d{2})")
+from kms.utils.paths import extract_date
 
 # File extensions to ingest as text
 TEXT_EXTENSIONS = {
@@ -59,21 +56,6 @@ SKIP_DIRS = {
     "dist",
     "build",
 }
-
-
-def _extract_date(rel_path: str) -> int:
-    """Extract date as YYYYMMDD integer from path if a date folder exists.
-
-    Returns 0 if no date folder is found.  Stored as int so ChromaDB
-    supports $gte/$lte range queries.
-    """
-    for part in Path(rel_path).parts:
-        m = _DATE_RE.fullmatch(part)
-        if m:
-            return int(f"{m.group(1)}{m.group(2)}{m.group(3)}")
-    return 0
-
-
 def _should_ingest(path: Path) -> bool:
     """Check if a file should be ingested."""
     if path.suffix.lower() in TEXT_EXTENSIONS:
@@ -198,7 +180,7 @@ def ingest_repo(
                 continue
 
             rel_path = str(file_path.relative_to(root))
-            date = _extract_date(rel_path)
+            date = extract_date(rel_path)
 
             docs = chunker.chunk(text, rel_path)
 
