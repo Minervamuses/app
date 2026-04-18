@@ -1,9 +1,13 @@
 """Ingest a project repo into the RAG core.
 
+rag is a tool embedded in a host project. It does not guess where the host
+lives — the host points the CLI at the directory to index.
+
 Usage:
-    python -m rag.cli.ingest          # Ingest parent repo
-    python -m rag.cli.ingest -r /path  # Ingest specific repo
-    python -m rag.cli.ingest file.md   # Ingest single file
+    python -m rag.cli.ingest              # Ingest the current working directory
+    python -m rag.cli.ingest -r /path     # Ingest a specific directory
+    python -m rag.cli.ingest file.md      # Ingest a single file
+    python -m rag.cli.ingest -r . --skip rag --skip external/rag
     python -m rag.cli.ingest -h
 """
 
@@ -40,7 +44,6 @@ TEXT_EXTENSIONS = {
 }
 
 # Directories to always skip
-_WORKSPACE_NAME = Path(__file__).resolve().parents[2].name
 SKIP_DIRS = {
     ".git",
     ".github",
@@ -80,14 +83,15 @@ def _get_file_preview(path: Path) -> str:
         return ""
 
 
-def _collect_folders(root: Path) -> dict[str, list[Path]]:
+def _collect_folders(root: Path, extra_skip: set[str] | None = None) -> dict[str, list[Path]]:
     """Group ingestable files by their parent directory."""
+    skip = SKIP_DIRS | (extra_skip or set())
     folders: dict[str, list[Path]] = {}
     for file_path in sorted(root.rglob("*")):
         if not file_path.is_file():
             continue
         parts = file_path.relative_to(root).parts
-        if any(part in SKIP_DIRS or part == _WORKSPACE_NAME for part in parts):
+        if any(part in skip for part in parts):
             continue
         if not _should_ingest(file_path):
             continue
@@ -126,6 +130,7 @@ def _tag_folders(folders: dict[str, list[Path]], root: Path, config: KMSConfig) 
 def ingest_repo(
     repo_root: str | None = None,
     config: KMSConfig | None = None,
+    extra_skip: set[str] | None = None,
 ) -> tuple[int, int]:
     """Ingest all text files into a single 'knowledge' collection with rich metadata.
 
@@ -135,20 +140,23 @@ def ingest_repo(
     - folder_meta.json with per-folder tags and summaries
 
     Args:
-        repo_root: Path to repo root. Defaults to the parent of this workspace.
+        repo_root: Path to the directory to ingest. Defaults to the current
+            working directory — the host project decides what to index.
         config: Pipeline configuration.
+        extra_skip: Additional directory names to skip (e.g. the rag clone dir
+            when ingesting a host project that embeds rag as a subdirectory).
 
     Returns:
         Tuple of (files_ingested, total_chunks).
     """
     config = config or KMSConfig()
-    root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
+    root = Path(repo_root).resolve() if repo_root else Path.cwd()
 
     if not root.is_dir():
         raise FileNotFoundError(f"Repo root not found: {root}")
 
     # Phase 1: Collect and tag folders
-    folders = _collect_folders(root)
+    folders = _collect_folders(root, extra_skip=extra_skip)
     folder_meta = _tag_folders(folders, root, config)
 
     # Save folder metadata
@@ -252,12 +260,18 @@ def main():
         "target",
         nargs="?",
         default=None,
-        help="File path for single-file ingest. Omit to ingest parent repo.",
+        help="File path for single-file ingest. Omit to ingest a directory.",
     )
     parser.add_argument("-p", "--pid", help="Override pid (single-file mode only)")
     parser.add_argument(
         "-r", "--repo",
-        help="Repo root path (repo mode). Defaults to the parent of this workspace.",
+        help="Directory to ingest (repo mode). Defaults to the current working directory.",
+    )
+    parser.add_argument(
+        "--skip",
+        action="append",
+        default=[],
+        help="Directory name to skip, repeatable (e.g. --skip rag --skip external/rag).",
     )
     args = parser.parse_args()
 
@@ -266,7 +280,10 @@ def main():
         print(f"ingested pid={pid}, chunks={count}")
     else:
         print("Ingesting repo...")
-        files, chunks = ingest_repo(repo_root=args.repo)
+        files, chunks = ingest_repo(
+            repo_root=args.repo,
+            extra_skip=set(args.skip) or None,
+        )
         print(f"\nDone: {files} files, {chunks} chunks")
 
 

@@ -1,13 +1,24 @@
 """Central configuration for the RAG workspace."""
 
-from dataclasses import dataclass
-from pathlib import Path
-
-# Resolve store path relative to the workspace root (parent of rag/)
-_WORKSPACE_DIR = Path(__file__).resolve().parents[1]
+import os
+from dataclasses import dataclass, field
 
 # Single collection for all knowledge chunks
 KNOWLEDGE_COLLECTION = "knowledge"
+
+
+def _default_persist_dir() -> str:
+    """Resolve the store directory without peeking at rag's own install path.
+
+    Host projects embed rag as a tool and decide where its data lives. Order:
+      1. ``KMS_STORE_DIR`` env var (explicit host override).
+      2. ``./store`` relative to the caller's CWD (the host project root when
+         the host invokes rag from there).
+    """
+    env = os.environ.get("KMS_STORE_DIR")
+    if env:
+        return env
+    return os.path.join(os.getcwd(), "store")
 
 
 @dataclass
@@ -15,7 +26,7 @@ class KMSConfig:
     """Central configuration for the RAG workspace."""
 
     # Storage
-    persist_dir: str = str(_WORKSPACE_DIR / "store")
+    persist_dir: str = field(default_factory=_default_persist_dir)
 
     # Chunking
     chunk_size: int = 1200
