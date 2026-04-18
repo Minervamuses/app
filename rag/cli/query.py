@@ -1,4 +1,4 @@
-"""Interactive query interface for the KMS."""
+"""Interactive query interface for the RAG core."""
 
 import argparse
 
@@ -42,7 +42,7 @@ def interactive(config: KMSConfig, k: int = 5) -> None:
     chroma = ChromaStore(KNOWLEDGE_COLLECTION, config)
     retriever = VectorRetriever(chroma)
 
-    print(f"KMS Query (k={k}). Type 'q' to quit.\n")
+    print(f"RAG Query (k={k}). Type 'q' to quit.\n")
 
     while True:
         try:
@@ -70,7 +70,7 @@ def interactive(config: KMSConfig, k: int = 5) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Query the KMS.")
+    parser = argparse.ArgumentParser(description="Query the RAG core.")
     parser.add_argument("question", nargs="?", help="Single question. Omit for interactive mode.")
     parser.add_argument("-k", type=int, default=5, help="Number of results (default: 5)")
     args = parser.parse_args()

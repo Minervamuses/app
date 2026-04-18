@@ -2,51 +2,41 @@
 
 ## Goal
 
-Split the current single-package repository into:
+Treat this repository as a neutral workspace with two peer packages:
 
 - a RAG/core package that owns indexing, storage, retrieval, and the public retrieval API
 - an agent/app package that owns tool adapters, graph orchestration, chat CLI, and evaluation
 
 This is the staging plan toward a later MCP-style deployment boundary.
 
-## Current Boundary After Step 1
+## Current Boundary
 
-### `kms` now represents RAG/core
+### `rag` represents RAG/core
 
-`kms` remains the source of truth for:
+`rag` is the source of truth for:
 
-- public API: `kms.api`, `kms.types`, `kms.filters`, `kms.config`
-- data pipeline: `kms.chunker`, `kms.embedder`, `kms.tagger`
-- retrieval/storage: `kms.retriever`, `kms.store`
-- shared LLM providers used by the core pipeline: `kms.llm`
-- utilities and RAG-side CLIs: `kms.utils`, `kms.cli.ingest`, `kms.cli.query`
+- public API: `rag.api`, `rag.types`, `rag.filters`, `rag.config`
+- data pipeline: `rag.chunker`, `rag.embedder`, `rag.tagger`
+- retrieval/storage: `rag.retriever`, `rag.store`
+- shared LLM providers used by the core pipeline: `rag.llm`
+- utilities and RAG-side CLIs: `rag.utils`, `rag.cli.ingest`, `rag.cli.query`
 
-### `kms_agent` now represents the agent/app layer
+### `agent` represents the agent/app layer
 
-`kms_agent` is now the source of truth for:
+`agent` is the source of truth for:
 
-- agent graph/session/state/history: `kms_agent.agent`
-- framework adapters: `kms_agent.adapters`
-- evaluation suites: `kms_agent.evaluation`
-- agent-side CLIs: `kms_agent.cli.chat`, `kms_agent.cli.eval`
+- graph/session/state/history: `agent.graph`, `agent.session`, `agent.state`, `agent.history`
+- framework adapters: `agent.adapters`
+- evaluation suites: `agent.evaluation`
+- agent-side CLIs: `agent.cli.chat`, `agent.cli.eval`
 
-### Compatibility
+## What Changed In This Stage
 
-Legacy imports under `kms.agent`, `kms.adapters`, `kms.evaluation`, `kms.cli.chat`, and `kms.cli.eval` are currently compatibility shims.
+- the old `kms` / `kms_agent` names are gone from the source tree
+- the repo no longer assumes the enclosing project is itself the agent app
+- the workspace root now exists to host two peer packages rather than one package containing the other
 
-## Why This Is The First Split
-
-This is the lowest-risk structural cut because:
-
-- `kms` already had a mostly self-contained RAG core
-- the agent layer already depended on `kms`, but not the other way around
-- extracting the agent first reduces coupling without forcing a noisy `kms -> rag` rename yet
-
-## Next Steps
-
-### Step 2: Rename the core package
-
-Rename `kms` to a clearer core name such as `rag` or `kms_rag` after callers stop depending on legacy `kms.*` agent paths.
+## Remaining Work
 
 ### Step 3: Extract service boundary
 
@@ -56,13 +46,14 @@ Wrap the core API (`search`, `explore`, `get_context`) in a thin server layer. T
 - HTTP/JSON RPC
 - a local subprocess tool server
 
-### Step 4: Remove compatibility shims
+### Step 4: Physical repo split outside the nested `app/` checkout
 
-Once all imports move to the new package names, delete the shim modules under legacy `kms.agent`, `kms.adapters`, and `kms.evaluation`.
+The code is now structured as peers inside this repo, but the enclosing
+filesystem directory is still named `app/`. Moving the checkout itself to a
+new sibling path under `PiDNA2/` is a parent-repo/filesystem operation rather
+than a git-tracked code change inside this repository.
 
-### Step 5: Physical repo split
+When that happens, the target layout should look like:
 
-At that point the code can be split into separate repositories with minimal churn:
-
-- `app/` or `agent-app/`
+- `agent/` or `agent-app/`
 - `rag/`

@@ -1,4 +1,4 @@
-"""CLI entry point for the extracted KMS agent package."""
+"""CLI entry point for the agent package."""
 
 import argparse
 
@@ -8,7 +8,7 @@ from agent.session import ChatSession, DEFAULT_RECURSION_LIMIT
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Conversational query interface for the KMS. "
+        description="Conversational agent interface over the RAG core. "
         "Uses LangGraph with tool-calling to let the LLM search the knowledge base."
     )
     parser.add_argument(
@@ -20,7 +20,7 @@ def main():
     config = KMSConfig()
     session = ChatSession(config, recursion_limit=args.max_turns)
 
-    print("KMS Chat (LangGraph mode). Type 'q' to quit.\n")
+    print("Agent Chat (LangGraph mode). Type 'q' to quit.\n")
 
     while True:
         try:

@@ -1,5 +1,10 @@
 # `langgraph` branch — 架構說明
 
+目前 repo root 是一個 workspace，底下有兩個 peer package：
+
+- `rag/`：建索引、儲存、檢索、public retrieval API
+- `agent/`：LangGraph agent、tool adapters、chat/eval CLI
+
 整個系統分成兩條獨立的 pipeline：**Ingest**（建索引）和 **Chat**（查詢），它們唯一的交會點是磁碟上的 store。
 
 ---
@@ -26,7 +31,7 @@
 
 ![Agent Loop](agent_loop.svg)
 
-整個 `graph.py` 只定義了兩個 node 和一條 conditional edge，LangGraph 會自動處理循環：
+整個 `agent/graph.py` 只定義了兩個 node 和一條 conditional edge，LangGraph 會自動處理循環：
 
 **Agent node**：把目前所有 messages（system prompt + 對話歷史 + tool 結果）丟給 LLM。LLM 回傳的東西只有兩種可能——純文字回答，或者 tool call 請求。
 
@@ -48,6 +53,6 @@
 
 ## 舊版 vs 新版的關鍵差異
 
-舊版的 `chat.py` 有 30 行在手動做 LangGraph 現在自動處理的事：parse tool calls → 組 assistant message → 逐一執行 tool → 組 tool result message → append 回 messages → 重新呼叫 LLM。新版把這些全交給 `StateGraph` + `ToolNode` + `tools_condition`，`chat.py` 的 `turn()` 只剩一行 `self.graph.invoke()`。
+舊版的 `chat.py` 有 30 行在手動做 LangGraph 現在自動處理的事：parse tool calls → 組 assistant message → 逐一執行 tool → 組 tool result message → append 回 messages → 重新呼叫 LLM。新版把這些全交給 `StateGraph` + `ToolNode` + `tools_condition`，`agent/session.py` 的 `turn()` 只剩一行 `self.graph.invoke()`。
 
 舊版 LLM 模組需要 `ChatResponse`、`ToolCall` dataclass 和 `BaseLLM.chat()` 方法來手動解析 OpenAI 的 tool call 格式。新版用 LangChain 的 `ChatOpenAI`，它原生支援 `.bind_tools()`，所以這些全部可以刪掉。`OpenRouterLLM` 只留 `invoke()` 給 tagger 用。

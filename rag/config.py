@@ -1,10 +1,10 @@
-"""Central configuration for the KMS pipeline."""
+"""Central configuration for the RAG workspace."""
 
 from dataclasses import dataclass
 from pathlib import Path
 
-# Resolve store path relative to app/ directory (parent of rag/)
-_APP_DIR = Path(__file__).resolve().parents[1]
+# Resolve store path relative to the workspace root (parent of rag/)
+_WORKSPACE_DIR = Path(__file__).resolve().parents[1]
 
 # Single collection for all knowledge chunks
 KNOWLEDGE_COLLECTION = "knowledge"
@@ -12,10 +12,10 @@ KNOWLEDGE_COLLECTION = "knowledge"
 
 @dataclass
 class KMSConfig:
-    """Central configuration for the KMS pipeline."""
+    """Central configuration for the RAG workspace."""
 
     # Storage
-    persist_dir: str = str(_APP_DIR / "store")
+    persist_dir: str = str(_WORKSPACE_DIR / "store")
 
     # Chunking
     chunk_size: int = 1200

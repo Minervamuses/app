@@ -1,4 +1,4 @@
-"""Evaluation CLI — run behavior and end-to-end evaluations.
+"""Evaluation CLI for the agent package.
 
 Usage:
     python -m agent.cli.eval --suite behavior
@@ -81,7 +81,7 @@ def _run_suite(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run KMS evaluation suites: behavior and end-to-end."
+        description="Run agent evaluation suites: behavior and end-to-end."
     )
     parser.add_argument(
         "--suite", choices=SUITE_NAMES,

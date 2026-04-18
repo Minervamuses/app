@@ -1,4 +1,4 @@
-"""Ingest a project repo into the KMS.
+"""Ingest a project repo into the RAG core.
 
 Usage:
     python -m rag.cli.ingest          # Ingest parent repo
@@ -40,8 +40,8 @@ TEXT_EXTENSIONS = {
 }
 
 # Directories to always skip
+_WORKSPACE_NAME = Path(__file__).resolve().parents[2].name
 SKIP_DIRS = {
-    "app",          # ourselves
     ".git",
     ".github",
     "__pycache__",
@@ -56,6 +56,8 @@ SKIP_DIRS = {
     "dist",
     "build",
 }
+
+
 def _should_ingest(path: Path) -> bool:
     """Check if a file should be ingested."""
     if path.suffix.lower() in TEXT_EXTENSIONS:
@@ -85,7 +87,7 @@ def _collect_folders(root: Path) -> dict[str, list[Path]]:
         if not file_path.is_file():
             continue
         parts = file_path.relative_to(root).parts
-        if any(part in SKIP_DIRS for part in parts):
+        if any(part in SKIP_DIRS or part == _WORKSPACE_NAME for part in parts):
             continue
         if not _should_ingest(file_path):
             continue
@@ -133,7 +135,7 @@ def ingest_repo(
     - folder_meta.json with per-folder tags and summaries
 
     Args:
-        repo_root: Path to repo root. Defaults to parent of app/.
+        repo_root: Path to repo root. Defaults to the parent of this workspace.
         config: Pipeline configuration.
 
     Returns:
@@ -245,7 +247,7 @@ def ingest_single(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest into the KMS.")
+    parser = argparse.ArgumentParser(description="Ingest into the RAG core.")
     parser.add_argument(
         "target",
         nargs="?",
@@ -255,7 +257,7 @@ def main():
     parser.add_argument("-p", "--pid", help="Override pid (single-file mode only)")
     parser.add_argument(
         "-r", "--repo",
-        help="Repo root path (repo mode). Defaults to parent of app/.",
+        help="Repo root path (repo mode). Defaults to the parent of this workspace.",
     )
     args = parser.parse_args()
 

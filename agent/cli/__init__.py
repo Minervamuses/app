@@ -1,1 +1,1 @@
-"""CLI entry points for the extracted KMS agent package."""
+"""CLI entry points for the agent package."""
