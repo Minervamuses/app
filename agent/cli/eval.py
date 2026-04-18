@@ -100,8 +100,9 @@ def main():
         help="Load test cases from a JSON file instead of generating.",
     )
     parser.add_argument(
-        "--output", type=str, metavar="DIR", default=None,
-        help="Save cases and results to this directory (default: don't save).",
+        "--output", type=str, metavar="DIR", default="eval",
+        help="Save cases and results to this directory (default: eval/). "
+             "Filenames include a timestamp so old runs are preserved.",
     )
     args = parser.parse_args()
 
