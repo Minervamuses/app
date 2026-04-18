@@ -10,7 +10,7 @@ from pathlib import Path
 
 from langgraph.errors import GraphRecursionError
 
-from kms.cli.chat import ChatSession
+from kms.agent.session import ChatSession
 from kms.config import KMSConfig
 from kms.evaluation.base import BaseEvaluator, EvalResult, _extract_json
 from kms.llm.ollama import OllamaLLM
