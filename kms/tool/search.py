@@ -4,41 +4,9 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
+from kms.filters import build_where
 from kms.retriever.vector import VectorRetriever
 from kms.store.chroma_store import ChromaStore
-
-
-def _date_to_int(date_str: str) -> int:
-    """Convert 'YYYY-MM-DD' to YYYYMMDD integer for ChromaDB numeric filtering."""
-    return int(date_str.replace("-", ""))
-
-
-def _build_where(
-    category: str | None,
-    file_type: str | None,
-    date_from: str | None,
-    date_to: str | None,
-    folder_prefix: str | None = None,
-) -> dict | None:
-    """Build a ChromaDB where clause from filter arguments."""
-    conditions = []
-    if folder_prefix:
-        prefix = folder_prefix.rstrip("/")
-        conditions.append({"folder": {"$contains": prefix}})
-    if category:
-        conditions.append({"category": {"$eq": category}})
-    if file_type:
-        conditions.append({"file_type": {"$eq": file_type}})
-    if date_from:
-        conditions.append({"date": {"$gte": _date_to_int(date_from)}})
-    if date_to:
-        conditions.append({"date": {"$lte": _date_to_int(date_to)}})
-
-    if not conditions:
-        return None
-    if len(conditions) == 1:
-        return conditions[0]
-    return {"$and": conditions}
 
 
 class SearchInput(BaseModel):
@@ -73,7 +41,13 @@ def create_search_tool(config: KMSConfig):
         Use the 'explore' tool first if you're unsure what categories or tags are available.
         You can call this multiple times with different queries or filters.
         """
-        where = _build_where(category, file_type, date_from, date_to, folder_prefix)
+        where = build_where(
+            category=category,
+            file_type=file_type,
+            date_from=date_from,
+            date_to=date_to,
+            folder_prefix=folder_prefix,
+        )
         docs = retriever.retrieve(query, k=k, where=where)
 
         if not docs:
