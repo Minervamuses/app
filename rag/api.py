@@ -124,6 +124,26 @@ def explore(
     )
 
 
+def list_chunks(
+    *,
+    folder_prefix: str | None = None,
+    pid: str | None = None,
+    config: KMSConfig | None = None,
+) -> list[Hit]:
+    """Enumerate every stored chunk, optionally filtered by folder/pid.
+
+    Exposed so consumers (e.g. evaluation harnesses) can iterate the full
+    corpus without reaching into rag's internal stores.
+    """
+    cfg = config or KMSConfig()
+    json_store = JSONStore(cfg.raw_json_path())
+    docs = json_store.get(pid=pid)
+    hits = [_doc_to_hit(doc) for doc in docs]
+    if folder_prefix is not None:
+        hits = [h for h in hits if (h.folder or "").startswith(folder_prefix)]
+    return hits
+
+
 def get_context(
     pid: str,
     chunk_id: int,

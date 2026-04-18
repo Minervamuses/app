@@ -10,8 +10,8 @@ from pathlib import Path
 
 from langgraph.errors import GraphRecursionError
 
+from rag.api import list_chunks
 from rag.config import KMSConfig
-from rag.store.json_store import JSONStore
 
 from agent.evaluation.base import BaseEvaluator, EvalResult, _extract_json
 from agent.llm.ollama import OllamaLLM
@@ -102,17 +102,15 @@ class EndToEndEvaluator(BaseEvaluator):
             List of test case dicts with question, reference_answer,
             required_chunks, and question_type.
         """
-        json_store = JSONStore(self.config.raw_json_path())
-        all_docs = json_store.get()
+        all_hits = list_chunks(config=self.config)
 
         # Group chunks by folder for relatedness
         by_folder: dict[str, list] = {}
-        for doc in all_docs:
-            folder = doc.metadata.get("folder", "")
-            by_folder.setdefault(folder, []).append(doc)
+        for hit in all_hits:
+            by_folder.setdefault(hit.folder or "", []).append(hit)
 
         # Only folders with 2+ chunks can produce synthesis questions
-        eligible = {f: docs for f, docs in by_folder.items() if len(docs) >= 2}
+        eligible = {f: hits for f, hits in by_folder.items() if len(hits) >= 2}
         if not eligible:
             return []
 
@@ -123,33 +121,32 @@ class EndToEndEvaluator(BaseEvaluator):
             if not folders:
                 break
             folder = random.choice(folders)
-            docs = eligible[folder]
-            sample_size = min(random.randint(2, 4), len(docs))
-            sampled = random.sample(docs, sample_size)
+            hits = eligible[folder]
+            sample_size = min(random.randint(2, 4), len(hits))
+            sampled = random.sample(hits, sample_size)
 
             # Filter out non-semantic chunks via local LLM
             filtered = []
-            for doc in sampled:
-                preview = doc.page_content[:400]
+            for hit in sampled:
+                preview = hit.text[:400]
                 verdict = self._filter_llm.invoke(
                     FILTER_PROMPT.format(chunk_text=preview),
                     max_tokens=8,
                     temperature=0.0,
                 )
                 if verdict.strip().upper().startswith("YES"):
-                    filtered.append(doc)
+                    filtered.append(hit)
             if len(filtered) < 2:
                 continue
             sampled = filtered
 
             chunk_texts = ""
-            for i, doc in enumerate(sampled, 1):
-                meta = doc.metadata
+            for i, hit in enumerate(sampled, 1):
                 chunk_texts += (
-                    f"\n[Chunk {i} - pid: {meta.get('pid')}, "
-                    f"chunk_id: {meta.get('chunk_id')}, "
-                    f"file: {meta.get('file_path', '?')}]\n"
-                    f"{doc.page_content[:1200]}\n"
+                    f"\n[Chunk {i} - pid: {hit.pid}, "
+                    f"chunk_id: {hit.chunk_id}, "
+                    f"file: {hit.file_path or '?'}]\n"
+                    f"{hit.text[:1200]}\n"
                 )
 
             prompt = GENERATE_PROMPT.format(chunk_texts=chunk_texts)
