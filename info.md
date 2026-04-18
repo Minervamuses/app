@@ -1,11 +1,8 @@
 # `langgraph` branch — 架構說明
 
-目前 repo root 是一個 workspace，底下有兩個 peer package：
+這個 repo 是 **agent** 專案，裡面放 `agent/` package：LangGraph agent、tool adapters、chat/eval CLI。`rag`（建索引、儲存、檢索、public retrieval API）現在是獨立 repo，位於 `../rag`（github.com:Minervamuses/rag），agent 透過 Poetry path dep 引入。
 
-- `rag/`：建索引、儲存、檢索、public retrieval API
-- `agent/`：LangGraph agent、tool adapters、chat/eval CLI
-
-整個系統分成兩條獨立的 pipeline：**Ingest**（建索引）和 **Chat**（查詢），它們唯一的交會點是磁碟上的 store。
+整個系統分成兩條獨立的 pipeline：**Ingest**（建索引，由 rag 負責）和 **Chat**（查詢，由 agent 驅動），它們唯一的交會點是磁碟上的 store。
 
 ---
 
