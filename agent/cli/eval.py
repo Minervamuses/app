@@ -4,8 +4,8 @@ Usage:
     python -m agent.cli.eval --suite behavior
     python -m agent.cli.eval --suite e2e --generate 15
     python -m agent.cli.eval --all --generate 5
-    python -m agent.cli.eval --suite e2e --cases store/eval/e2e_cases.json
-    python -m agent.cli.eval --all --generate 5 --output store/eval/
+    python -m agent.cli.eval --suite e2e --cases eval/e2e_cases.json
+    python -m agent.cli.eval --all --generate 5 --output eval/
     python -m agent.cli.eval -h
 """
 

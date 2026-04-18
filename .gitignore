@@ -6,8 +6,6 @@ dist/
 build/
 .venv/
 .pytest_cache/
-/store/*
-!/store/eval/
 *.sqlite3
 poetry.lock
 
