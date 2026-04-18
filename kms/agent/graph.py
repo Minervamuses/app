@@ -3,13 +3,11 @@
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from kms.adapters.langchain import create_context_tool, create_explore_tool, create_search_tool
 from kms.agent.history import prepare_messages_for_agent
 from kms.agent.state import AgentState
 from kms.config import KMSConfig
 from kms.llm.openrouter import get_chat_model
-from kms.tool.context import create_context_tool
-from kms.tool.explore import create_explore_tool
-from kms.tool.search import create_search_tool
 
 
 def build_graph(config: KMSConfig):

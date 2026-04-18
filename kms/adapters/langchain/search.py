@@ -1,18 +1,16 @@
-"""Search tool — semantic search with metadata filtering."""
+"""LangChain search tool adapter."""
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from kms.config import KMSConfig, KNOWLEDGE_COLLECTION
-from kms.filters import build_where
-from kms.retriever.vector import VectorRetriever
-from kms.store.chroma_store import ChromaStore
+from kms.api import search as api_search
+from kms.config import KMSConfig
 
 
 class SearchInput(BaseModel):
     """Input schema for the search tool."""
 
-    query: str = Field(description="Semantic search query — describe what you're looking for.")
+    query: str = Field(description="Semantic search query ??describe what you're looking for.")
     folder_prefix: str | None = Field(None, description="Filter by folder path prefix (e.g. 'Research_notes' or 'pidna2/src'). Matches the folder and all subfolders.")
     category: str | None = Field(None, description="Filter by category (e.g. 'source-code', 'research-notes').")
     file_type: str | None = Field(None, description="Filter by file extension (e.g. '.py', '.md', '.sql').")
@@ -23,8 +21,6 @@ class SearchInput(BaseModel):
 
 def create_search_tool(config: KMSConfig):
     """Create a LangChain search tool bound to the given config."""
-    store = ChromaStore(KNOWLEDGE_COLLECTION, config)
-    retriever = VectorRetriever(store)
 
     @tool("search", args_schema=SearchInput)
     def search(
@@ -41,32 +37,27 @@ def create_search_tool(config: KMSConfig):
         Use the 'explore' tool first if you're unsure what categories or tags are available.
         You can call this multiple times with different queries or filters.
         """
-        where = build_where(
+        hits = api_search(
+            query,
+            k=k,
+            folder_prefix=folder_prefix,
             category=category,
             file_type=file_type,
             date_from=date_from,
             date_to=date_to,
-            folder_prefix=folder_prefix,
+            config=config,
         )
-        docs = retriever.retrieve(query, k=k, where=where)
-
-        if not docs:
+        if not hits:
             return "No results found."
 
         parts = []
-        for i, doc in enumerate(docs, 1):
-            meta = doc.metadata
-            header = f"[{i}] {meta.get('file_path', '?')}"
-            cat = meta.get("category", "?")
-            header += f" (category={cat})"
-            date = meta.get("date")
-            if date and date != 0:
-                header += f" (date={date})"
-            pid = meta.get("pid", "?")
-            chunk_id = meta.get("chunk_id", "?")
-            header += f" [pid={pid}, chunk_id={chunk_id}]"
-            preview = doc.page_content[:600]
-            parts.append(f"{header}\n{preview}")
+        for i, hit in enumerate(hits, 1):
+            header = f"[{i}] {hit.file_path or '?'}"
+            header += f" (category={hit.category or '?'})"
+            if hit.date and hit.date != 0:
+                header += f" (date={hit.date})"
+            header += f" [pid={hit.pid or '?'}, chunk_id={hit.chunk_id}]"
+            parts.append(f"{header}\n{hit.text[:600]}")
 
         return "\n\n".join(parts)
 
