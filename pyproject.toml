@@ -8,7 +8,7 @@ packages = [{ include = "agent" }]
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
 
-rag = { path = "rag", develop = true }
+rag = { path = "../rag", develop = true }
 
 langchain-core = "^1.2.0"
 langchain-openai = "^1.1.12"
