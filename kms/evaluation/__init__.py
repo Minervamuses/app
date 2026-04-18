@@ -1,8 +1,6 @@
-"""Evaluation module — test suites for agent behavior and end-to-end quality."""
+"""Compatibility package for legacy `kms.evaluation` imports."""
 
-from kms.evaluation.base import BaseEvaluator, EvalResult
-from kms.evaluation.behavior import BehaviorEvaluator
-from kms.evaluation.endtoend import EndToEndEvaluator
+from kms_agent.evaluation import BaseEvaluator, BehaviorEvaluator, EndToEndEvaluator, EvalResult
 
 __all__ = [
     "BaseEvaluator",

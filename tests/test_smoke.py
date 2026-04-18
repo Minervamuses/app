@@ -7,14 +7,18 @@ from langchain_core.tools import tool
 def test_imports():
     """Core modules should import without circular or structural failures."""
     import kms
+    import kms_agent
     from kms.config import KMSConfig
 
     assert kms is not None
+    assert kms_agent is not None
     assert KMSConfig is not None
 
     import kms.retriever.vector
     import kms.store.chroma_store
     import kms.agent.graph
+    import kms_agent.agent.graph
+    import kms_agent.evaluation.behavior
 
 
 def test_graph_builds_without_error(monkeypatch, tmp_path):

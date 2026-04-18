@@ -1,4 +1,4 @@
-"""Compatibility package for legacy `kms.adapters.langchain` imports."""
+"""Agent-side adapters for connecting the RAG core to frameworks."""
 
 from kms_agent.adapters.langchain import (
     create_context_tool,

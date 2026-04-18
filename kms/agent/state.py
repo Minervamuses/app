@@ -1,13 +1,7 @@
-"""Agent state definition for LangGraph."""
+"""Compatibility shim for `kms.agent.state`."""
 
-from typing import Annotated
+import sys
 
-from langchain_core.messages import BaseMessage
-from langgraph.graph.message import add_messages
-from typing_extensions import TypedDict
+from kms_agent.agent import state as _state
 
-
-class AgentState(TypedDict):
-    """State passed between graph nodes. Messages accumulate via add_messages reducer."""
-
-    messages: Annotated[list[BaseMessage], add_messages]
+sys.modules[__name__] = _state
