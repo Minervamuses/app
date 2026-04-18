@@ -150,7 +150,7 @@ def ingest_repo(
     folder_meta = _tag_folders(folders, root, config)
 
     # Save folder metadata
-    meta_path = Path(config.persist_dir) / "folder_meta.json"
+    meta_path = Path(config.folder_meta_path())
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     with meta_path.open("w", encoding="utf-8") as f:
         json.dump(folder_meta, f, ensure_ascii=False, indent=2)

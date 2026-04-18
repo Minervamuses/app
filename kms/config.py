@@ -46,3 +46,7 @@ class KMSConfig:
     def raw_json_path(self) -> str:
         """Path to the raw chunks JSON file."""
         return f"{self.persist_dir}/raw.json"
+
+    def folder_meta_path(self) -> str:
+        """Path to the folder metadata JSON file."""
+        return f"{self.persist_dir}/folder_meta.json"

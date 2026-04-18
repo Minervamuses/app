@@ -18,7 +18,7 @@ class ExploreInput(BaseModel):
 
 def _load_meta(config: KMSConfig) -> dict:
     """Load folder_meta.json from the persist directory."""
-    meta_path = Path(config.persist_dir) / "folder_meta.json"
+    meta_path = Path(config.folder_meta_path())
     try:
         with open(meta_path) as f:
             return json.load(f)
