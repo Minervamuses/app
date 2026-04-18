@@ -1,22 +1,20 @@
 [tool.poetry]
-name = "rag-agent-workspace"
+name = "rag"
 version = "0.1.0"
-description = "Workspace containing the peer rag and agent packages for the lab knowledge system"
+description = "Framework-neutral RAG library for indexing, storing, and retrieving text chunks from a project directory."
 authors = ["Minervamuses"]
-package-mode = false
+packages = [{ include = "rag" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
 
 tiktoken = "^0.12.0"
 chromadb = "^1.5.0"
-langchain = "^1.2.0"
 langchain-core = "^1.2.0"
 langchain-chroma = "^1.1.0"
 langchain-ollama = "^1.0.0"
+ollama = "^0.6.0"
 openai = "^2.30.0"
-langgraph = "^1.1.4"
-langchain-openai = "^1.1.12"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"

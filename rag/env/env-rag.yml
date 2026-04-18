@@ -1,0 +1,7 @@
+name: rag
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.13
+prefix: /home/minervamuses/miniconda3/envs/rag
