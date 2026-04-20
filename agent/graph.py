@@ -41,9 +41,12 @@ def build_graph(config: AgentConfig, extra_tools: list | None = None):
         )
         return {"messages": [model_with_tools.invoke(prompt_messages)]}
 
+    def _tool_error_to_message(exc: Exception) -> str:
+        return f"Tool error: {type(exc).__name__}: {exc}"
+
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent_node)
-    graph.add_node("tools", ToolNode(tools))
+    graph.add_node("tools", ToolNode(tools, handle_tool_errors=_tool_error_to_message))
 
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", tools_condition)
