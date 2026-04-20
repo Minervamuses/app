@@ -1,5 +1,6 @@
 """Tests for turn-aware memory and rolling compaction behavior."""
 
+import asyncio
 from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -88,7 +89,7 @@ def _make_session(monkeypatch, tmp_path, turns_per_compaction=3):
         def __init__(self):
             self.calls: list[list] = []
 
-        def invoke(self, state, config=None):
+        async def ainvoke(self, state, config=None):
             self.calls.append(state["messages"])
             return {"messages": [*state["messages"], AIMessage(content="ok")]}
 
@@ -114,7 +115,7 @@ def test_compaction_triggers_after_block(monkeypatch, tmp_path):
     )
 
     for i in range(3):
-        session.turn(f"q{i}")
+        asyncio.run(session.turn(f"q{i}"))
 
     assert len(summarize_calls) == 1
     assert session.rolling_summary_text == "summary-1"
@@ -128,7 +129,7 @@ def test_compaction_is_block_based_not_message_based(monkeypatch, tmp_path):
     )
 
     for i in range(7):
-        session.turn(f"q{i}")
+        asyncio.run(session.turn(f"q{i}"))
 
     # 7 turns -> 2 compactions (at turn 3 and turn 6), 1 raw turn remaining
     assert len(summarize_calls) == 2
@@ -143,7 +144,7 @@ def test_prompt_history_after_compaction_has_single_summary(monkeypatch, tmp_pat
     )
 
     for i in range(6):
-        session.turn(f"q{i}")
+        asyncio.run(session.turn(f"q{i}"))
 
     # Two compactions, but still exactly one summary SystemMessage kept.
     msgs = session._prompt_history()
@@ -158,7 +159,7 @@ def test_compaction_failure_does_not_drop_turns(monkeypatch, tmp_path):
     from agent.config import AgentConfig
 
     class DummyGraph:
-        def invoke(self, state, config=None):
+        async def ainvoke(self, state, config=None):
             return {"messages": [*state["messages"], AIMessage(content="ok")]}
 
     monkeypatch.setattr("agent.session.build_graph", lambda _cfg, extra_tools=None: DummyGraph())
@@ -172,7 +173,7 @@ def test_compaction_failure_does_not_drop_turns(monkeypatch, tmp_path):
     session = ChatSession(cfg, summarize_fn=raising_summarize)
 
     for i in range(2):
-        session.turn(f"q{i}")
+        asyncio.run(session.turn(f"q{i}"))
 
     assert session.rolling_summary_text is None
     assert len(session.recent_turns) == 2

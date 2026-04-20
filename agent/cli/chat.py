@@ -33,7 +33,7 @@ async def _run(args: argparse.Namespace) -> None:
         if not user_input or user_input.lower() in ("q", "quit", "exit"):
             break
 
-        response = session.turn(user_input)
+        response = await session.turn(user_input)
         print(f"\n{response}\n")
 
 

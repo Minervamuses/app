@@ -5,6 +5,7 @@ whether the tool call sequence matches expected patterns (first tool choice,
 tool count, required tools).
 """
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -126,7 +127,7 @@ class BehaviorEvaluator(BaseEvaluator):
 
             try:
                 for question in questions:
-                    _answer, turn_calls = session.turn_with_trace(question)
+                    _answer, turn_calls = asyncio.run(session.turn_with_trace(question))
                     tool_calls.extend(turn_calls)
             except (GraphRecursionError, Exception):
                 tool_calls = []

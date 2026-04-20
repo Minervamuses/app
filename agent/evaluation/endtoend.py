@@ -4,6 +4,7 @@ Generates multi-chunk synthesis questions with reference answers, runs them
 through the full agent graph, then uses LLM-as-judge to score the output.
 """
 
+import asyncio
 import json
 import random
 from pathlib import Path
@@ -189,7 +190,7 @@ class EndToEndEvaluator(BaseEvaluator):
             session = ChatSession(self.config, recursion_limit=32)
 
             try:
-                actual_answer = session.turn(case["question"])
+                actual_answer = asyncio.run(session.turn(case["question"]))
             except GraphRecursionError:
                 actual_answer = "(agent hit recursion limit)"
             except Exception as exc:

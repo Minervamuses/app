@@ -17,25 +17,52 @@ other. Configure the layer(s) you actually need.
 
 ## Enable Web Search MCP for the `app` agent
 
+`mrkrsl/web-search-mcp` is **not** published on npm — it ships as a
+GitHub release zip with pre-built `dist/`. Install once:
+
 ```
-AGENT_ENABLE_MCP_WEB_SEARCH=1
-AGENT_MCP_WEB_SEARCH_COMMAND=npx
-AGENT_MCP_WEB_SEARCH_ARGS=-y web-search-mcp@latest
+mkdir -p ~/.local/share/mcp-servers
+cd ~/.local/share/mcp-servers
+curl -sSL -o ws.zip https://github.com/mrkrsl/web-search-mcp/releases/latest/download/web-search-mcp-v0.3.2.zip
+mkdir web-search-mcp && cd web-search-mcp
+unzip -q ../ws.zip && rm ../ws.zip
+npm install --omit=dev
+npx playwright install chromium   # ~300 MiB of browser binaries
 ```
 
-See upstream: `mrkrsl/web-search-mcp`.
+Then in `app/.env`:
+
+```
+AGENT_ENABLE_MCP_WEB_SEARCH=1
+AGENT_MCP_WEB_SEARCH_COMMAND=node
+AGENT_MCP_WEB_SEARCH_ARGS=/home/<user>/.local/share/mcp-servers/web-search-mcp/dist/index.js
+```
+
+Known upstream bug: the server prints human-readable banners on stdout
+(e.g. `Web Search MCP Server started`). The MCP stdio client logs these
+as invalid JSON-RPC and skips them; tool loading still succeeds.
+Expected tools: `full-web-search`, `get-web-search-summaries`,
+`get-single-web-page-content`.
 
 ## Enable GitHub MCP for the `app` agent
 
+Install the upstream Go binary once:
+
+```
+curl -sSL -o /tmp/gh-mcp.tar.gz https://github.com/github/github-mcp-server/releases/latest/download/github-mcp-server_Linux_x86_64.tar.gz
+tar -xzf /tmp/gh-mcp.tar.gz -C ~/.local/bin github-mcp-server
+chmod +x ~/.local/bin/github-mcp-server
+```
+
+Then in `app/.env`:
+
 ```
 AGENT_ENABLE_MCP_GITHUB=1
-AGENT_MCP_GITHUB_COMMAND=/absolute/path/to/github-mcp-server
+AGENT_MCP_GITHUB_COMMAND=/home/<user>/.local/bin/github-mcp-server
 AGENT_MCP_GITHUB_ARGS=stdio
 AGENT_MCP_GITHUB_TOOLSETS=repos,pull_requests,issues,actions,context
 GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxx
 ```
-
-See upstream: `github/github-mcp-server`.
 
 Scope is intentionally limited to reading and navigating remote state.
 GitHub MCP is **not** a substitute for local git shell workflow; local

@@ -112,10 +112,10 @@ class ChatSession:
         self.rolling_summary_text = new_summary
         self.recent_turns = self.recent_turns[threshold:]
 
-    def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
+    async def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
         """Process one turn and return the final answer plus tool-call trace."""
         input_messages = [*self._prompt_history(), HumanMessage(content=user_input)]
-        result = self.graph.invoke(
+        result = await self.graph.ainvoke(
             {"messages": input_messages},
             config={"recursion_limit": self.recursion_limit},
         )
@@ -136,14 +136,14 @@ class ChatSession:
 
         return answer, tool_calls
 
-    def turn(self, user_input: str) -> str:
+    async def turn(self, user_input: str) -> str:
         """Process one conversation turn. Returns the final text response."""
-        answer, _tool_calls = self._run_turn(user_input)
+        answer, _tool_calls = await self._run_turn(user_input)
         return answer
 
-    def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
+    async def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
         """Process one turn and return the answer plus normalized tool trace."""
-        return self._run_turn(user_input)
+        return await self._run_turn(user_input)
 
     @classmethod
     async def create(
