@@ -2,7 +2,7 @@
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 from agent.graph import build_graph
 from agent.history import (
     extract_tool_calls,
@@ -56,7 +56,7 @@ class ChatSession:
 
     def __init__(
         self,
-        config: KMSConfig,
+        config: AgentConfig,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
         system_prompt: str = SYSTEM_PROMPT,
         extra_tools: list | None = None,
@@ -148,7 +148,7 @@ class ChatSession:
     @classmethod
     async def create(
         cls,
-        config: KMSConfig,
+        config: AgentConfig,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
         system_prompt: str = SYSTEM_PROMPT,
         summarize_fn=None,

@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from rag.api import search as api_search
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 
 class SearchInput(BaseModel):
@@ -19,7 +19,7 @@ class SearchInput(BaseModel):
     k: int = Field(5, description="Number of results (default 5).")
 
 
-def create_search_tool(config: KMSConfig):
+def create_search_tool(config: AgentConfig):
     """Create a LangChain search tool bound to the given config."""
 
     @tool("search", args_schema=SearchInput)

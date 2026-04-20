@@ -11,7 +11,7 @@ from pathlib import Path
 from langgraph.errors import GraphRecursionError
 
 from rag.api import list_chunks
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 from agent.evaluation.base import BaseEvaluator, EvalResult, _extract_json
 from agent.llm.ollama import OllamaLLM
@@ -82,8 +82,8 @@ JUDGE_RESPONSE_FORMAT = {
 class EndToEndEvaluator(BaseEvaluator):
     """Evaluate the full pipeline: retrieval + agent behavior + answer quality."""
 
-    def __init__(self, config: KMSConfig | None = None):
-        self.config = config or KMSConfig()
+    def __init__(self, config: AgentConfig | None = None):
+        self.config = config or AgentConfig()
         self._filter_llm = OllamaLLM(model_name=self.config.filter_llm_model, config=self.config)
         self._gen_llm = OpenRouterLLM(model_name=self.config.gen_llm_model, config=self.config)
         self._judge_llm = OpenRouterLLM(model_name=self.config.judge_llm_model, config=self.config)

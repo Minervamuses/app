@@ -7,12 +7,12 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 from openai import OpenAI, RateLimitError
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 from agent.llm.base import BaseLLM
 
 
-def get_chat_model(config: KMSConfig | None = None) -> ChatOpenAI:
+def get_chat_model(config: AgentConfig | None = None) -> ChatOpenAI:
     """Return a ChatOpenAI pointed at OpenRouter for use with LangGraph.
 
     Args:
@@ -24,7 +24,7 @@ def get_chat_model(config: KMSConfig | None = None) -> ChatOpenAI:
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
-    config = config or KMSConfig()
+    config = config or AgentConfig()
     return ChatOpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=api_key,
@@ -41,7 +41,7 @@ class OpenRouterLLM(BaseLLM):
     MAX_RETRIES = 10
     INITIAL_DELAY = 10.0
 
-    def __init__(self, model_name: str | None = None, config: KMSConfig | None = None):
+    def __init__(self, model_name: str | None = None, config: AgentConfig | None = None):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set")
@@ -49,7 +49,7 @@ class OpenRouterLLM(BaseLLM):
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
         )
-        config = config or KMSConfig()
+        config = config or AgentConfig()
         self.model = model_name or config.llm_model
 
     def _call_with_retry(self, **kwargs):

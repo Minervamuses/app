@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from rag.api import explore as api_explore
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 
 class ExploreInput(BaseModel):
@@ -13,7 +13,7 @@ class ExploreInput(BaseModel):
     category: str | None = Field(None, description="Optional: only show folders matching this category (first tag).")
 
 
-def create_explore_tool(config: KMSConfig):
+def create_explore_tool(config: AgentConfig):
     """Create a LangChain explore tool bound to the given config."""
 
     @tool("explore", args_schema=ExploreInput)

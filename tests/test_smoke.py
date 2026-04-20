@@ -8,11 +8,11 @@ def test_imports():
     """Core modules should import without circular or structural failures."""
     import rag
     import agent
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     assert rag is not None
     assert agent is not None
-    assert KMSConfig is not None
+    assert AgentConfig is not None
 
     import rag.retriever.vector
     import rag.store.chroma_store
@@ -23,7 +23,7 @@ def test_imports():
 def test_graph_builds_without_error(monkeypatch, tmp_path):
     """The graph should compile with lightweight test doubles."""
     from agent.graph import build_graph
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     @tool("explore")
     def fake_explore() -> str:
@@ -52,7 +52,7 @@ def test_graph_builds_without_error(monkeypatch, tmp_path):
     monkeypatch.setattr("agent.graph.create_search_tool", lambda _config: fake_search)
     monkeypatch.setattr("agent.graph.create_context_tool", lambda _config: fake_context)
 
-    cfg = KMSConfig(persist_dir=str(tmp_path))
+    cfg = AgentConfig(persist_dir=str(tmp_path))
     graph = build_graph(cfg)
 
     assert graph is not None

@@ -120,7 +120,7 @@ def test_load_mcp_tools_skips_failing_server(monkeypatch):
 
 def test_session_create_without_mcp(monkeypatch, tmp_path):
     from agent.session import ChatSession
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     class DummyModel:
         def bind_tools(self, _tools):
@@ -149,7 +149,7 @@ def test_session_create_without_mcp(monkeypatch, tmp_path):
     monkeypatch.setattr("agent.graph.create_search_tool", lambda _c: fake_search)
     monkeypatch.setattr("agent.graph.create_context_tool", lambda _c: fake_context)
 
-    cfg = KMSConfig(persist_dir=str(tmp_path))
+    cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=False))
     assert session is not None
     assert session.recent_turns == []
@@ -157,7 +157,7 @@ def test_session_create_without_mcp(monkeypatch, tmp_path):
 
 def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
     from agent.session import ChatSession
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     @tool("web_fetch")
     def fake_web(url: str) -> str:
@@ -204,7 +204,7 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
 
     monkeypatch.setattr("agent.mcp.load_mcp_tools", fake_load)
 
-    cfg = KMSConfig(persist_dir=str(tmp_path))
+    cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))
     bound_names = [t.name for t in seen_tools["bound"]]
     assert bound_names == ["explore", "search", "get_context", "web_fetch"]
@@ -213,7 +213,7 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
 
 def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
     from agent.session import ChatSession
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     @tool("explore")
     def fake_explore() -> str:
@@ -252,7 +252,7 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr("agent.mcp.load_mcp_tools", failing_load)
 
-    cfg = KMSConfig(persist_dir=str(tmp_path))
+    cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))
     assert session is not None
     # Only local KB tools bound.

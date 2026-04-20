@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from rag.api import get_context as api_get_context
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 
 class ContextInput(BaseModel):
@@ -15,7 +15,7 @@ class ContextInput(BaseModel):
     window: int = Field(1, description="How many chunks before/after to include (default 1, max 3).")
 
 
-def create_context_tool(config: KMSConfig):
+def create_context_tool(config: AgentConfig):
     """Create a LangChain context tool bound to the given config."""
 
     @tool("get_context", args_schema=ContextInput)

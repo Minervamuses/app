@@ -2,7 +2,7 @@
 
 import ollama as _ollama
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 from agent.llm.base import BaseLLM
 
@@ -10,8 +10,8 @@ from agent.llm.base import BaseLLM
 class OllamaLLM(BaseLLM):
     """LLM provider via local Ollama server."""
 
-    def __init__(self, model_name: str | None = None, config: KMSConfig | None = None):
-        config = config or KMSConfig()
+    def __init__(self, model_name: str | None = None, config: AgentConfig | None = None):
+        config = config or AgentConfig()
         self.model = model_name or config.filter_llm_model
         self._client = _ollama.Client()
 

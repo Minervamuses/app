@@ -10,7 +10,7 @@ from pathlib import Path
 
 from langgraph.errors import GraphRecursionError
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 from agent.session import ChatSession
 from agent.evaluation.base import BaseEvaluator, EvalResult
 
@@ -18,8 +18,8 @@ from agent.evaluation.base import BaseEvaluator, EvalResult
 class BehaviorEvaluator(BaseEvaluator):
     """Evaluate agent tool-selection behavior against expected patterns."""
 
-    def __init__(self, config: KMSConfig | None = None):
-        self.config = config or KMSConfig()
+    def __init__(self, config: AgentConfig | None = None):
+        self.config = config or AgentConfig()
 
     def generate(self, n: int = 0, output_path: str | None = None) -> list[dict]:
         """Return built-in behavior test cases.

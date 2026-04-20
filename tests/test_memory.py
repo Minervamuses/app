@@ -82,7 +82,7 @@ def test_compact_turns_returns_new_summary():
 
 def _make_session(monkeypatch, tmp_path, turns_per_compaction=3):
     from agent.session import ChatSession
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     class DummyGraph:
         def __init__(self):
@@ -95,7 +95,7 @@ def _make_session(monkeypatch, tmp_path, turns_per_compaction=3):
     dummy_graph = DummyGraph()
     monkeypatch.setattr("agent.session.build_graph", lambda _cfg, extra_tools=None: dummy_graph)
 
-    cfg = KMSConfig(persist_dir=str(tmp_path))
+    cfg = AgentConfig(persist_dir=str(tmp_path))
     cfg.agent_turns_per_compaction = turns_per_compaction
 
     summarize_calls: list[str] = []
@@ -155,7 +155,7 @@ def test_prompt_history_after_compaction_has_single_summary(monkeypatch, tmp_pat
 
 def test_compaction_failure_does_not_drop_turns(monkeypatch, tmp_path):
     from agent.session import ChatSession
-    from rag.config import KMSConfig
+    from agent.config import AgentConfig
 
     class DummyGraph:
         def invoke(self, state, config=None):
@@ -163,7 +163,7 @@ def test_compaction_failure_does_not_drop_turns(monkeypatch, tmp_path):
 
     monkeypatch.setattr("agent.session.build_graph", lambda _cfg, extra_tools=None: DummyGraph())
 
-    cfg = KMSConfig(persist_dir=str(tmp_path))
+    cfg = AgentConfig(persist_dir=str(tmp_path))
     cfg.agent_turns_per_compaction = 2
 
     def raising_summarize(_prompt: str) -> str:

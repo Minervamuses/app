@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
 from agent.evaluation.endtoend import EndToEndEvaluator
@@ -24,7 +24,7 @@ SUITE_NAMES = ("behavior", "e2e")
 
 def _run_suite(
     suite: str,
-    config: KMSConfig,
+    config: AgentConfig,
     generate_n: int | None,
     cases_path: str | None,
     output_dir: str | None,
@@ -109,7 +109,7 @@ def main():
     if not args.suite and not args.all:
         parser.error("Specify --suite or --all")
 
-    config = KMSConfig()
+    config = AgentConfig()
     suites = list(SUITE_NAMES) if args.all else [args.suite]
     results: list[EvalResult] = []
 

@@ -3,12 +3,12 @@
 import argparse
 import asyncio
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 from agent.session import ChatSession, DEFAULT_RECURSION_LIMIT
 
 
 async def _run(args: argparse.Namespace) -> None:
-    config = KMSConfig()
+    config = AgentConfig()
     session = await ChatSession.create(
         config,
         recursion_limit=args.max_turns,

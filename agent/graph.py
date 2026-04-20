@@ -3,7 +3,7 @@
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from rag.config import KMSConfig
+from agent.config import AgentConfig
 
 from agent.adapters.langchain import create_context_tool, create_explore_tool, create_search_tool
 from agent.llm.openrouter import get_chat_model
@@ -11,7 +11,7 @@ from agent.history import prepare_messages_for_agent
 from agent.state import AgentState
 
 
-def build_graph(config: KMSConfig, extra_tools: list | None = None):
+def build_graph(config: AgentConfig, extra_tools: list | None = None):
     """Build and compile the conversational RAG agent graph.
 
     Args:
