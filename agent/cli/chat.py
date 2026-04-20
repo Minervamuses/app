@@ -14,12 +14,27 @@ _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 
+def _print_progress(node_name: str, new_msgs: list) -> None:
+    """Stream tool-call activity to the user without dumping payloads."""
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    for msg in new_msgs:
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            for call in msg.tool_calls:
+                name = call.get("name", "?")
+                print(f"  → calling {name}", flush=True)
+        elif isinstance(msg, ToolMessage):
+            name = getattr(msg, "name", "?")
+            print(f"  ✓ {name} returned", flush=True)
+
+
 async def _run(args: argparse.Namespace) -> None:
     config = AgentConfig()
     session = await ChatSession.create(
         config,
         recursion_limit=args.max_turns,
         load_mcp=not args.no_mcp,
+        progress_cb=_print_progress,
     )
 
     print("Agent Chat (LangGraph mode). Type 'q' to quit.\n")

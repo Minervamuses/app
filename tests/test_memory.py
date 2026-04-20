@@ -89,9 +89,9 @@ def _make_session(monkeypatch, tmp_path, turns_per_compaction=3):
         def __init__(self):
             self.calls: list[list] = []
 
-        async def ainvoke(self, state, config=None):
+        async def astream(self, state, config=None, stream_mode="updates"):
             self.calls.append(state["messages"])
-            return {"messages": [*state["messages"], AIMessage(content="ok")]}
+            yield {"agent": {"messages": [AIMessage(content="ok")]}}
 
     dummy_graph = DummyGraph()
     monkeypatch.setattr("agent.session.build_graph", lambda _cfg, extra_tools=None: dummy_graph)
@@ -159,8 +159,8 @@ def test_compaction_failure_does_not_drop_turns(monkeypatch, tmp_path):
     from agent.config import AgentConfig
 
     class DummyGraph:
-        async def ainvoke(self, state, config=None):
-            return {"messages": [*state["messages"], AIMessage(content="ok")]}
+        async def astream(self, state, config=None, stream_mode="updates"):
+            yield {"agent": {"messages": [AIMessage(content="ok")]}}
 
     monkeypatch.setattr("agent.session.build_graph", lambda _cfg, extra_tools=None: DummyGraph())
 

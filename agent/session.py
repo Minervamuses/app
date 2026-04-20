@@ -61,6 +61,7 @@ class ChatSession:
         system_prompt: str = SYSTEM_PROMPT,
         extra_tools: list | None = None,
         summarize_fn=None,
+        progress_cb=None,
     ):
         self.config = config
         self.graph = build_graph(config, extra_tools=extra_tools)
@@ -75,6 +76,7 @@ class ChatSession:
         self.last_tool_calls: list[dict] = []
 
         self._summarize_fn = summarize_fn
+        self._progress_cb = progress_cb
 
     def _get_summarize_fn(self):
         if self._summarize_fn is not None:
@@ -113,15 +115,27 @@ class ChatSession:
         self.recent_turns = self.recent_turns[threshold:]
 
     async def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
-        """Process one turn and return the final answer plus tool-call trace."""
+        """Process one turn and return the final answer plus tool-call trace.
+
+        Streams graph updates so a progress callback (if provided) can
+        surface tool calls as they happen; payloads are not forwarded.
+        """
         input_messages = [*self._prompt_history(), HumanMessage(content=user_input)]
-        result = await self.graph.ainvoke(
+        messages: list = list(input_messages)
+        async for update in self.graph.astream(
             {"messages": input_messages},
             config={"recursion_limit": self.recursion_limit},
-        )
-        new_messages = result["messages"][len(input_messages):]
+            stream_mode="updates",
+        ):
+            for node_name, delta in update.items():
+                new_msgs = delta.get("messages", []) if isinstance(delta, dict) else []
+                messages.extend(new_msgs)
+                if self._progress_cb is not None:
+                    self._progress_cb(node_name, new_msgs)
+        new_messages = messages[len(input_messages):]
         tool_calls = extract_tool_calls(new_messages)
-        answer = result["messages"][-1].content or ""
+        answer = messages[-1].content if messages else ""
+        answer = answer or ""
 
         self.last_tool_calls = tool_calls
         self.turn_logs.append({
@@ -153,6 +167,7 @@ class ChatSession:
         system_prompt: str = SYSTEM_PROMPT,
         summarize_fn=None,
         load_mcp: bool = True,
+        progress_cb=None,
     ) -> "ChatSession":
         """Async factory that loads MCP tools (if enabled) before graph construction.
 
@@ -173,4 +188,5 @@ class ChatSession:
             system_prompt=system_prompt,
             extra_tools=extra_tools,
             summarize_fn=summarize_fn,
+            progress_cb=progress_cb,
         )
