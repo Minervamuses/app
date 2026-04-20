@@ -100,16 +100,34 @@ def resolve_mcp_specs() -> list[MCPServerSpec]:
     return specs
 
 
+def _mcp_log_dir() -> str:
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    path = os.path.join(base, "agent-mcp")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def _spec_to_connection(spec: MCPServerSpec) -> dict:
-    # Some MCP servers (notably mrkrsl/web-search-mcp) emit verbose debug
-    # output on stderr that the stdio transport forwards straight to the
-    # parent terminal. Wrap the real command in /bin/sh so we can redirect
-    # stderr to /dev/null without asking each server to behave.
+    # Some MCP servers (notably mrkrsl/web-search-mcp) are careless about
+    # what they write to stdout: startup banners, shutdown notices, etc.
+    # The stdio transport then tries to JSON-parse those lines and, on
+    # shutdown, the resulting ValidationError races against stream close
+    # and surfaces as an ExceptionGroup[BrokenResourceError] inside the
+    # tool call. Fix it at the subprocess level:
+    #   1. stderr goes to a per-server log file (so we can still debug).
+    #   2. stdout passes through grep that only forwards lines starting
+    #      with '{' — JSON-RPC messages are always JSON objects, so this
+    #      is a safe filter that drops every free-form stdout print.
     inner = shlex.join([spec.command, *spec.args])
+    log_path = os.path.join(_mcp_log_dir(), f"{spec.name}.stderr.log")
+    pipeline = (
+        f"{inner} 2>>{shlex.quote(log_path)} "
+        f"| grep --line-buffered '^{{'"
+    )
     conn: dict = {
         "transport": "stdio",
         "command": "/bin/sh",
-        "args": ["-c", f"exec {inner} 2>/dev/null"],
+        "args": ["-c", pipeline],
     }
     if spec.env:
         conn["env"] = dict(spec.env)
