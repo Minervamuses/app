@@ -11,11 +11,13 @@ from agent.history import prepare_messages_for_agent
 from agent.state import AgentState
 
 
-def build_graph(config: KMSConfig):
+def build_graph(config: KMSConfig, extra_tools: list | None = None):
     """Build and compile the conversational RAG agent graph.
 
     Args:
         config: KMS configuration.
+        extra_tools: Optional additional LangChain-compatible tools (e.g. MCP
+            tools loaded at startup) appended after the three local KB tools.
 
     Returns:
         A compiled LangGraph that accepts AgentState and manages
@@ -27,6 +29,8 @@ def build_graph(config: KMSConfig):
         create_search_tool(config),
         create_context_tool(config),
     ]
+    if extra_tools:
+        tools = tools + list(extra_tools)
     model_with_tools = model.bind_tools(tools)
 
     def agent_node(state: AgentState):
