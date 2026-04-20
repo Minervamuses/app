@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 
 from dotenv import load_dotenv
+from langgraph.errors import GraphRecursionError
 
 from agent.config import AgentConfig
 from agent.session import ChatSession, DEFAULT_RECURSION_LIMIT
@@ -33,7 +34,15 @@ async def _run(args: argparse.Namespace) -> None:
         if not user_input or user_input.lower() in ("q", "quit", "exit"):
             break
 
-        response = await session.turn(user_input)
+        try:
+            response = await session.turn(user_input)
+        except GraphRecursionError:
+            response = (
+                f"(agent hit recursion limit of {session.recursion_limit} tool "
+                "rounds without settling. Try rephrasing or narrowing the question.)"
+            )
+        except Exception as exc:
+            response = f"(agent error: {type(exc).__name__}: {exc})"
         print(f"\n{response}\n")
 
 

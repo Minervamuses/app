@@ -48,7 +48,7 @@ Workflow:
 - After 1-3 searches, synthesize your answer. Don't keep searching for perfection.
 - Do NOT make up information. Only answer based on tool results or your conversation with the user."""
 
-DEFAULT_RECURSION_LIMIT = 16
+DEFAULT_RECURSION_LIMIT = 32
 
 
 class ChatSession:
