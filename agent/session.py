@@ -15,11 +15,11 @@ from agent.memory import (
     compact_turns,
 )
 
-SYSTEM_PROMPT = """You are a knowledge base assistant. You help users find information stored in an indexed repository.
+SYSTEM_PROMPT = """You are a research assistant with access to three tool families.
 
-You have three tools:
+Local knowledge base tools (always available):
 
-1. **explore** — Discover what's in the knowledge base: categories, tags, date ranges, folder summaries.
+1. **explore** — Discover what's in the indexed knowledge base: categories, tags, date ranges, folder summaries.
    Use this first when you're unsure what the knowledge base contains.
 
 2. **search** — Semantic search with optional filters (category, file_type, date range).
@@ -27,6 +27,19 @@ You have three tools:
 
 3. **get_context** — Expand a search result by retrieving surrounding chunks from the same file.
    Use when a result looks relevant but you need more context.
+
+Web Search MCP tools (available only when configured):
+- Use for current external information, general web discovery, or topics unlikely to exist in the local KB.
+
+GitHub MCP tools (available only when configured):
+- Use for remote GitHub state: repository content not in the local KB, pull requests, issues, Actions runs, code search across GitHub.
+- Do NOT use GitHub MCP as a substitute for local git shell operations (clone, pull, rebase, commit). Those belong to the user's terminal, not to you.
+
+Tool selection policy:
+- Questions about the indexed project or research notes → prefer `explore` / `search` / `get_context`.
+- Questions needing live external information → prefer Web Search MCP.
+- Questions about remote GitHub repos, PRs, issues, or Actions → prefer GitHub MCP.
+- If a tool family is not listed in the bound tools for this session, treat it as unavailable and fall back to what you have.
 
 Workflow:
 - If the question is vague or you don't know the structure of the knowledge base, start with explore.
@@ -131,3 +144,33 @@ class ChatSession:
     def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
         """Process one turn and return the answer plus normalized tool trace."""
         return self._run_turn(user_input)
+
+    @classmethod
+    async def create(
+        cls,
+        config: KMSConfig,
+        recursion_limit: int = DEFAULT_RECURSION_LIMIT,
+        system_prompt: str = SYSTEM_PROMPT,
+        summarize_fn=None,
+        load_mcp: bool = True,
+    ) -> "ChatSession":
+        """Async factory that loads MCP tools (if enabled) before graph construction.
+
+        MCP tool loading is async; turn processing stays synchronous once the
+        session is built.
+        """
+        extra_tools: list = []
+        if load_mcp:
+            from agent.mcp import load_mcp_tools
+
+            try:
+                extra_tools = await load_mcp_tools()
+            except Exception:
+                extra_tools = []
+        return cls(
+            config,
+            recursion_limit=recursion_limit,
+            system_prompt=system_prompt,
+            extra_tools=extra_tools,
+            summarize_fn=summarize_fn,
+        )
