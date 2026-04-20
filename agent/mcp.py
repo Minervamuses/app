@@ -122,6 +122,11 @@ async def load_mcp_tools(specs: list[MCPServerSpec] | None = None) -> list:
     if not specs:
         return []
 
+    # Some upstream MCP servers (e.g. mrkrsl/web-search-mcp) print banners
+    # on stdout instead of stderr. The stdio client logs each non-JSON line
+    # as an exception; silence that channel so user-facing output stays clean.
+    logging.getLogger("mcp.client.stdio").setLevel(logging.CRITICAL)
+
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
     tools: list = []
