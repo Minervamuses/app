@@ -2,9 +2,15 @@
 
 import argparse
 import asyncio
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from agent.config import AgentConfig
 from agent.session import ChatSession, DEFAULT_RECURSION_LIMIT
+
+_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 
 async def _run(args: argparse.Namespace) -> None:
