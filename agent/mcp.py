@@ -101,10 +101,15 @@ def resolve_mcp_specs() -> list[MCPServerSpec]:
 
 
 def _spec_to_connection(spec: MCPServerSpec) -> dict:
+    # Some MCP servers (notably mrkrsl/web-search-mcp) emit verbose debug
+    # output on stderr that the stdio transport forwards straight to the
+    # parent terminal. Wrap the real command in /bin/sh so we can redirect
+    # stderr to /dev/null without asking each server to behave.
+    inner = shlex.join([spec.command, *spec.args])
     conn: dict = {
         "transport": "stdio",
-        "command": spec.command,
-        "args": spec.args,
+        "command": "/bin/sh",
+        "args": ["-c", f"exec {inner} 2>/dev/null"],
     }
     if spec.env:
         conn["env"] = dict(spec.env)
