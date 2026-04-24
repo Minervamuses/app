@@ -42,11 +42,14 @@ Agent 啟動時會把下列所有 tool 綁到 LLM；LLM 依照 system prompt 裡
 
 **① 本地知識庫（永遠可用）**
 
+本地 KB tool 由 `rag.TOOL_SCHEMAS` + `rag.dispatch(...)` 生成 LangChain tools；chat graph 不再維護一份獨立的 RAG tool schema。一般 chat 預設只綁互動檢索需要的三個 tool，`rag_list_chunks` 保留給 eval / audit 類內部流程，避免模型誤把整個 `raw.json` 掃進 prompt。
+
 | Tool | 讀什麼 | 用途 |
 |------|--------|------|
-| `explore` | `folder_meta.json` | 列出 categories、tags、date 範圍、每個目錄的 summary。agent 用來了解「知識庫裡有什麼」 |
-| `search` | ChromaDB 向量索引 | 語義搜尋，支援 `category` / `file_type` / `date_from` / `date_to` filter。每筆結果帶 `pid` 和 `chunk_id` |
-| `get_context` | `raw.json` | 用 `pid` 找到同一檔案的所有 chunks，回傳目標 chunk 前後 N 個。看更多前後文用 |
+| `rag_explore` | `folder_meta.json` | 列出 categories、tags、date 範圍、每個目錄的 summary。agent 用來了解「知識庫裡有什麼」 |
+| `rag_search` | ChromaDB 向量索引 | 語義搜尋，支援 `folder_prefix` / `category` / `file_type` / `date_from` / `date_to` filter。每筆結果帶 `pid` 和 `chunk_id` |
+| `rag_get_context` | `raw.json` | 用 `pid` 找到同一檔案的所有 chunks，回傳目標 chunk 前後 N 個。看更多前後文用 |
+| `rag_list_chunks` | `raw.json` | 不做 embedding，直接列舉 chunks；預設不綁進 chat，只給 eval / audit 使用 |
 
 **② Web Search MCP（由環境變數開關；目前啟用）**
 
@@ -66,7 +69,7 @@ Agent 啟動時會把下列所有 tool 綁到 LLM；LLM 依照 system prompt 裡
 
 ### Tool selection policy（寫在 system prompt）
 
-- 問題是關於這個專案本身或研究筆記 → 用本地 KB（explore / search / get_context）
+- 問題是關於這個專案本身或研究筆記 → 用本地 KB（rag_explore / rag_search / rag_get_context）
 - 問題需要當下的外部資訊 → 用 Web Search MCP
 - 問題是遠端 GitHub 狀態（PR、issue、CI） → 用 GitHub MCP
 - 某個家族沒綁上來（環境變數關掉）→ 當它不存在，用手上有的
@@ -108,10 +111,10 @@ $ python -m agent.cli.chat
 Agent Chat (LangGraph mode). Type 'q' to quit.
 
 >> 幫我看一下三月那份進度報告提到了什麼
-  → calling explore
-  ✓ explore returned
-  → calling search
-  ✓ search returned
+  → calling rag_explore
+  ✓ rag_explore returned
+  → calling rag_search
+  ✓ rag_search returned
 
 <agent 的答案>
 ```

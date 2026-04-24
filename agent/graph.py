@@ -5,7 +5,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from agent.config import AgentConfig
 
-from agent.adapters.langchain import create_context_tool, create_explore_tool, create_search_tool
+from agent.adapters.langchain import create_rag_tools
 from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
 from agent.state import AgentState
@@ -15,7 +15,7 @@ def build_graph(config: AgentConfig, extra_tools: list | None = None):
     """Build and compile the conversational RAG agent graph.
 
     Args:
-        config: KMS configuration.
+        config: Agent configuration.
         extra_tools: Optional additional LangChain-compatible tools (e.g. MCP
             tools loaded at startup) appended after the three local KB tools.
 
@@ -24,11 +24,7 @@ def build_graph(config: AgentConfig, extra_tools: list | None = None):
         the bounded agent ↔ tools loop for a single turn.
     """
     model = get_chat_model(config)
-    tools = [
-        create_explore_tool(config),
-        create_search_tool(config),
-        create_context_tool(config),
-    ]
+    tools = create_rag_tools(config)
     if extra_tools:
         tools = tools + list(extra_tools)
     model_with_tools = model.bind_tools(tools)

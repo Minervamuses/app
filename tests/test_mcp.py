@@ -1,7 +1,6 @@
 """Tests for MCP loader behavior and MCP-aware session startup."""
 
 import asyncio
-from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
@@ -129,25 +128,26 @@ def test_session_create_without_mcp(monkeypatch, tmp_path):
         def invoke(self, _messages):
             return AIMessage(content="ok")
 
-    @tool("explore")
+    @tool("rag_explore")
     def fake_explore() -> str:
         """e"""
         return "explore"
 
-    @tool("search")
+    @tool("rag_search")
     def fake_search(query: str) -> str:
         """s"""
         return query
 
-    @tool("get_context")
+    @tool("rag_get_context")
     def fake_context(pid: str, chunk_id: int) -> str:
         """c"""
         return f"{pid}:{chunk_id}"
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _c: DummyModel())
-    monkeypatch.setattr("agent.graph.create_explore_tool", lambda _c: fake_explore)
-    monkeypatch.setattr("agent.graph.create_search_tool", lambda _c: fake_search)
-    monkeypatch.setattr("agent.graph.create_context_tool", lambda _c: fake_context)
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _c: [fake_explore, fake_search, fake_context],
+    )
 
     cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=False))
@@ -164,17 +164,17 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
         """fake mcp tool"""
         return url
 
-    @tool("explore")
+    @tool("rag_explore")
     def fake_explore() -> str:
         """e"""
         return "explore"
 
-    @tool("search")
+    @tool("rag_search")
     def fake_search(query: str) -> str:
         """s"""
         return query
 
-    @tool("get_context")
+    @tool("rag_get_context")
     def fake_context(pid: str, chunk_id: int) -> str:
         """c"""
         return f"{pid}:{chunk_id}"
@@ -195,9 +195,10 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
             return capture_bind(tools)
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _c: DummyModel())
-    monkeypatch.setattr("agent.graph.create_explore_tool", lambda _c: fake_explore)
-    monkeypatch.setattr("agent.graph.create_search_tool", lambda _c: fake_search)
-    monkeypatch.setattr("agent.graph.create_context_tool", lambda _c: fake_context)
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _c: [fake_explore, fake_search, fake_context],
+    )
 
     async def fake_load():
         return [fake_web]
@@ -207,7 +208,12 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
     cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))
     bound_names = [t.name for t in seen_tools["bound"]]
-    assert bound_names == ["explore", "search", "get_context", "web_fetch"]
+    assert bound_names == [
+        "rag_explore",
+        "rag_search",
+        "rag_get_context",
+        "web_fetch",
+    ]
     assert session is not None
 
 
@@ -215,17 +221,17 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
     from agent.session import ChatSession
     from agent.config import AgentConfig
 
-    @tool("explore")
+    @tool("rag_explore")
     def fake_explore() -> str:
         """e"""
         return "explore"
 
-    @tool("search")
+    @tool("rag_search")
     def fake_search(query: str) -> str:
         """s"""
         return query
 
-    @tool("get_context")
+    @tool("rag_get_context")
     def fake_context(pid: str, chunk_id: int) -> str:
         """c"""
         return f"{pid}:{chunk_id}"
@@ -243,9 +249,10 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
             return M()
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _c: DummyModel())
-    monkeypatch.setattr("agent.graph.create_explore_tool", lambda _c: fake_explore)
-    monkeypatch.setattr("agent.graph.create_search_tool", lambda _c: fake_search)
-    monkeypatch.setattr("agent.graph.create_context_tool", lambda _c: fake_context)
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _c: [fake_explore, fake_search, fake_context],
+    )
 
     async def failing_load():
         raise RuntimeError("mcp unavailable")
@@ -256,4 +263,8 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))
     assert session is not None
     # Only local KB tools bound.
-    assert [t.name for t in seen["bound"]] == ["explore", "search", "get_context"]
+    assert [t.name for t in seen["bound"]] == [
+        "rag_explore",
+        "rag_search",
+        "rag_get_context",
+    ]

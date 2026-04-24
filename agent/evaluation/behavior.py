@@ -38,25 +38,25 @@ class BehaviorEvaluator(BaseEvaluator):
         cases = [
             {
                 "question": "What's in the knowledge base?",
-                "expected_first_tool": "explore",
+                "expected_first_tool": "rag_explore",
                 "expected_tool_count": {"min": 1, "max": 2},
                 "rationale": "Unknown KB structure, should explore first",
             },
             {
                 "question": "Show me the available categories and tags.",
-                "expected_first_tool": "explore",
+                "expected_first_tool": "rag_explore",
                 "expected_tool_count": {"min": 1, "max": 1},
                 "rationale": "Explicitly asking for KB overview",
             },
             {
                 "question": "How does the scoring module work?",
-                "expected_first_tool": "search",
+                "expected_first_tool": "rag_search",
                 "expected_tool_count": {"min": 1, "max": 4},
                 "rationale": "Specific technical question, direct search",
             },
             {
                 "question": "What research notes were written in March?",
-                "expected_first_tool": "search",
+                "expected_first_tool": "rag_search",
                 "expected_filters_include": ["date_from"],
                 "expected_tool_count": {"min": 1, "max": 3},
                 "rationale": "Clear time + category signal, should filter",
@@ -66,7 +66,7 @@ class BehaviorEvaluator(BaseEvaluator):
                     "How does the embedding module work?",
                     "Show me more context around that result.",
                 ],
-                "expected_tools_include": ["search", "get_context"],
+                "expected_tools_include": ["rag_search", "rag_get_context"],
                 "expected_tool_count": {"min": 2, "max": 6},
                 "rationale": "Multi-turn: first search, then ask for context expansion",
             },
@@ -84,7 +84,7 @@ class BehaviorEvaluator(BaseEvaluator):
             },
             {
                 "question": "Find all Python files related to database models.",
-                "expected_first_tool": "search",
+                "expected_first_tool": "rag_search",
                 "expected_filters_include": ["file_type"],
                 "expected_tool_count": {"min": 1, "max": 3},
                 "rationale": "Specific file type + topic, should use file_type filter",
@@ -175,7 +175,7 @@ class BehaviorEvaluator(BaseEvaluator):
             # Check expected filter keys in search args
             expected_filters = case.get("expected_filters_include", [])
             if expected_filters:
-                search_args = [a for t, a in zip(actual_tools, actual_args) if t == "search"]
+                search_args = [a for t, a in zip(actual_tools, actual_args) if t == "rag_search"]
                 filter_used = any(
                     all(f in args for f in expected_filters)
                     for args in search_args
