@@ -55,9 +55,9 @@ Agent 啟動時會把下列所有 tool 綁到 LLM；LLM 依照 system prompt 裡
 
 | Tool | 讀什麼 | 用途 |
 |------|--------|------|
-| `recall_history` | `<rag persist_dir>/chat_history/` ChromaDB | 語義搜尋本 session 之前、已經被擠出 context window 的對話內容；可選 `role` filter（`user` / `assistant`）。每筆結果帶 `role`、`turn_id`、`timestamp` |
+| `recall_history` | `<rag persist_dir>/chat_history/` ChromaDB | 語義搜尋已經被擠出 context window、且成功持久化的舊對話內容；可選 `role` filter（`user` / `assistant`）。每筆結果帶 `role`、`turn_id`、`timestamp` |
 
-跨 process 持久化 — 關掉 CLI、重新啟動，agent 仍可搜到上一次的對話。**不是 rag_search 的替代品**：問題如果是關於知識庫文件，依然走 rag_search。
+已 eviction 的舊對話跨 process 持久化 — 關掉 CLI、重新啟動後，agent 仍可搜到已寫入 `chat_history` 的部分。最近 `agent_recent_turns_window` 輪仍是目前 session 的 prompt memory，不會在每輪即時寫入 Chroma。**不是 rag_search 的替代品**：問題如果是關於知識庫文件，依然走 rag_search。
 
 **③ Web Search MCP（由環境變數開關；目前啟用）**
 
@@ -90,9 +90,9 @@ Agent 啟動時會把下列所有 tool 綁到 LLM；LLM 依照 system prompt 裡
 1. **固定 system prompt**
 2. **recent turns**（最近 `config.agent_recent_turns_window` 輪，預設 10，原始 user/assistant 訊息）
 
-每完成一輪後 `ChatSession._evict_overflow` 檢查 `recent_turns`：超過 window 就把最舊那輪交給 `agent/history_rag/` 的 `ChatHistoryStore`，把 user prompt 跟 assistant response 各自 embed 成一個 chunk 寫入 `<rag persist_dir>/chat_history/`（單一 collection，metadata 帶 `role` / `turn_id` / `session_id` / `timestamp`）。寫入後從 `recent_turns` 移除。
+每完成一輪後 `ChatSession._evict_overflow` 檢查 `recent_turns`：超過 window 就把最舊那輪交給 `agent/history_rag/` 的 `ChatHistoryStore`，把 user prompt 跟 assistant response 各自 embed 成一個 chunk 寫入 `<rag persist_dir>/chat_history/`（單一 collection，metadata 帶 `role` / `turn_id` / `session_id` / `timestamp`）。寫入後才從 `recent_turns` 移除；成功寫入前，prompt pruning 不會把這些尚未持久化的 turn 丟掉。
 
-**沒有 LLM 壓縮成本**：embedding 用本地 Ollama bge-m3，只在 turn 結束時跑一次 `add_documents`，沒有 OpenRouter 呼叫。**內容不失真**：原文逐字保留在 ChromaDB，需要時透過 `recall_history` 取回，agent 看到的是當時實際說過的話。**跨 session 累積**：同一個 persist dir 永遠只有一個 collection，所有 session 的舊對話都在裡面。
+**沒有 LLM 壓縮成本**：embedding 用本地 Ollama bge-m3，只在 turn 結束時跑一次 `add_documents`，沒有 OpenRouter 呼叫。**內容不失真**：原文逐字保留在 ChromaDB，需要時透過 `recall_history` 取回，agent 看到的是當時實際說過的話。**已 eviction 的歷史跨 session 累積**：同一個 persist dir 永遠只有一個 collection，所有已持久化的舊對話都在裡面；目前 session 的最近 window 輪仍留在 RAM。
 
 存進去之後，agent 在後續對話裡靠 `recall_history` 自行決定要不要找回來。Tool 的呼叫純粹由 LLM 判斷，沒有任何 hard rule。
 

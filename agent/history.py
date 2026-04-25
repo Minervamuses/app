@@ -1,4 +1,4 @@
-"""Utilities for pruning agent context and recording compact turn history."""
+"""Utilities for tool-call traces and same-turn context pruning."""
 
 from collections import Counter
 
