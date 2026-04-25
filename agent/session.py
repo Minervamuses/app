@@ -1,4 +1,9 @@
-"""Multi-turn conversational session for the KMS agent."""
+"""Multi-turn conversational session for the agent."""
+
+import asyncio
+import logging
+import uuid
+from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -8,12 +13,13 @@ from agent.history import (
     extract_tool_calls,
     format_tool_counts,
 )
-from agent.llm.openrouter import OpenRouterLLM
+from agent.history_rag import ChatHistoryStore, get_chat_history_store
 from agent.memory import (
     TurnRecord,
     assemble_prompt_history,
-    compact_turns,
 )
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a research assistant with access to four tool families.
 
@@ -68,7 +74,7 @@ class ChatSession:
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
         system_prompt: str = SYSTEM_PROMPT,
         extra_tools: list | None = None,
-        summarize_fn=None,
+        history_store: ChatHistoryStore | None = None,
         progress_cb=None,
     ):
         self.config = config
@@ -76,51 +82,50 @@ class ChatSession:
         self.recursion_limit = recursion_limit
 
         self.system_prompt_message = SystemMessage(content=system_prompt)
-        self.rolling_summary_text: str | None = None
         self.recent_turns: list[TurnRecord] = []
-        self.completed_turn_count: int = 0
+
+        self.session_id = uuid.uuid4().hex
+        self._turn_counter = 0
+        self.history_store = history_store or get_chat_history_store(config)
 
         self.turn_logs: list[dict] = []
         self.last_tool_calls: list[dict] = []
 
-        self._summarize_fn = summarize_fn
         self._progress_cb = progress_cb
-
-    def _get_summarize_fn(self):
-        if self._summarize_fn is not None:
-            return self._summarize_fn
-        model_name = self.config.agent_compaction_model or self.config.llm_model
-        llm = OpenRouterLLM(model_name=model_name, config=self.config)
-        max_tokens = self.config.agent_compaction_max_tokens
-
-        def _summarize(prompt: str) -> str:
-            return llm.invoke(prompt, max_tokens=max_tokens, temperature=0.2)
-
-        self._summarize_fn = _summarize
-        return self._summarize_fn
 
     def _prompt_history(self) -> list:
         return assemble_prompt_history(
             self.system_prompt_message,
-            self.rolling_summary_text,
             self.recent_turns,
         )
 
-    def _maybe_compact(self) -> None:
-        threshold = self.config.agent_turns_per_compaction
-        if threshold <= 0 or len(self.recent_turns) < threshold:
-            return
-        block = self.recent_turns[:threshold]
-        try:
-            new_summary = compact_turns(
-                self.rolling_summary_text,
-                block,
-                summarize=self._get_summarize_fn(),
-            )
-        except Exception:
-            return
-        self.rolling_summary_text = new_summary
-        self.recent_turns = self.recent_turns[threshold:]
+    async def _evict_overflow(self) -> None:
+        """Spill turns past the window into the long-term store. Log + keep on failure."""
+        window = self.config.agent_recent_turns_window
+        hard_cap = window * 3
+        while len(self.recent_turns) > window:
+            oldest = self.recent_turns[0]
+            try:
+                await asyncio.to_thread(
+                    self.history_store.add_turn,
+                    oldest,
+                    session_id=self.session_id,
+                    turn_id=oldest.turn_id,
+                    timestamp=oldest.timestamp,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "history_rag: eviction failed for turn %s (kept in recent_turns): %s",
+                    oldest.turn_id, exc,
+                )
+                if len(self.recent_turns) > hard_cap:
+                    logger.error(
+                        "history_rag: hard cap %d reached; dropping oldest turn %s unrecorded",
+                        hard_cap, oldest.turn_id,
+                    )
+                    self.recent_turns.pop(0)
+                break  # don't retry within the same turn
+            self.recent_turns.pop(0)
 
     async def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
         """Process one turn and return the final answer plus tool-call trace.
@@ -152,9 +157,16 @@ class ChatSession:
             "tool_counts": format_tool_counts(tool_calls),
         })
 
-        self.recent_turns.append(TurnRecord(user_input=user_input, assistant_output=answer))
-        self.completed_turn_count += 1
-        self._maybe_compact()
+        self._turn_counter += 1
+        self.recent_turns.append(
+            TurnRecord(
+                user_input=user_input,
+                assistant_output=answer,
+                turn_id=self._turn_counter,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+        await self._evict_overflow()
 
         return answer, tool_calls
 
@@ -173,14 +185,14 @@ class ChatSession:
         config: AgentConfig,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
         system_prompt: str = SYSTEM_PROMPT,
-        summarize_fn=None,
+        history_store: ChatHistoryStore | None = None,
         load_mcp: bool = True,
         progress_cb=None,
     ) -> "ChatSession":
         """Async factory that loads MCP tools (if enabled) before graph construction.
 
-        MCP tool loading is async; turn processing stays synchronous once the
-        session is built.
+        MCP tool loading is async; turn processing stays asynchronous via
+        graph.astream once the session is built.
         """
         extra_tools: list = []
         if load_mcp:
@@ -195,6 +207,6 @@ class ChatSession:
             recursion_limit=recursion_limit,
             system_prompt=system_prompt,
             extra_tools=extra_tools,
-            summarize_fn=summarize_fn,
+            history_store=history_store,
             progress_cb=progress_cb,
         )

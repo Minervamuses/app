@@ -29,10 +29,3 @@ class AgentConfig(RAGConfig):
     # Long-term memory: keep this many most-recent turns in the prompt;
     # evicted turns spill into the chat_history vector store.
     agent_recent_turns_window: int = 10
-
-    # Turn compaction (every N completed turns, collapse oldest block into a
-    # single rolling summary). agent_compaction_model=None falls back to
-    # llm_model at runtime.
-    agent_turns_per_compaction: int = 10
-    agent_compaction_model: str | None = None
-    agent_compaction_max_tokens: int = 800
