@@ -55,17 +55,22 @@ def prepare_messages_for_agent(
     """Prepare a bounded prompt for the next agent step.
 
     Rules:
+    - Never trim non-tool conversation history supplied by ChatSession; until a
+      turn is successfully evicted into history_rag, it must remain visible.
     - Keep only the most recent ``max_tool_interactions`` tool interactions
       inside the current turn.
     - Add a compact truncation note when earlier tool activity was removed.
-    - Cap the final prompt-visible message count.
+    - ``max_messages`` is kept as a compatibility knob for callers, but this
+      function no longer enforces it by dropping unevicted conversation turns.
     """
     tool_call_names: dict[str, str] = {}
+    tool_call_groups: list[set[str]] = []
     total_tool_interactions = 0
-    kept_tool_call_ids: list[str] = []
+    recent_tool_call_ids: list[str] = []
 
     for message in messages:
         if isinstance(message, AIMessage) and message.tool_calls:
+            group: set[str] = set()
             for tool_call in message.tool_calls:
                 if isinstance(tool_call, dict):
                     tool_id = tool_call.get("id")
@@ -75,20 +80,32 @@ def prepare_messages_for_agent(
                     tool_name = getattr(tool_call, "name", "unknown")
                 if tool_id:
                     tool_call_names[tool_id] = tool_name
+                    group.add(tool_id)
+            if group:
+                tool_call_groups.append(group)
         elif isinstance(message, ToolMessage):
             total_tool_interactions += 1
 
-    for message in reversed(messages):
-        if not isinstance(message, ToolMessage):
-            continue
-        tool_call_id = getattr(message, "tool_call_id", None)
-        if not tool_call_id:
-            continue
-        kept_tool_call_ids.append(tool_call_id)
-        if len(kept_tool_call_ids) >= max_tool_interactions:
-            break
+    if max_tool_interactions > 0:
+        for message in reversed(messages):
+            if not isinstance(message, ToolMessage):
+                continue
+            tool_call_id = getattr(message, "tool_call_id", None)
+            if not tool_call_id:
+                continue
+            recent_tool_call_ids.append(tool_call_id)
+            if len(recent_tool_call_ids) >= max_tool_interactions:
+                break
 
-    kept_ids = set(kept_tool_call_ids)
+    recent_ids = set(recent_tool_call_ids)
+    kept_ids: set[str] = set()
+    for group in tool_call_groups:
+        if group & recent_ids:
+            # Keep the full assistant tool-call group to preserve the chat
+            # protocol: every kept assistant tool call should have its tool
+            # response in the prompt.
+            kept_ids.update(group)
+
     pruned_messages: list[BaseMessage] = []
     dropped_counts: Counter[str] = Counter()
 
@@ -130,4 +147,4 @@ def prepare_messages_for_agent(
         non_system = [msg for msg in pruned_messages if not isinstance(msg, SystemMessage)]
         pruned_messages = system_prompt + [note] + non_system
 
-    return trim_message_history(pruned_messages, max_messages=max_messages)
+    return pruned_messages
