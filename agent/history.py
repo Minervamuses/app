@@ -2,7 +2,7 @@
 
 from collections import Counter
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 
 
 def extract_tool_calls(messages: list[BaseMessage]) -> list[dict]:
@@ -131,14 +131,3 @@ def prepare_messages_for_agent(
         pruned_messages = system_prompt + [note] + non_system
 
     return trim_message_history(pruned_messages, max_messages=max_messages)
-
-
-def build_compact_turn(
-    user_input: str,
-    assistant_output: str,
-) -> list[BaseMessage]:
-    """Store only the user turn and final assistant answer in long-term history."""
-    messages: list[BaseMessage] = [HumanMessage(content=user_input)]
-    if assistant_output:
-        messages.append(AIMessage(content=assistant_output))
-    return messages

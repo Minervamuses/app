@@ -1,4 +1,4 @@
-# `refactor/decouple-library` branch — 架構說明
+# `main` branch — 架構說明
 
 這個 repo 是 **agent** 專案，放 `agent/` package：LangGraph agent、tool adapters、chat / eval CLI。`rag`（建索引、儲存、檢索、public retrieval API）是獨立 repo，在 `../rag`（github.com:Minervamuses/rag），透過 Poetry path dep 引入。
 

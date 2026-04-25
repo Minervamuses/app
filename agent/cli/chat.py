@@ -25,7 +25,14 @@ def _print_progress(node_name: str, new_msgs: list) -> None:
                 print(f"  → calling {name}", flush=True)
         elif isinstance(msg, ToolMessage):
             name = getattr(msg, "name", "?")
-            print(f"  ✓ {name} returned", flush=True)
+            content = getattr(msg, "content", "") or ""
+            errored = (
+                getattr(msg, "status", None) == "error"
+                or (isinstance(content, str) and content.startswith("Tool error:"))
+            )
+            symbol = "✗" if errored else "✓"
+            suffix = " errored" if errored else " returned"
+            print(f"  {symbol} {name}{suffix}", flush=True)
 
 
 async def _run(args: argparse.Namespace) -> None:
