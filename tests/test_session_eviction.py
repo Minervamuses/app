@@ -1,4 +1,4 @@
-"""Tests for ChatSession's recent-turns eviction into the long-term store.
+"""Tests for ChatSession's recent-turn persistence into the long-term store.
 
 Mocks both the LangGraph graph and the ChatHistoryStore so these tests
 don't need an LLM, Ollama, or ChromaDB. The point is to verify the
@@ -8,6 +8,7 @@ eviction policy:
 - the recent_turns window stays bounded at the configured size
 - store failures are logged and the turn stays put
 - once recent_turns exceeds window * 3, oldest is dropped unrecorded
+- on shutdown, remaining prompt-visible turns are flushed to history_store
 """
 
 import asyncio
@@ -171,3 +172,38 @@ def test_failed_eviction_turn_stays_prompt_visible(make_session):
 
     turn_4 = graph.snapshots[3]
     assert "q0" in turn_4["contents"]
+
+
+def test_flush_recent_turns_persists_short_session(make_session):
+    session, store = make_session(window=10)
+    for i in range(2):
+        asyncio.run(session.turn(f"q{i}"))
+
+    assert store.adds == []
+
+    asyncio.run(session.flush_recent_turns())
+
+    assert [item["user_input"] for item in store.adds] == ["q0", "q1"]
+    assert session.recent_turns == []
+
+
+def test_flush_recent_turns_is_idempotent(make_session):
+    session, store = make_session(window=10)
+    asyncio.run(session.turn("q0"))
+
+    asyncio.run(session.flush_recent_turns())
+    asyncio.run(session.flush_recent_turns())
+
+    assert [item["user_input"] for item in store.adds] == ["q0"]
+
+
+def test_flush_recent_turns_logs_and_keeps_turn_on_failure(make_session, caplog):
+    failing_store = _FakeHistoryStore(raise_on_add=True)
+    session, _ = make_session(window=10, history_store=failing_store)
+    asyncio.run(session.turn("q0"))
+
+    with caplog.at_level(logging.WARNING, logger="agent.session"):
+        asyncio.run(session.flush_recent_turns())
+
+    assert len(session.recent_turns) == 1
+    assert any("shutdown flush failed" in rec.message for rec in caplog.records)
