@@ -6,6 +6,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from agent.config import AgentConfig
 
 from agent.adapters.langchain import create_rag_tools
+from agent.history_rag import create_history_tool
 from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
 from agent.state import AgentState
@@ -17,7 +18,7 @@ def build_graph(config: AgentConfig, extra_tools: list | None = None):
     Args:
         config: Agent configuration.
         extra_tools: Optional additional LangChain-compatible tools (e.g. MCP
-            tools loaded at startup) appended after the three local KB tools.
+            tools loaded at startup) appended after the local agent tools.
 
     Returns:
         A compiled LangGraph that accepts AgentState and manages
@@ -25,6 +26,7 @@ def build_graph(config: AgentConfig, extra_tools: list | None = None):
     """
     model = get_chat_model(config)
     tools = create_rag_tools(config)
+    tools.append(create_history_tool(config))
     if extra_tools:
         tools = tools + list(extra_tools)
     model_with_tools = model.bind_tools(tools)
