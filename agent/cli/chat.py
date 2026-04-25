@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import unicodedata
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -12,6 +13,24 @@ from agent.session import ChatSession, DEFAULT_RECURSION_LIMIT
 
 _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
+
+_EXIT_COMMANDS = {"q", "quit", "exit"}
+
+
+def _normalize_cli_command(value: str) -> str:
+    """Normalize short CLI commands without mutating messages sent to the agent."""
+    normalized = unicodedata.normalize("NFKC", value.strip())
+    visible_chars = [
+        char
+        for char in normalized
+        if unicodedata.category(char) not in {"Cc", "Cf"}
+    ]
+    return "".join(visible_chars).strip().casefold()
+
+
+def _is_exit_input(value: str) -> bool:
+    command = _normalize_cli_command(value)
+    return not command or command in _EXIT_COMMANDS
 
 
 def _print_progress(node_name: str, new_msgs: list) -> None:
@@ -49,14 +68,15 @@ async def _run(args: argparse.Namespace) -> None:
     try:
         while True:
             try:
-                user_input = input(">> ").strip()
+                raw_input = input(">> ")
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
 
-            if not user_input or user_input.lower() in ("q", "quit", "exit"):
+            if _is_exit_input(raw_input):
                 break
 
+            user_input = raw_input.strip()
             try:
                 response = await session.turn(user_input)
             except GraphRecursionError:
