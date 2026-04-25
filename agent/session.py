@@ -99,6 +99,15 @@ class ChatSession:
             self.recent_turns,
         )
 
+    async def _store_turn(self, turn: TurnRecord) -> None:
+        await asyncio.to_thread(
+            self.history_store.add_turn,
+            turn,
+            session_id=self.session_id,
+            turn_id=turn.turn_id,
+            timestamp=turn.timestamp,
+        )
+
     async def _evict_overflow(self) -> None:
         """Spill turns past the window into the long-term store. Log + keep on failure."""
         window = self.config.agent_recent_turns_window
@@ -106,13 +115,7 @@ class ChatSession:
         while len(self.recent_turns) > window:
             oldest = self.recent_turns[0]
             try:
-                await asyncio.to_thread(
-                    self.history_store.add_turn,
-                    oldest,
-                    session_id=self.session_id,
-                    turn_id=oldest.turn_id,
-                    timestamp=oldest.timestamp,
-                )
+                await self._store_turn(oldest)
             except Exception as exc:
                 logger.warning(
                     "history_rag: eviction failed for turn %s (kept in recent_turns): %s",
@@ -125,6 +128,20 @@ class ChatSession:
                     )
                     self.recent_turns.pop(0)
                 break  # don't retry within the same turn
+            self.recent_turns.pop(0)
+
+    async def flush_recent_turns(self) -> None:
+        """Persist all prompt-visible turns before the session is discarded."""
+        while self.recent_turns:
+            oldest = self.recent_turns[0]
+            try:
+                await self._store_turn(oldest)
+            except Exception as exc:
+                logger.warning(
+                    "history_rag: shutdown flush failed for turn %s (left in recent_turns): %s",
+                    oldest.turn_id, exc,
+                )
+                break
             self.recent_turns.pop(0)
 
     async def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:

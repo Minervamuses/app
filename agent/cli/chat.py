@@ -46,26 +46,29 @@ async def _run(args: argparse.Namespace) -> None:
 
     print("Agent Chat (LangGraph mode). Type 'q' to quit.\n")
 
-    while True:
-        try:
-            user_input = input(">> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
+    try:
+        while True:
+            try:
+                user_input = input(">> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
 
-        if not user_input or user_input.lower() in ("q", "quit", "exit"):
-            break
+            if not user_input or user_input.lower() in ("q", "quit", "exit"):
+                break
 
-        try:
-            response = await session.turn(user_input)
-        except GraphRecursionError:
-            response = (
-                f"(agent hit recursion limit of {session.recursion_limit} tool "
-                "rounds without settling. Try rephrasing or narrowing the question.)"
-            )
-        except Exception as exc:
-            response = f"(agent error: {type(exc).__name__}: {exc})"
-        print(f"\n{response}\n")
+            try:
+                response = await session.turn(user_input)
+            except GraphRecursionError:
+                response = (
+                    f"(agent hit recursion limit of {session.recursion_limit} tool "
+                    "rounds without settling. Try rephrasing or narrowing the question.)"
+                )
+            except Exception as exc:
+                response = f"(agent error: {type(exc).__name__}: {exc})"
+            print(f"\n{response}\n")
+    finally:
+        await session.flush_recent_turns()
 
 
 def main():
