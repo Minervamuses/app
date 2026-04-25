@@ -7,7 +7,6 @@ build/
 .venv/
 .pytest_cache/
 *.sqlite3
-poetry.lock
 
 # Agent / AI tool configs
 CLAUDE.md
