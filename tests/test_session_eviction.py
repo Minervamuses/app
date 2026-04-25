@@ -17,6 +17,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from agent.config import AgentConfig
+from agent.history import prepare_messages_for_agent
 from agent.memory import TurnRecord
 from agent.session import ChatSession
 
@@ -43,6 +44,25 @@ class _FakeHistoryStore:
                 "timestamp": timestamp,
             }
         )
+
+
+class _PreparingGraph:
+    def __init__(self, config: AgentConfig, history_store: _FakeHistoryStore):
+        self.config = config
+        self.history_store = history_store
+        self.snapshots: list[dict] = []
+
+    async def astream(self, state, config=None, stream_mode="updates"):
+        prepared = prepare_messages_for_agent(
+            state["messages"],
+            max_messages=self.config.agent_max_messages,
+            max_tool_interactions=self.config.agent_max_tool_interactions,
+        )
+        self.snapshots.append({
+            "persisted_before_agent": [item["user_input"] for item in self.history_store.adds],
+            "contents": [msg.content for msg in prepared],
+        })
+        yield {"agent": {"messages": [AIMessage(content="ok")]}}
 
 
 @pytest.fixture
@@ -123,3 +143,31 @@ def test_hard_cap_drops_oldest_after_persistent_failure(make_session, caplog):
 
     assert len(session.recent_turns) <= 6
     assert any("hard cap" in rec.message for rec in caplog.records)
+
+
+def test_turn_leaving_message_cap_stays_visible_until_evicted(make_session):
+    session, store = make_session(window=10)
+    graph = _PreparingGraph(session.config, store)
+    session.graph = graph
+
+    for i in range(1, 12):
+        asyncio.run(session.turn(f"q{i}"))
+
+    turn_11 = graph.snapshots[10]
+    assert turn_11["persisted_before_agent"] == []
+    assert "q1" in turn_11["contents"]
+    assert [item["user_input"] for item in store.adds] == ["q1"]
+
+
+def test_failed_eviction_turn_stays_prompt_visible(make_session):
+    failing_store = _FakeHistoryStore(raise_on_add=True)
+    session, _ = make_session(window=2, history_store=failing_store)
+    session.config.agent_max_messages = 4
+    graph = _PreparingGraph(session.config, failing_store)
+    session.graph = graph
+
+    for i in range(4):
+        asyncio.run(session.turn(f"q{i}"))
+
+    turn_4 = graph.snapshots[3]
+    assert "q0" in turn_4["contents"]
