@@ -36,8 +36,8 @@ Local knowledge base tools (always available):
 
 Conversation history tool (always available):
 
-4. **recall_history** — Search prior parts of this conversation that have aged out of the visible context. Each user prompt and each assistant response is stored as a separate entry; results carry role, turn_id, and timestamp.
-   Use when the user references earlier content that you cannot see in the current prompt.
+4. **recall_history** — Search persisted prior chat turns from this user, including older parts of the current session and previous CLI sessions. Each user prompt and each assistant response is stored as a separate entry; results carry role, turn_id, and timestamp.
+   Use when the user references earlier chat content that you cannot see in the current prompt.
    Do NOT call this for content already visible in the current conversation.
    Do NOT use this as a substitute for rag_search on general knowledge questions.
 
@@ -50,7 +50,7 @@ GitHub MCP tools (available only when configured):
 
 Tool selection policy:
 - Questions about the indexed project or research notes → prefer `rag_explore` / `rag_search` / `rag_get_context`.
-- Questions about earlier in this same conversation that are no longer visible → prefer `recall_history`.
+- Questions about earlier chat history that is no longer visible → prefer `recall_history`.
 - Questions needing live external information → prefer Web Search MCP.
 - Questions about remote GitHub repos, PRs, issues, or Actions → prefer GitHub MCP.
 - If a tool family is not listed in the bound tools for this session, treat it as unavailable and fall back to what you have.

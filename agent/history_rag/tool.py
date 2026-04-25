@@ -1,7 +1,7 @@
 """LangChain tool factory for chat-history retrieval.
 
 Exposes a single `recall_history` tool that the agent can call when the
-user references content that has aged out of the recent_turns window.
+user references persisted chat content that is not in the current prompt.
 """
 
 from __future__ import annotations
@@ -17,11 +17,12 @@ from agent.history_rag.store import ChatHistoryStore, get_chat_history_store
 
 TOOL_NAME = "recall_history"
 TOOL_DESCRIPTION = (
-    "Search older parts of this conversation that have aged out of the visible "
-    "recent context. Each evicted user prompt and assistant response is stored "
-    "separately, so results may include either a question you saw earlier or an "
-    "answer you produced earlier. Use this when the user references content from "
-    "earlier that is no longer in the current prompt. Do NOT use this for "
+    "Search persisted older chat turns that are not in the visible recent "
+    "context, including prior CLI sessions. Each stored user prompt and "
+    "assistant response is stored separately, so results may include either a "
+    "question you saw earlier or an answer you produced earlier. Use this when "
+    "the user references chat content from earlier that is no longer in the "
+    "current prompt. Do NOT use this for "
     "general knowledge questions or for content already visible in this turn."
 )
 
@@ -29,7 +30,7 @@ TOOL_DESCRIPTION = (
 class RecallHistoryInput(BaseModel):
     """Input schema for the recall_history tool."""
 
-    query: str = Field(description="Semantic search query over evicted chat turns.")
+    query: str = Field(description="Semantic search query over persisted chat turns.")
     k: int = Field(5, description="Number of results to return (default 5).")
     role: Literal["user", "assistant"] | None = Field(
         None,
