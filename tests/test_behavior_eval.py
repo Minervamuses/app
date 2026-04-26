@@ -63,6 +63,22 @@ def test_score_tool_expectations_rejects_forbidden_tools():
     assert scores["tool_family"] is True
 
 
+def test_score_tool_expectations_merges_first_tool_and_first_tool_in():
+    evaluator = BehaviorEvaluator()
+    case = {
+        "expected_first_tool": "rag_search",
+        "expected_first_tool_in": ["rag_explore"],
+    }
+
+    scores_search = evaluator._score_tool_expectations(case, ["rag_search"], [{}])
+    scores_explore = evaluator._score_tool_expectations(case, ["rag_explore"], [{}])
+    scores_other = evaluator._score_tool_expectations(case, ["recall_history"], [{}])
+
+    assert scores_search["first_tool"] is True
+    assert scores_explore["first_tool"] is True
+    assert scores_other["first_tool"] is False
+
+
 def test_score_tool_expectations_checks_search_filter_keys():
     evaluator = BehaviorEvaluator()
     case = {"expected_filters_include": ["file_type"]}

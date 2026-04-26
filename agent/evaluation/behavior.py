@@ -322,14 +322,15 @@ class BehaviorEvaluator(BaseEvaluator):
         actual_count = len(actual_tools)
 
         expected_first = case.get("expected_first_tool")
+        allowed_first = list(case.get("expected_first_tool_in", []))
         if expected_first is not None:
-            scores["first_tool"] = (actual_tools[0] == expected_first) if actual_tools else False
-        elif expected_first is None and "expected_first_tool" in case:
-            scores["no_tool"] = actual_count == 0
+            allowed_first.append(expected_first)
 
-        expected_first_in = case.get("expected_first_tool_in", [])
-        if expected_first_in:
-            scores["first_tool"] = actual_tools[0] in expected_first_in if actual_tools else False
+        if allowed_first:
+            scores["first_tool"] = (actual_tools[0] in allowed_first) if actual_tools else False
+        elif "expected_first_tool" in case:
+            # Explicit None means "no tool should be called".
+            scores["no_tool"] = actual_count == 0
 
         expected_count = case.get("expected_tool_count", {})
         if expected_count:
