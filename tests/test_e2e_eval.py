@@ -10,8 +10,10 @@ class _FakeJudge:
 
 
 class _FakeSession:
+    captured_history_stores: list = []
+
     def __init__(self, *args, **kwargs):
-        pass
+        type(self).captured_history_stores.append(kwargs.get("history_store"))
 
     async def turn_with_trace(self, _question):
         return "answer", [
@@ -40,3 +42,29 @@ def test_e2e_records_tool_trace(monkeypatch, tmp_path):
     assert result.details[0]["actual_tools"] == ["rag_search", "rag_get_context"]
     assert result.details[0]["actual_tool_count"] == 2
     assert result.scores["avg_score_raw"] == 3
+
+
+def test_e2e_injects_noop_history_store(monkeypatch, tmp_path):
+    _FakeSession.captured_history_stores = []
+    monkeypatch.setattr("agent.evaluation.endtoend.ChatSession", _FakeSession)
+
+    evaluator = EndToEndEvaluator.__new__(EndToEndEvaluator)
+    evaluator.config = AgentConfig(persist_dir=str(tmp_path))
+    evaluator.extra_tools = []
+    evaluator.available_tools = []
+    evaluator._judge_llm = _FakeJudge()
+
+    evaluator.evaluate([
+        {"question": "q", "reference_answer": "a", "question_type": "direct_search"},
+        {"question": "q2", "reference_answer": "a2", "question_type": "direct_search"},
+    ])
+
+    stores = _FakeSession.captured_history_stores
+    assert len(stores) == 2
+    for store in stores:
+        assert store is not None
+        # Noop store: search returns nothing, add_turn is a no-op.
+        assert store.search("anything") == []
+        assert store.add_turn(
+            object(), session_id="s", turn_id=1, timestamp="t",
+        ) is None

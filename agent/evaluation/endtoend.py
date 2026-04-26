@@ -56,6 +56,16 @@ Return a JSON object with:
 
 Return ONLY the JSON object."""
 
+class _NoopHistoryStore:
+    """Empty history store so e2e runs never touch the user's real Chroma store."""
+
+    def search(self, query: str, k: int = 5, role: str | None = None):
+        return []
+
+    def add_turn(self, turn, *, session_id: str, turn_id: int, timestamp: str) -> None:
+        return None
+
+
 JUDGE_RESPONSE_FORMAT = {
     "type": "json_schema",
     "json_schema": {
@@ -198,6 +208,7 @@ class EndToEndEvaluator(BaseEvaluator):
                 self.config,
                 recursion_limit=32,
                 extra_tools=self.extra_tools,
+                history_store=_NoopHistoryStore(),
             )
             tool_calls: list[dict] = []
 
