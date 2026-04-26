@@ -199,14 +199,18 @@ class EndToEndEvaluator(BaseEvaluator):
                 recursion_limit=32,
                 extra_tools=self.extra_tools,
             )
+            tool_calls: list[dict] = []
 
             try:
-                actual_answer = asyncio.run(session.turn(case["question"]))
+                actual_answer, tool_calls = asyncio.run(
+                    session.turn_with_trace(case["question"])
+                )
             except GraphRecursionError:
                 actual_answer = "(agent hit recursion limit)"
             except Exception as exc:
                 actual_answer = f"(agent error: {type(exc).__name__}: {exc})"
 
+            actual_tools = [tc["name"] for tc in tool_calls]
             # LLM-as-judge
             judge_prompt = JUDGE_PROMPT.format(
                 question=case["question"],
@@ -243,6 +247,8 @@ class EndToEndEvaluator(BaseEvaluator):
                 "question_type": case.get("question_type"),
                 "reference_answer": case["reference_answer"],
                 "actual_answer": actual_answer[:500],
+                "actual_tools": actual_tools,
+                "actual_tool_count": len(actual_tools),
                 "score": score,
                 "rationale": rationale,
             }
