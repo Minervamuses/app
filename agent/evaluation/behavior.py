@@ -13,14 +13,24 @@ from langgraph.errors import GraphRecursionError
 
 from agent.config import AgentConfig
 from agent.session import ChatSession
-from agent.evaluation.base import BaseEvaluator, EvalResult
+from agent.history_rag import ChatHistoryStore
+from agent.evaluation.base import BaseEvaluator, EvalResult, tool_inventory
 
 
 class BehaviorEvaluator(BaseEvaluator):
     """Evaluate agent tool-selection behavior against expected patterns."""
 
-    def __init__(self, config: AgentConfig | None = None):
+    def __init__(
+        self,
+        config: AgentConfig | None = None,
+        *,
+        extra_tools: list | None = None,
+        history_store: ChatHistoryStore | None = None,
+    ):
         self.config = config or AgentConfig()
+        self.extra_tools = list(extra_tools or [])
+        self.history_store = history_store
+        self.available_tools = tool_inventory(self.extra_tools)
 
     def generate(self, n: int = 0, output_path: str | None = None) -> list[dict]:
         """Return built-in behavior test cases.
@@ -122,7 +132,12 @@ class BehaviorEvaluator(BaseEvaluator):
         for case in cases:
             # Support both single-turn ("question") and multi-turn ("messages")
             questions = case.get("messages") or [case["question"]]
-            session = ChatSession(self.config, recursion_limit=32)
+            session = ChatSession(
+                self.config,
+                recursion_limit=32,
+                extra_tools=self.extra_tools,
+                history_store=self.history_store,
+            )
             tool_calls: list[dict] = []
 
             try:
@@ -203,4 +218,5 @@ class BehaviorEvaluator(BaseEvaluator):
             total=total,
             scores=scores,
             details=details,
+            metadata={"available_tools": self.available_tools},
         )

@@ -14,7 +14,7 @@ from langgraph.errors import GraphRecursionError
 from rag.api import list_chunks
 from agent.config import AgentConfig
 
-from agent.evaluation.base import BaseEvaluator, EvalResult, _extract_json
+from agent.evaluation.base import BaseEvaluator, EvalResult, _extract_json, tool_inventory
 from agent.llm.ollama import OllamaLLM
 from agent.llm.openrouter import OpenRouterLLM
 from agent.session import ChatSession
@@ -83,8 +83,15 @@ JUDGE_RESPONSE_FORMAT = {
 class EndToEndEvaluator(BaseEvaluator):
     """Evaluate the full pipeline: retrieval + agent behavior + answer quality."""
 
-    def __init__(self, config: AgentConfig | None = None):
+    def __init__(
+        self,
+        config: AgentConfig | None = None,
+        *,
+        extra_tools: list | None = None,
+    ):
         self.config = config or AgentConfig()
+        self.extra_tools = list(extra_tools or [])
+        self.available_tools = tool_inventory(self.extra_tools)
         self._filter_llm = OllamaLLM(model_name=self.config.filter_llm_model, config=self.config)
         self._gen_llm = OpenRouterLLM(model_name=self.config.gen_llm_model, config=self.config)
         self._judge_llm = OpenRouterLLM(model_name=self.config.judge_llm_model, config=self.config)
@@ -187,7 +194,11 @@ class EndToEndEvaluator(BaseEvaluator):
         details = []
 
         for case in cases:
-            session = ChatSession(self.config, recursion_limit=32)
+            session = ChatSession(
+                self.config,
+                recursion_limit=32,
+                extra_tools=self.extra_tools,
+            )
 
             try:
                 actual_answer = asyncio.run(session.turn(case["question"]))
@@ -259,4 +270,5 @@ class EndToEndEvaluator(BaseEvaluator):
             total=total,
             scores=scores,
             details=details,
+            metadata={"available_tools": self.available_tools},
         )

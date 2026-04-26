@@ -10,16 +10,22 @@ Usage:
 """
 
 import argparse
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 from agent.config import AgentConfig
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
 from agent.evaluation.endtoend import EndToEndEvaluator
+from agent.mcp import load_mcp_tools
 
 SUITE_NAMES = ("behavior", "e2e")
+_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 
 def _run_suite(
@@ -28,13 +34,14 @@ def _run_suite(
     generate_n: int | None,
     cases_path: str | None,
     output_dir: str | None,
+    extra_tools: list | None,
 ) -> EvalResult:
     """Run a single evaluation suite and return the result."""
 
     if suite == "behavior":
-        evaluator = BehaviorEvaluator(config)
+        evaluator = BehaviorEvaluator(config, extra_tools=extra_tools)
     elif suite == "e2e":
-        evaluator = EndToEndEvaluator(config)
+        evaluator = EndToEndEvaluator(config, extra_tools=extra_tools)
     else:
         raise ValueError(f"Unknown suite: {suite}")
 
@@ -73,6 +80,7 @@ def _run_suite(
                 "total": result.total,
                 "scores": result.scores,
                 "details": result.details,
+                "metadata": result.metadata,
             }, f, ensure_ascii=False, indent=2)
         print(f"[{suite}] Results → {results_path}")
 
@@ -104,12 +112,23 @@ def main():
         help="Save cases and results to this directory (default: eval/). "
              "Filenames include a timestamp so old runs are preserved.",
     )
+    parser.add_argument(
+        "--no-mcp", action="store_true",
+        help="Disable MCP tool loading even if configured via environment.",
+    )
     args = parser.parse_args()
 
     if not args.suite and not args.all:
         parser.error("Specify --suite or --all")
 
     config = AgentConfig()
+    extra_tools = []
+    if args.no_mcp:
+        print("[eval] MCP loading disabled via --no-mcp")
+    else:
+        extra_tools = asyncio.run(load_mcp_tools())
+        print(f"[eval] Loaded {len(extra_tools)} MCP tool(s)")
+
     suites = list(SUITE_NAMES) if args.all else [args.suite]
     results: list[EvalResult] = []
 
@@ -124,6 +143,7 @@ def main():
             generate_n=args.generate,
             cases_path=args.cases if not args.all else None,
             output_dir=args.output,
+            extra_tools=extra_tools,
         )
         results.append(result)
 

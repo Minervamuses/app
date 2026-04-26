@@ -4,6 +4,16 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from agent.adapters.langchain.rag_tools import DEFAULT_RAG_TOOL_NAMES
+from agent.history_rag.tool import TOOL_NAME as HISTORY_TOOL_NAME
+
+
+def tool_inventory(extra_tools: list | None = None) -> list[str]:
+    """Return the tool names available to an evaluation session."""
+    names = [*DEFAULT_RAG_TOOL_NAMES, HISTORY_TOOL_NAME]
+    names.extend(getattr(tool, "name", str(tool)) for tool in (extra_tools or []))
+    return names
+
 
 def _extract_json(text: str) -> dict:
     """Extract a JSON object from LLM response text, handling code fences."""
@@ -24,6 +34,7 @@ class EvalResult:
     total: int
     scores: dict[str, float]
     details: list[dict] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
     def summary(self) -> str:
         """Return a human-readable summary of the evaluation."""
