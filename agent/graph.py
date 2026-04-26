@@ -12,13 +12,18 @@ from agent.history import prepare_messages_for_agent
 from agent.state import AgentState
 
 
-def build_graph(config: AgentConfig, extra_tools: list | None = None):
+def build_graph(
+    config: AgentConfig,
+    extra_tools: list | None = None,
+    history_store=None,
+):
     """Build and compile the conversational RAG agent graph.
 
     Args:
         config: Agent configuration.
         extra_tools: Optional additional LangChain-compatible tools (e.g. MCP
             tools loaded at startup) appended after the local agent tools.
+        history_store: Optional store injected into the recall_history tool.
 
     Returns:
         A compiled LangGraph that accepts AgentState and manages
@@ -26,7 +31,7 @@ def build_graph(config: AgentConfig, extra_tools: list | None = None):
     """
     model = get_chat_model(config)
     tools = create_rag_tools(config)
-    tools.append(create_history_tool(config))
+    tools.append(create_history_tool(config, store=history_store))
     if extra_tools:
         tools = tools + list(extra_tools)
     model_with_tools = model.bind_tools(tools)

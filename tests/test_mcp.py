@@ -204,7 +204,7 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
         "agent.graph.create_rag_tools",
         lambda _c: [fake_explore, fake_search, fake_context],
     )
-    monkeypatch.setattr("agent.graph.create_history_tool", lambda _c: fake_recall)
+    monkeypatch.setattr("agent.graph.create_history_tool", lambda _c, store=None: fake_recall)
 
     async def fake_load():
         return [fake_web]
@@ -265,7 +265,7 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
         "agent.graph.create_rag_tools",
         lambda _c: [fake_explore, fake_search, fake_context],
     )
-    monkeypatch.setattr("agent.graph.create_history_tool", lambda _c: fake_recall)
+    monkeypatch.setattr("agent.graph.create_history_tool", lambda _c, store=None: fake_recall)
 
     async def failing_load():
         raise RuntimeError("mcp unavailable")

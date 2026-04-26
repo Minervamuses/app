@@ -78,7 +78,6 @@ class ChatSession:
         progress_cb=None,
     ):
         self.config = config
-        self.graph = build_graph(config, extra_tools=extra_tools)
         self.recursion_limit = recursion_limit
 
         self.system_prompt_message = SystemMessage(content=system_prompt)
@@ -87,6 +86,11 @@ class ChatSession:
         self.session_id = uuid.uuid4().hex
         self._turn_counter = 0
         self.history_store = history_store or get_chat_history_store(config)
+        self.graph = build_graph(
+            config,
+            extra_tools=extra_tools,
+            history_store=self.history_store,
+        )
 
         self.turn_logs: list[dict] = []
         self.last_tool_calls: list[dict] = []

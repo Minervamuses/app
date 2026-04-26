@@ -71,7 +71,7 @@ def make_session(monkeypatch, tmp_path):
     """Factory: build a ChatSession with a fake graph and fake history store."""
     monkeypatch.setattr(
         "agent.session.build_graph",
-        lambda _cfg, extra_tools=None: _FakeGraph(),
+        lambda _cfg, extra_tools=None, history_store=None: _FakeGraph(),
     )
 
     def _make(window: int, history_store: _FakeHistoryStore | None = None):
