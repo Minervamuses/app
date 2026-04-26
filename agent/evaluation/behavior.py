@@ -311,6 +311,29 @@ class BehaviorEvaluator(BaseEvaluator):
             return _StaticHistoryStore(case["setup_history"])
         return self.history_store
 
+    @staticmethod
+    def _missing_required_tools(case: dict, available: set[str]) -> set[str]:
+        """Return required tools the agent cannot call in this run.
+
+        Hard requirements: ``expected_first_tool`` (when not None) and every
+        entry of ``expected_tools_include`` must be loaded. The ``_in`` /
+        ``_any_of`` sets are satisfied if at least one entry is loaded, so
+        they only flag missing when *every* listed tool is absent.
+        """
+        missing: set[str] = set()
+        first = case.get("expected_first_tool")
+        if first and first not in available:
+            missing.add(first)
+        for tool in case.get("expected_tools_include", []) or []:
+            if tool not in available:
+                missing.add(tool)
+
+        for field in ("expected_first_tool_in", "expected_tools_any_of"):
+            options = list(case.get(field, []) or [])
+            if options and not any(opt in available for opt in options):
+                missing.update(options)
+        return missing
+
     def _score_tool_expectations(
         self,
         case: dict,
@@ -385,9 +408,24 @@ class BehaviorEvaluator(BaseEvaluator):
         metric_correct = {key: 0 for key in metric_names}
         metric_total = {key: 0 for key in metric_names}
         routing_correct = 0
+        evaluated = 0
+        skipped = 0
         details = []
+        available = set(self.available_tools)
 
         for case in cases:
+            missing = self._missing_required_tools(case, available)
+            if missing:
+                skipped += 1
+                details.append({
+                    "id": case.get("id"),
+                    "category": case.get("category"),
+                    "question": case.get("question") or case.get("messages", [""])[0],
+                    "skipped": True,
+                    "skip_reason": f"required tools not loaded: {sorted(missing)}",
+                })
+                continue
+
             # Support both single-turn ("question") and multi-turn ("messages")
             questions = case.get("messages") or [case["question"]]
             history_store = self._history_store_for_case(case)
@@ -417,6 +455,7 @@ class BehaviorEvaluator(BaseEvaluator):
             scores = self._score_tool_expectations(case, actual_tools, actual_args)
             case_passed = bool(scores) and all(scores.values())
             routing_correct += case_passed
+            evaluated += 1
 
             case_detail = {
                 "id": case.get("id"),
@@ -437,7 +476,7 @@ class BehaviorEvaluator(BaseEvaluator):
 
         total = len(cases)
 
-        scores = {"routing_accuracy": routing_correct / total if total else 0}
+        scores = {"routing_accuracy": routing_correct / evaluated if evaluated else 0}
         for key, metric_name in metric_names.items():
             if metric_total[key]:
                 scores[metric_name] = metric_correct[key] / metric_total[key]
@@ -447,5 +486,9 @@ class BehaviorEvaluator(BaseEvaluator):
             total=total,
             scores=scores,
             details=details,
-            metadata={"available_tools": self.available_tools},
+            metadata={
+                "available_tools": self.available_tools,
+                "evaluated": evaluated,
+                "skipped": skipped,
+            },
         )

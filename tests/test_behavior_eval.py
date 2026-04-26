@@ -1,5 +1,6 @@
 """Tests for behavior evaluation case schema and scoring."""
 
+from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
 
 
@@ -77,6 +78,55 @@ def test_score_tool_expectations_merges_first_tool_and_first_tool_in():
     assert scores_search["first_tool"] is True
     assert scores_explore["first_tool"] is True
     assert scores_other["first_tool"] is False
+
+
+def test_missing_required_tools_flags_hard_requirements():
+    available = {"rag_search", "rag_explore"}
+    case = {
+        "expected_first_tool": "full-web-search",
+        "expected_tools_include": ["full-web-search"],
+    }
+    assert BehaviorEvaluator._missing_required_tools(case, available) == {
+        "full-web-search"
+    }
+
+
+def test_missing_required_tools_passes_when_any_of_options_partially_available():
+    available = {"rag_search"}
+    case = {"expected_first_tool_in": ["rag_search", "rag_explore"]}
+    assert BehaviorEvaluator._missing_required_tools(case, available) == set()
+
+
+def test_missing_required_tools_flags_when_all_any_of_options_absent():
+    available = {"rag_search"}
+    case = {"expected_tools_any_of": ["full-web-search", "get-web-search-summaries"]}
+    missing = BehaviorEvaluator._missing_required_tools(case, available)
+    assert missing == {"full-web-search", "get-web-search-summaries"}
+
+
+def test_evaluate_skips_cases_whose_tools_are_unavailable(tmp_path):
+    from agent.config import AgentConfig
+
+    evaluator = BehaviorEvaluator(AgentConfig(persist_dir=str(tmp_path)))
+    cases = [
+        {
+            "id": "needs_web",
+            "category": "full-web-search",
+            "question": "fetch a page",
+            "expected_first_tool": "full-web-search",
+            "expected_tools_include": ["full-web-search"],
+        },
+    ]
+
+    result = evaluator.evaluate(cases)
+
+    assert isinstance(result, EvalResult)
+    assert result.total == 1
+    assert result.metadata["evaluated"] == 0
+    assert result.metadata["skipped"] == 1
+    assert result.scores["routing_accuracy"] == 0
+    assert result.details[0]["skipped"] is True
+    assert "full-web-search" in result.details[0]["skip_reason"]
 
 
 def test_score_tool_expectations_checks_search_filter_keys():
