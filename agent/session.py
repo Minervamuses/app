@@ -196,6 +196,16 @@ class ChatSession:
         answer, _tool_calls = await self._run_turn(user_input)
         return answer
 
+    def status_snapshot(self) -> dict[str, str | int]:
+        """Expose lightweight session state for local CLI commands."""
+        return {
+            "session_id": self.session_id,
+            "turn_count": self._turn_counter,
+            "recent_turn_count": len(self.recent_turns),
+            "recursion_limit": self.recursion_limit,
+            "last_tool_counts": format_tool_counts(self.last_tool_calls) or "none",
+        }
+
     async def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
         """Process one turn and return the answer plus normalized tool trace."""
         return await self._run_turn(user_input)
