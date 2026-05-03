@@ -26,11 +26,13 @@ def test_chat_cli_flushes_recent_turns_on_quit(monkeypatch):
 
     inputs = iter(["hello", "q"])
 
+    async def fake_read_line(_prompt: str) -> str:
+        return next(inputs)
+
     monkeypatch.setattr(chat.ChatSession, "create", fake_create)
-    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
 
     args = argparse.Namespace(max_turns=32, no_mcp=True)
-    asyncio.run(chat._run(args))
+    asyncio.run(chat._run(args, read_line=fake_read_line))
 
     assert calls == ["turn:hello", "flush"]
 
@@ -64,11 +66,13 @@ def test_chat_cli_normalizes_quit_inputs(monkeypatch, quit_input):
 
     inputs = iter([quit_input])
 
+    async def fake_read_line(_prompt: str) -> str:
+        return next(inputs)
+
     monkeypatch.setattr(chat.ChatSession, "create", fake_create)
-    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
 
     args = argparse.Namespace(max_turns=32, no_mcp=True)
-    asyncio.run(chat._run(args))
+    asyncio.run(chat._run(args, read_line=fake_read_line))
 
     assert calls == ["flush"]
 
@@ -93,11 +97,13 @@ def test_chat_cli_does_not_normalize_regular_messages(monkeypatch):
 
     inputs = iter(["hello\u200b", "q"])
 
+    async def fake_read_line(_prompt: str) -> str:
+        return next(inputs)
+
     monkeypatch.setattr(chat.ChatSession, "create", fake_create)
-    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
 
     args = argparse.Namespace(max_turns=32, no_mcp=True)
-    asyncio.run(chat._run(args))
+    asyncio.run(chat._run(args, read_line=fake_read_line))
 
     assert calls == ["turn:'hello\\u200b'", "flush"]
 
@@ -122,10 +128,12 @@ def test_chat_cli_flushes_recent_turns_on_turn_error(monkeypatch):
 
     inputs = iter(["hello", "q"])
 
+    async def fake_read_line(_prompt: str) -> str:
+        return next(inputs)
+
     monkeypatch.setattr(chat.ChatSession, "create", fake_create)
-    monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
 
     args = argparse.Namespace(max_turns=32, no_mcp=True)
-    asyncio.run(chat._run(args))
+    asyncio.run(chat._run(args, read_line=fake_read_line))
 
     assert calls == ["turn:hello", "flush"]

@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import unicodedata
 from pathlib import Path
+from typing import Awaitable, Callable
 
 from dotenv import load_dotenv
 from langgraph.errors import GraphRecursionError
@@ -15,6 +16,7 @@ _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 _EXIT_COMMANDS = {"q", "quit", "exit"}
+LineReader = Callable[[str], Awaitable[str]]
 
 
 def _normalize_cli_command(value: str) -> str:
@@ -54,7 +56,14 @@ def _print_progress(node_name: str, new_msgs: list) -> None:
             print(f"  {symbol} {name}{suffix}", flush=True)
 
 
-async def _run(args: argparse.Namespace) -> None:
+async def _default_read_line(prompt: str) -> str:
+    return input(prompt)
+
+
+async def _run(
+    args: argparse.Namespace,
+    read_line: LineReader | None = None,
+) -> None:
     config = AgentConfig()
     session = await ChatSession.create(
         config,
@@ -62,13 +71,14 @@ async def _run(args: argparse.Namespace) -> None:
         load_mcp=not args.no_mcp,
         progress_cb=_print_progress,
     )
+    reader = read_line or _default_read_line
 
     print("Agent Chat (LangGraph mode). Type 'q' to quit.\n")
 
     try:
         while True:
             try:
-                raw_input = input(">> ")
+                raw_input = await reader(">> ")
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
