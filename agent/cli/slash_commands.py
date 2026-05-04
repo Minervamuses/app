@@ -131,6 +131,11 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_status,
             ),
             SlashCommand(
+                name="init",
+                description="Ingest the parent repo (excluding this app project).",
+                handler=_handle_init,
+            ),
+            SlashCommand(
                 name="ingest",
                 description="Upsert a file or folder into the rag store.",
                 handler=_handle_ingest,
@@ -214,6 +219,40 @@ def _resolve_target(arg: str | None) -> Path:
     """Expand `~` and resolve the target path argument."""
     raw = arg if arg else "."
     return Path(raw).expanduser().resolve()
+
+
+def _find_app_root() -> Path:
+    """Walk up from this file to the app project root (its pyproject.toml)."""
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if (candidate / "pyproject.toml").exists():
+            return candidate
+    raise RuntimeError("could not locate app project root (no pyproject.toml found)")
+
+
+async def _handle_init(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    if parsed.args:
+        raise SlashCommandError("/init takes no arguments")
+
+    app_root = _find_app_root()
+    parent_repo = app_root.parent
+    skip = {app_root.name}
+
+    files, chunks = await asyncio.to_thread(
+        ingest_repo,
+        str(parent_repo),
+        config=context.session.config,
+        skip_rel_paths=skip,
+    )
+    return SlashCommandResult(
+        message=(
+            f"initialized: {files} files, {chunks} chunks "
+            f"(root={parent_repo}, excluded {app_root.name}/)"
+        )
+    )
 
 
 async def _handle_ingest(
