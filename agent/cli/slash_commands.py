@@ -1,8 +1,12 @@
 """Slash command parsing, registry, and local command handlers."""
 
+import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 import shlex
 from typing import Awaitable, Callable
+
+from rag import ingest_repo, ingest_single, list_diff, prune_orphans
 
 
 class SlashCommandError(ValueError):
@@ -127,6 +131,21 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_status,
             ),
             SlashCommand(
+                name="ingest",
+                description="Upsert a file or folder into the rag store.",
+                handler=_handle_ingest,
+            ),
+            SlashCommand(
+                name="sync",
+                description="Show files on disk vs in the rag store (dry run).",
+                handler=_handle_sync,
+            ),
+            SlashCommand(
+                name="prune",
+                description="Remove store entries whose source file is gone (add --yes to apply).",
+                handler=_handle_prune,
+            ),
+            SlashCommand(
                 name="clear",
                 description="Clear the terminal screen.",
                 handler=_handle_clear,
@@ -189,3 +208,114 @@ async def _handle_quit(
 ) -> SlashCommandResult:
     del context, parsed
     return SlashCommandResult(should_exit=True)
+
+
+def _resolve_target(arg: str | None) -> Path:
+    """Expand `~` and resolve the target path argument."""
+    raw = arg if arg else "."
+    return Path(raw).expanduser().resolve()
+
+
+async def _handle_ingest(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    if not parsed.args:
+        return SlashCommandResult(message="usage: /ingest <file-or-folder>")
+    if len(parsed.args) > 1:
+        raise SlashCommandError("/ingest takes exactly one path argument")
+
+    target = _resolve_target(parsed.args[0])
+    if not target.exists():
+        raise SlashCommandError(f"path does not exist: {target}")
+
+    config = context.session.config
+
+    if target.is_file():
+        pid, count = await asyncio.to_thread(
+            ingest_single, str(target), config=config
+        )
+        return SlashCommandResult(
+            message=f"ingested {pid} ({count} chunks)"
+        )
+
+    if target.is_dir():
+        files, chunks = await asyncio.to_thread(
+            ingest_repo, str(target), config=config
+        )
+        return SlashCommandResult(
+            message=f"ingested {files} files ({chunks} chunks) under {target}"
+        )
+
+    raise SlashCommandError(f"unsupported path type: {target}")
+
+
+async def _handle_sync(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    if len(parsed.args) > 1:
+        raise SlashCommandError("/sync takes at most one path argument")
+
+    target = _resolve_target(parsed.args[0] if parsed.args else None)
+    if not target.is_dir():
+        raise SlashCommandError(f"not a directory: {target}")
+
+    diff = await asyncio.to_thread(
+        list_diff, str(target), context.session.config
+    )
+
+    lines = [f"Diff against {target}:"]
+    missing_store = diff["missing_from_store"]
+    missing_disk = diff["missing_from_disk"]
+
+    lines.append(f"  on disk, not in store ({len(missing_store)}):")
+    if missing_store:
+        lines.extend(f"    + {path}" for path in missing_store)
+    else:
+        lines.append("    (none)")
+
+    lines.append(f"  in store, not on disk ({len(missing_disk)}):")
+    if missing_disk:
+        lines.extend(f"    - {path}" for path in missing_disk)
+    else:
+        lines.append("    (none)")
+
+    return SlashCommandResult(message="\n".join(lines))
+
+
+async def _handle_prune(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    args = list(parsed.args)
+    apply = False
+    if "--yes" in args:
+        apply = True
+        args = [a for a in args if a != "--yes"]
+    if len(args) > 1:
+        raise SlashCommandError("/prune takes at most one path argument")
+
+    target = _resolve_target(args[0] if args else None)
+    if not target.is_dir():
+        raise SlashCommandError(f"not a directory: {target}")
+
+    config = context.session.config
+
+    if not apply:
+        diff = await asyncio.to_thread(list_diff, str(target), config)
+        orphans = diff["missing_from_disk"]
+        lines = [f"Would prune {len(orphans)} orphaned pid(s) under {target}:"]
+        if orphans:
+            lines.extend(f"  - {path}" for path in orphans)
+            lines.append("Re-run with --yes to apply.")
+        else:
+            lines.append("  (none)")
+        return SlashCommandResult(message="\n".join(lines))
+
+    removed = await asyncio.to_thread(
+        prune_orphans, str(target), config
+    )
+    return SlashCommandResult(
+        message=f"pruned {len(removed)} orphaned pid(s) under {target}"
+    )
