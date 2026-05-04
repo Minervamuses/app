@@ -71,7 +71,10 @@ def _print_cli_message(message: str) -> None:
 
 
 def _clear_terminal() -> None:
-    print("\033[2J\033[H", end="", flush=True)
+    # \033[H = home, \033[2J = clear viewport, \033[3J = clear scrollback.
+    # Without 3J modern terminals keep prior lines reachable by scrolling up,
+    # so /clear only appears to clear.
+    print("\033[H\033[2J\033[3J", end="", flush=True)
 
 
 async def _run(
