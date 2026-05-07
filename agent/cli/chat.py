@@ -62,6 +62,21 @@ def _print_progress(node_name: str, new_msgs: list) -> None:
             print(f"  {symbol} {name}{suffix}", flush=True)
 
 
+def _print_startup_trace(session) -> None:
+    """Show prompt-visible skill metadata so it is observable in the CLI trace."""
+    trace_fn = getattr(session, "startup_trace_entries", None)
+    if trace_fn is None:
+        return
+
+    entries = trace_fn() or []
+    for entry in entries:
+        if entry.get("type") != "skill_metadata":
+            continue
+        name = entry.get("name", "?")
+        path = entry.get("path", "?")
+        print(f"  ✓ skill {name} metadata loaded from {path}", flush=True)
+
+
 def _print_banner() -> None:
     print("Agent Chat (LangGraph mode). Type 'q' to quit.\n")
 
@@ -92,6 +107,7 @@ async def _run(
     reader = read_line or build_line_reader(command_registry=command_registry)
 
     _print_banner()
+    _print_startup_trace(session)
 
     try:
         while True:

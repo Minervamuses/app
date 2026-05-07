@@ -29,3 +29,6 @@ class AgentConfig(RAGConfig):
     # Long-term memory: keep this many most-recent turns in the prompt;
     # evicted turns spill into the chat_history vector store.
     agent_recent_turns_window: int = 10
+
+    # Optional local skills directory. When unset, defaults to `<repo>/skills`.
+    skills_dir: str | None = None

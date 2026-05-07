@@ -14,6 +14,11 @@ from agent.history import (
     format_tool_counts,
 )
 from agent.history_rag import ChatHistoryStore, get_chat_history_store
+from agent.skills import (
+    build_skill_trace_entries,
+    discover_skills,
+    render_skills_prompt,
+)
 from agent.memory import (
     TurnRecord,
     assemble_prompt_history,
@@ -21,7 +26,7 @@ from agent.memory import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a research assistant with access to four tool families.
+SYSTEM_PROMPT = """You are a research assistant with access to five tool families.
 
 Local knowledge base tools (always available):
 
@@ -41,6 +46,12 @@ Conversation history tool (always available):
    Do NOT call this for content already visible in the current conversation.
    Do NOT use this as a substitute for rag_search on general knowledge questions.
 
+Local file-reading tool (always available):
+
+5. **read_file** — Read a local UTF-8 text file from an absolute or cwd-relative path.
+   Use this for local drafts, notes, reviewer comments, journal guidelines, and local `SKILL.md` files.
+   When a local skill matches the user's request, read its `SKILL.md` before following the skill.
+
 Web Search MCP tools (available only when configured):
 - Use for current external information, general web discovery, or topics unlikely to exist in the local KB.
 
@@ -51,6 +62,7 @@ GitHub MCP tools (available only when configured):
 Tool selection policy:
 - Questions about the indexed project or research notes → prefer `rag_explore` / `rag_search` / `rag_get_context`.
 - Questions about earlier chat history that is no longer visible → prefer `recall_history`.
+- Questions about local files or local skills → prefer `read_file`.
 - Questions needing live external information → prefer Web Search MCP.
 - Questions about remote GitHub repos, PRs, issues, or Actions → prefer GitHub MCP.
 - If a tool family is not listed in the bound tools for this session, treat it as unavailable and fall back to what you have.
@@ -59,6 +71,7 @@ Workflow:
 - If the question is vague or you don't know the structure of the knowledge base, start with rag_explore.
 - Use rag_search with appropriate filters based on what you learned from rag_explore.
 - Use rag_get_context if you need to see more around a promising result.
+- Use read_file when the answer depends on a local file or when a relevant local skill is listed below.
 - After 1-3 rag_search calls, synthesize your answer. Don't keep searching for perfection.
 - Do NOT make up information. Only answer based on tool results or your conversation with the user."""
 
@@ -80,7 +93,12 @@ class ChatSession:
         self.config = config
         self.recursion_limit = recursion_limit
 
-        self.system_prompt_message = SystemMessage(content=system_prompt)
+        self.loaded_skills = discover_skills(config)
+        skills_prompt = render_skills_prompt(self.loaded_skills)
+        full_system_prompt = system_prompt
+        if skills_prompt:
+            full_system_prompt = f"{system_prompt}\n\n{skills_prompt}"
+        self.system_prompt_message = SystemMessage(content=full_system_prompt)
         self.recent_turns: list[TurnRecord] = []
 
         self.session_id = uuid.uuid4().hex
@@ -94,6 +112,7 @@ class ChatSession:
 
         self.turn_logs: list[dict] = []
         self.last_tool_calls: list[dict] = []
+        self.last_trace_events: list[dict] = []
 
         self._progress_cb = progress_cb
 
@@ -102,6 +121,10 @@ class ChatSession:
             self.system_prompt_message,
             self.recent_turns,
         )
+
+    def startup_trace_entries(self) -> list[dict]:
+        """Return synthetic trace entries for prompt-visible skill metadata."""
+        return build_skill_trace_entries(self.loaded_skills)
 
     async def _store_turn(self, turn: TurnRecord) -> None:
         await asyncio.to_thread(
@@ -168,13 +191,24 @@ class ChatSession:
                     self._progress_cb(node_name, new_msgs)
         new_messages = messages[len(input_messages):]
         tool_calls = extract_tool_calls(new_messages)
+        trace_events = self.startup_trace_entries() + [
+            {
+                "type": "tool",
+                "name": call["name"],
+                "args": call["args"],
+                "id": call.get("id"),
+            }
+            for call in tool_calls
+        ]
         answer = messages[-1].content if messages else ""
         answer = answer or ""
 
         self.last_tool_calls = tool_calls
+        self.last_trace_events = trace_events
         self.turn_logs.append({
             "user_input": user_input,
             "tool_calls": tool_calls,
+            "trace_events": trace_events,
             "tool_counts": format_tool_counts(tool_calls),
         })
 
