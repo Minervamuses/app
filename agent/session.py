@@ -184,9 +184,6 @@ class ChatSession:
         self.plan_mode = False
         self.plan_log_path = None
 
-    def _turn_used_web_search(self, tool_calls: list[dict]) -> bool:
-        return any(call.get("name") in self.web_search_tool_names for call in tool_calls)
-
     def _render_plan_block(
         self,
         *,
@@ -204,18 +201,20 @@ class ChatSession:
             "",
             user_input,
             "",
+        ]
+        lines.extend(self._render_tool_blocks(new_messages, tool_calls))
+        lines.extend([
             "**Assistant:**",
             "",
             answer,
             "",
-        ]
-        lines.extend(self._render_web_search_blocks(new_messages, tool_calls))
-        lines.extend(["---", ""])
+            "---",
+            "",
+        ])
         return "\n".join(lines)
 
-    def _render_web_search_blocks(self, new_messages: list, tool_calls: list[dict]) -> list[str]:
-        web_calls = [call for call in tool_calls if call.get("name") in self.web_search_tool_names]
-        if not web_calls:
+    def _render_tool_blocks(self, new_messages: list, tool_calls: list[dict]) -> list[str]:
+        if not tool_calls:
             return []
 
         tool_messages: dict[str, list[ToolMessage]] = {}
@@ -227,23 +226,34 @@ class ChatSession:
                 tool_messages.setdefault(call_id, []).append(message)
 
         lines: list[str] = []
-        for call in web_calls:
+        for call in tool_calls:
             call_id = call.get("id")
             results = tool_messages.get(call_id, []) if call_id else []
-            if not results:
-                continue
             lines.extend([
-                f"### Web search: {call.get('name', 'unknown')}",
+                f"### Tool: {call.get('name', 'unknown')}",
                 "",
                 "```json",
                 json.dumps(call.get("args", {}), ensure_ascii=False, indent=2),
                 "```",
                 "",
+                "**Result:**",
+                "",
             ])
-            for result in results:
-                content = getattr(result, "content", "") or ""
-                lines.extend([str(content), ""])
+            if not results:
+                lines.extend(["(no ToolMessage matched this tool_call_id)", ""])
+            else:
+                for result in results:
+                    content = getattr(result, "content", "") or ""
+                    capped = self._cap_tool_result(str(content))
+                    lines.extend(["```", capped, "```", ""])
         return lines
+
+    def _cap_tool_result(self, content: str) -> str:
+        cap = self.config.plan_log_max_tool_chars
+        if len(content) <= cap:
+            return content
+        head = content[:cap]
+        return f"{head}\n\n[truncated; original {len(content)} chars]"
 
     def _append_block_to_md(self, log_path: str, block: str) -> None:
         with Path(log_path).open("a", encoding="utf-8") as f:

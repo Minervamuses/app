@@ -33,5 +33,10 @@ class AgentConfig(RAGConfig):
     # Plan mode markdown logs. Relative to the app project root.
     plan_logs_dir: str = "plan_logs"
 
+    # Soft cap on a single ToolMessage payload written to a plan log
+    # (UTF-8 chars). Truncation only affects the markdown copy; the LLM
+    # still receives the full ToolMessage in its context window.
+    plan_log_max_tool_chars: int = 65536
+
     # Optional local skills directory. When unset, defaults to `<repo>/skills`.
     skills_dir: str | None = None
