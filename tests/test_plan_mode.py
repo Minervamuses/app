@@ -242,6 +242,42 @@ def test_plan_log_truncation_does_not_affect_llm_context(make_session, monkeypat
     assert "answer" in [m.content for m in full_results]
 
 
+def test_mode_hint_injected_when_plan_turns_in_recent(make_session):
+    session, _store, _log_dir = make_session(window=10)
+    asyncio.run(session.enter_plan_mode())
+    asyncio.run(session.turn("plan question"))
+    asyncio.run(session.exit_plan_mode())
+
+    history = session._prompt_history()
+    hint_msgs = [m for m in history if "[Mode hint]" in str(getattr(m, "content", ""))]
+    assert len(hint_msgs) == 1
+    assert "plan_logs/" in hint_msgs[0].content
+    assert "do NOT call recall_history" in hint_msgs[0].content
+
+
+def test_mode_hint_absent_in_pure_normal_session(make_session):
+    session, _store, _log_dir = make_session(window=10)
+    asyncio.run(session.turn("normal question"))
+
+    history = session._prompt_history()
+    hint_msgs = [m for m in history if "[Mode hint]" in str(getattr(m, "content", ""))]
+    assert hint_msgs == []
+
+
+def test_mode_hint_disappears_after_plan_turns_evicted(make_session):
+    session, _store, _log_dir = make_session(window=2)
+    asyncio.run(session.enter_plan_mode())
+    asyncio.run(session.turn("plan q"))
+    asyncio.run(session.exit_plan_mode())
+    # Push the plan turn out of the window with normal turns.
+    for index in range(3):
+        asyncio.run(session.turn(f"normal {index}"))
+
+    history = session._prompt_history()
+    hint_msgs = [m for m in history if "[Mode hint]" in str(getattr(m, "content", ""))]
+    assert hint_msgs == []
+
+
 def test_unknown_persist_target_raises(make_session):
     session, _store, _log_dir = make_session(window=2)
     turn = TurnRecord(

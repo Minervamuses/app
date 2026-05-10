@@ -124,10 +124,31 @@ class ChatSession:
         self._progress_cb = progress_cb
 
     def _prompt_history(self) -> list:
-        return assemble_prompt_history(
+        base = assemble_prompt_history(
             self.system_prompt_message,
             self.recent_turns,
         )
+        hint = self._build_plan_mode_hint()
+        if hint is None:
+            return base
+        return [base[0], hint, *base[1:]]
+
+    def _build_plan_mode_hint(self) -> SystemMessage | None:
+        """Tell the LLM that some visible turns are plan-mode (md only),
+        so it does not call recall_history looking for them in ChromaDB.
+        """
+        has_plan_turn = any(
+            getattr(turn, "persist_target", "chroma") == "plan_log"
+            for turn in self.recent_turns
+        )
+        if not has_plan_turn:
+            return None
+        return SystemMessage(content=(
+            "[Mode hint] Some turns in the recent context were recorded under "
+            "plan mode (stored only in plan_logs/, NOT in ChromaDB). They ARE "
+            "visible to you in this prompt - do NOT call recall_history to "
+            "look for them."
+        ))
 
     def startup_trace_entries(self) -> list[dict]:
         """Return synthetic trace entries for prompt-visible skill metadata."""
