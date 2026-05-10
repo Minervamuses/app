@@ -17,5 +17,8 @@ AGENTS.md
 .cursorrules
 .github/copilot-instructions.md
 
+# Plan-mode markdown logs (kept on disk for the user; never indexed by RAG)
+plan_logs/
+
 # Windows zone identifier
 *:Zone.Identifier
