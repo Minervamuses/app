@@ -260,6 +260,7 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
         "rag_get_context",
         "recall_history",
         "read_file",
+        "bash",
         "web_fetch",
     ]
     assert session is not None
@@ -317,11 +318,12 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
     cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))
     assert session is not None
-    # Only local agent tools bound (rag + recall_history); MCP load failed.
+    # Only local agent tools bound (rag + recall_history + read_file + bash); MCP load failed.
     assert [t.name for t in seen["bound"]] == [
         "rag_explore",
         "rag_search",
         "rag_get_context",
         "recall_history",
         "read_file",
+        "bash",
     ]

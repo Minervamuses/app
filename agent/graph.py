@@ -10,7 +10,7 @@ from agent.history_rag import create_history_tool
 from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
 from agent.state import AgentState
-from agent.tools import create_read_file_tool
+from agent.tools import create_bash_tool, create_read_file_tool
 
 
 def build_graph(
@@ -34,6 +34,7 @@ def build_graph(
     tools = create_rag_tools(config)
     tools.append(create_history_tool(config, store=history_store))
     tools.append(create_read_file_tool(config))
+    tools.append(create_bash_tool(config))
     if extra_tools:
         tools = tools + list(extra_tools)
     model_with_tools = model.bind_tools(tools)
