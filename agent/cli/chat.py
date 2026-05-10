@@ -77,8 +77,9 @@ def _print_startup_trace(session) -> None:
         print(f"  ✓ skill {name} metadata loaded from {path}", flush=True)
 
 
-def _print_banner() -> None:
-    print("Agent Chat (LangGraph mode). Type 'q' to quit.\n")
+def _print_banner(session=None) -> None:
+    mode = "discussion" if getattr(session, "discussion_mode", False) else "default"
+    print(f"Agent Chat (LangGraph mode). Type 'q' to quit.\nMode: {mode}\n")
 
 
 def _print_cli_message(message: str) -> None:
@@ -106,7 +107,7 @@ async def _run(
     command_registry = build_default_registry()
     reader = read_line or build_line_reader(command_registry=command_registry)
 
-    _print_banner()
+    _print_banner(session)
     _print_startup_trace(session)
 
     try:
@@ -142,7 +143,7 @@ async def _run(
 
                 if result.clear_screen:
                     _clear_terminal()
-                    _print_banner()
+                    _print_banner(session)
                 if result.message:
                     _print_cli_message(result.message)
                 if result.should_exit:

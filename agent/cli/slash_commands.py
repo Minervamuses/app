@@ -6,6 +6,7 @@ from pathlib import Path
 import shlex
 from typing import Awaitable, Callable
 
+from agent.paths import find_app_root
 from rag import ingest_repo, ingest_single, list_diff, prune_orphans
 
 
@@ -131,6 +132,11 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_status,
             ),
             SlashCommand(
+                name="discuss",
+                description="Toggle Discussion Mode (turns saved to markdown, never indexed).",
+                handler=_handle_discuss,
+            ),
+            SlashCommand(
                 name="init",
                 description="Ingest the parent repo (excluding this app project).",
                 handler=_handle_init,
@@ -195,8 +201,35 @@ async def _handle_status(
         f"recent_turn_count: {status['recent_turn_count']}",
         f"recursion_limit: {status['recursion_limit']}",
         f"last_tool_calls: {status['last_tool_counts']}",
+        f"discussion_mode: {status.get('discussion_mode', False)}",
+        f"discussion_log_path: {status.get('discussion_log_path', '') or 'none'}",
     ]
     return SlashCommandResult(message="\n".join(lines))
+
+
+async def _handle_discuss(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    session = context.session
+    if len(parsed.args) > 1:
+        raise SlashCommandError("usage: /discuss [on|off]")
+    arg = parsed.args[0].lower() if parsed.args else None
+    if arg not in (None, "on", "off"):
+        raise SlashCommandError("usage: /discuss [on|off]")
+
+    target_on = (not session.discussion_mode) if arg is None else (arg == "on")
+    if target_on == session.discussion_mode:
+        return SlashCommandResult(
+            message=f"discussion mode already {'on' if target_on else 'off'}"
+        )
+    if target_on:
+        path = await session.enter_discussion_mode()
+        return SlashCommandResult(message=f"discussion mode ON -> {path}")
+    await session.exit_discussion_mode()
+    return SlashCommandResult(
+        message="discussion mode OFF (md preserved; future turns -> chroma)"
+    )
 
 
 async def _handle_clear(
@@ -221,15 +254,6 @@ def _resolve_target(arg: str | None) -> Path:
     return Path(raw).expanduser().resolve()
 
 
-def _find_app_root() -> Path:
-    """Walk up from this file to the app project root (its pyproject.toml)."""
-    here = Path(__file__).resolve()
-    for candidate in here.parents:
-        if (candidate / "pyproject.toml").exists():
-            return candidate
-    raise RuntimeError("could not locate app project root (no pyproject.toml found)")
-
-
 async def _handle_init(
     context: SlashCommandContext,
     parsed: ParsedSlashCommand,
@@ -237,7 +261,7 @@ async def _handle_init(
     if parsed.args:
         raise SlashCommandError("/init takes no arguments")
 
-    app_root = _find_app_root()
+    app_root = find_app_root()
     parent_repo = app_root.parent
     skip = {app_root.name}
 
@@ -270,21 +294,24 @@ async def _handle_ingest(
 
     config = context.session.config
 
-    if target.is_file():
-        pid, count = await asyncio.to_thread(
-            ingest_single, str(target), config=config
-        )
-        return SlashCommandResult(
-            message=f"ingested {pid} ({count} chunks)"
-        )
+    try:
+        if target.is_file():
+            pid, count = await asyncio.to_thread(
+                ingest_single, str(target), config=config
+            )
+            return SlashCommandResult(
+                message=f"ingested {pid} ({count} chunks)"
+            )
 
-    if target.is_dir():
-        files, chunks = await asyncio.to_thread(
-            ingest_repo, str(target), config=config
-        )
-        return SlashCommandResult(
-            message=f"ingested {files} files ({chunks} chunks) under {target}"
-        )
+        if target.is_dir():
+            files, chunks = await asyncio.to_thread(
+                ingest_repo, str(target), config=config
+            )
+            return SlashCommandResult(
+                message=f"ingested {files} files ({chunks} chunks) under {target}"
+            )
+    except ValueError as exc:
+        raise SlashCommandError(str(exc)) from exc
 
     raise SlashCommandError(f"unsupported path type: {target}")
 
@@ -300,9 +327,12 @@ async def _handle_sync(
     if not target.is_dir():
         raise SlashCommandError(f"not a directory: {target}")
 
-    diff = await asyncio.to_thread(
-        list_diff, str(target), context.session.config
-    )
+    try:
+        diff = await asyncio.to_thread(
+            list_diff, str(target), context.session.config
+        )
+    except ValueError as exc:
+        raise SlashCommandError(str(exc)) from exc
 
     lines = [f"Diff against {target}:"]
     missing_store = diff["missing_from_store"]
@@ -342,7 +372,10 @@ async def _handle_prune(
     config = context.session.config
 
     if not apply:
-        diff = await asyncio.to_thread(list_diff, str(target), config)
+        try:
+            diff = await asyncio.to_thread(list_diff, str(target), config)
+        except ValueError as exc:
+            raise SlashCommandError(str(exc)) from exc
         orphans = diff["missing_from_disk"]
         lines = [f"Would prune {len(orphans)} orphaned pid(s) under {target}:"]
         if orphans:
@@ -352,9 +385,12 @@ async def _handle_prune(
             lines.append("  (none)")
         return SlashCommandResult(message="\n".join(lines))
 
-    removed = await asyncio.to_thread(
-        prune_orphans, str(target), config
-    )
+    try:
+        removed = await asyncio.to_thread(
+            prune_orphans, str(target), config
+        )
+    except ValueError as exc:
+        raise SlashCommandError(str(exc)) from exc
     return SlashCommandResult(
         message=f"pruned {len(removed)} orphaned pid(s) under {target}"
     )

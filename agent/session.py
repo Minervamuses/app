@@ -377,6 +377,8 @@ class ChatSession:
             "recent_turn_count": len(self.recent_turns),
             "recursion_limit": self.recursion_limit,
             "last_tool_counts": format_tool_counts(self.last_tool_calls) or "none",
+            "discussion_mode": self.discussion_mode,
+            "discussion_log_path": str(self.discussion_log_path) if self.discussion_log_path else "",
         }
 
     async def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
