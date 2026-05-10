@@ -84,6 +84,12 @@ def test_load_mcp_tools_empty_without_specs():
     assert tools == []
 
 
+def test_load_mcp_tools_with_families_empty_without_specs():
+    tools, families = asyncio.run(mcp_module.load_mcp_tools_with_families(specs=[]))
+    assert tools == []
+    assert families == {}
+
+
 def test_load_mcp_tools_skips_failing_server(monkeypatch):
     @tool("web_fetch")
     def fake_web(url: str) -> str:
@@ -115,6 +121,39 @@ def test_load_mcp_tools_skips_failing_server(monkeypatch):
     tools = asyncio.run(mcp_module.load_mcp_tools(specs=specs))
     assert len(tools) == 1
     assert tools[0].name == "web_fetch"
+
+
+def test_load_mcp_tools_with_families_maps_loaded_tools(monkeypatch):
+    @tool("web_fetch")
+    def fake_web(url: str) -> str:
+        """Fake web search tool."""
+        return url
+
+    @tool("github_repo")
+    def fake_github(repo: str) -> str:
+        """Fake GitHub tool."""
+        return repo
+
+    async def get_tools(self, *, server_name=None):
+        server = next(iter(self.connections.keys()))
+        return [fake_web] if server == "web_search" else [fake_github]
+
+    class FakeClient:
+        def __init__(self, connections=None):
+            self.connections = connections
+            self.get_tools = get_tools.__get__(self, FakeClient)
+
+    import langchain_mcp_adapters.client as client_module
+    monkeypatch.setattr(client_module, "MultiServerMCPClient", FakeClient)
+
+    specs = [
+        mcp_module.MCPServerSpec(name="web_search", command="x", args=[], env={}),
+        mcp_module.MCPServerSpec(name="github", command="y", args=[], env={}),
+    ]
+    tools, families = asyncio.run(mcp_module.load_mcp_tools_with_families(specs=specs))
+
+    assert [tool.name for tool in tools] == ["web_fetch", "github_repo"]
+    assert families == {"web_fetch": "web_search", "github_repo": "github"}
 
 
 def test_session_create_without_mcp(monkeypatch, tmp_path):
@@ -219,6 +258,7 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
         "rag_search",
         "rag_get_context",
         "recall_history",
+        "read_file",
         "web_fetch",
     ]
     assert session is not None
@@ -281,4 +321,5 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
         "rag_search",
         "rag_get_context",
         "recall_history",
+        "read_file",
     ]

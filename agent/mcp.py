@@ -140,10 +140,18 @@ async def load_mcp_tools(specs: list[MCPServerSpec] | None = None) -> list:
     Failures from any single server are logged and that server is skipped;
     tools from surviving servers are still returned.
     """
+    tools, _families = await load_mcp_tools_with_families(specs=specs)
+    return tools
+
+
+async def load_mcp_tools_with_families(
+    specs: list[MCPServerSpec] | None = None,
+) -> tuple[list, dict[str, str]]:
+    """Load MCP tools and return a tool-name to server-family map."""
     if specs is None:
         specs = resolve_mcp_specs()
     if not specs:
-        return []
+        return [], {}
 
     # Some upstream MCP servers (e.g. mrkrsl/web-search-mcp) print banners
     # on stdout instead of stderr. The stdio client logs each non-JSON line
@@ -153,6 +161,7 @@ async def load_mcp_tools(specs: list[MCPServerSpec] | None = None) -> list:
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
     tools: list = []
+    families: dict[str, str] = {}
     for spec in specs:
         connections = {spec.name: _spec_to_connection(spec)}
         try:
@@ -162,4 +171,8 @@ async def load_mcp_tools(specs: list[MCPServerSpec] | None = None) -> list:
             logger.warning("MCP server %r failed to load: %s", spec.name, exc)
             continue
         tools.extend(server_tools)
-    return tools
+        for tool in server_tools:
+            tool_name = getattr(tool, "name", None)
+            if tool_name:
+                families[tool_name] = spec.name
+    return tools, families
