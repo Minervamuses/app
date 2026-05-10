@@ -54,54 +54,149 @@ def test_slash_command_completer_ignores_normal_chat_text():
     assert completions == []
 
 
-def test_discuss_command_toggles_session(tmp_path):
-    class FakeSession:
-        config = object()
-        plan_mode = False
-        plan_log_path = None
+class _FakeModeSession:
+    def __init__(self, plan_log_path):
+        self.config = object()
+        self.plan_mode = False
+        self.plan_log_path = None
+        self._target_log_path = plan_log_path
 
-        async def enter_plan_mode(self):
-            self.plan_mode = True
-            self.plan_log_path = tmp_path / "plan.md"
-            return self.plan_log_path
+    async def enter_plan_mode(self):
+        self.plan_mode = True
+        self.plan_log_path = self._target_log_path
+        return self.plan_log_path
 
-        async def exit_plan_mode(self):
-            self.plan_mode = False
-            self.plan_log_path = None
+    async def exit_plan_mode(self):
+        self.plan_mode = False
+        self.plan_log_path = None
 
+
+def test_handle_mode_oneshot_switches_to_plan(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
     registry = build_default_registry()
-    session = FakeSession()
 
     result = asyncio.run(
         execute_slash_command(
-            parse_slash_command("/discuss"),
+            parse_slash_command("/mode plan"),
             SlashCommandContext(session=session, registry=registry),
         )
     )
+
     assert session.plan_mode is True
-    assert "plan mode ON" in result.message
+    assert "mode -> plan" in result.message
+    assert str(tmp_path / "plan.md") in result.message
+
+
+def test_handle_mode_oneshot_switches_back_to_normal(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    asyncio.run(session.enter_plan_mode())
+    registry = build_default_registry()
 
     result = asyncio.run(
         execute_slash_command(
-            parse_slash_command("/discuss off"),
+            parse_slash_command("/mode normal"),
             SlashCommandContext(session=session, registry=registry),
         )
     )
+
     assert session.plan_mode is False
-    assert "plan mode OFF" in result.message
+    assert "mode -> normal" in result.message
 
 
-def test_discuss_command_rejects_extra_args():
-    class FakeSession:
-        plan_mode = False
+def test_handle_mode_interactive_selection(monkeypatch, tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
 
+    async def fake_to_thread(func, *args, **kwargs):
+        return "2"
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/mode"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.plan_mode is True
+    assert "mode -> plan" in result.message
+
+
+def test_handle_mode_cancel_on_empty_input(monkeypatch, tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return ""
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/mode"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.plan_mode is False
+    assert "cancelled" in result.message
+
+
+def test_handle_mode_invalid_numeric_choice_raises(monkeypatch, tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return "9"
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    with pytest.raises(SlashCommandError, match="invalid choice"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/mode"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+
+def test_handle_mode_unknown_name_raises(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    with pytest.raises(SlashCommandError, match="unknown mode"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/mode mystery"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+
+def test_handle_mode_same_mode_is_noop(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/mode normal"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert "already in normal mode" in result.message
+
+
+def test_handle_mode_rejects_extra_args(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
     registry = build_default_registry()
 
     with pytest.raises(SlashCommandError, match="usage"):
         asyncio.run(
             execute_slash_command(
-                parse_slash_command("/discuss on extra"),
-                SlashCommandContext(session=FakeSession(), registry=registry),
+                parse_slash_command("/mode plan extra"),
+                SlashCommandContext(session=session, registry=registry),
             )
         )
 

@@ -132,9 +132,9 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_status,
             ),
             SlashCommand(
-                name="discuss",
-                description="Toggle Discussion Mode (turns saved to markdown, never indexed).",
-                handler=_handle_discuss,
+                name="mode",
+                description="Switch session mode (interactive picker; pass a name for one-shot).",
+                handler=_handle_mode,
             ),
             SlashCommand(
                 name="init",
@@ -207,29 +207,111 @@ async def _handle_status(
     return SlashCommandResult(message="\n".join(lines))
 
 
-async def _handle_discuss(
+@dataclass(frozen=True)
+class ModeSpec:
+    """Definition for one selectable session mode."""
+
+    name: str
+    description: str
+    enter: Callable[[object], Awaitable["Path | None"]]
+    exit: Callable[[object], Awaitable[None]]
+
+
+async def _enter_normal_mode(session: object) -> "Path | None":
+    del session
+    return None
+
+
+async def _exit_normal_mode(session: object) -> None:
+    del session
+
+
+async def _enter_plan_mode(session: object) -> "Path | None":
+    return await session.enter_plan_mode()
+
+
+async def _exit_plan_mode(session: object) -> None:
+    await session.exit_plan_mode()
+
+
+_MODE_REGISTRY: dict[str, ModeSpec] = {
+    "normal": ModeSpec(
+        name="normal",
+        description="turns saved to ChromaDB (default)",
+        enter=_enter_normal_mode,
+        exit=_exit_normal_mode,
+    ),
+    "plan": ModeSpec(
+        name="plan",
+        description="turns saved to plan_logs/, never indexed",
+        enter=_enter_plan_mode,
+        exit=_exit_plan_mode,
+    ),
+}
+
+
+def _current_mode_name(session: object) -> str:
+    return "plan" if getattr(session, "plan_mode", False) else "normal"
+
+
+def _render_mode_prompt(current: str) -> str:
+    lines = [f"Current mode: {current}", "Available modes:"]
+    modes = list(_MODE_REGISTRY.values())
+    for idx, spec in enumerate(modes, start=1):
+        lines.append(f"  [{idx}] {spec.name}  - {spec.description}")
+    lines.append("Select (number or name; Enter to cancel): ")
+    return "\n".join(lines)
+
+
+def _resolve_mode_choice(raw: str) -> str | None:
+    """Map raw user input to a mode name, or None for cancel.
+
+    Numeric input maps to registry order; name input is returned as-is for
+    later validation by the handler. Cancel tokens: empty, ``q``, ``cancel``.
+    """
+    cleaned = raw.strip().lower()
+    if not cleaned or cleaned in {"q", "cancel"}:
+        return None
+    if cleaned.isdigit():
+        idx = int(cleaned) - 1
+        modes = list(_MODE_REGISTRY.values())
+        if 0 <= idx < len(modes):
+            return modes[idx].name
+        raise SlashCommandError(f"invalid choice: {cleaned}")
+    return cleaned
+
+
+async def _handle_mode(
     context: SlashCommandContext,
     parsed: ParsedSlashCommand,
 ) -> SlashCommandResult:
     session = context.session
     if len(parsed.args) > 1:
-        raise SlashCommandError("usage: /discuss [on|off]")
-    arg = parsed.args[0].lower() if parsed.args else None
-    if arg not in (None, "on", "off"):
-        raise SlashCommandError("usage: /discuss [on|off]")
+        raise SlashCommandError("usage: /mode [name]")
 
-    target_on = (not session.plan_mode) if arg is None else (arg == "on")
-    if target_on == session.plan_mode:
-        return SlashCommandResult(
-            message=f"plan mode already {'on' if target_on else 'off'}"
+    current = _current_mode_name(session)
+    if parsed.args:
+        target_name: str | None = parsed.args[0].strip().lower()
+    else:
+        raw = await asyncio.to_thread(input, _render_mode_prompt(current))
+        target_name = _resolve_mode_choice(raw)
+        if target_name is None:
+            return SlashCommandResult(message="cancelled")
+
+    if target_name not in _MODE_REGISTRY:
+        valid = ", ".join(_MODE_REGISTRY)
+        raise SlashCommandError(
+            f"unknown mode: {target_name} (available: {valid})"
         )
-    if target_on:
-        path = await session.enter_plan_mode()
-        return SlashCommandResult(message=f"plan mode ON -> {path}")
-    await session.exit_plan_mode()
-    return SlashCommandResult(
-        message="plan mode OFF (md preserved; future turns -> chroma)"
-    )
+
+    if target_name == current:
+        return SlashCommandResult(message=f"already in {current} mode")
+
+    await _MODE_REGISTRY[current].exit(session)
+    log_path = await _MODE_REGISTRY[target_name].enter(session)
+
+    suffix = f" -> {log_path}" if log_path else ""
+    return SlashCommandResult(message=f"mode -> {target_name}{suffix}")
 
 
 async def _handle_clear(
