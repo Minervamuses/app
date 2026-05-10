@@ -201,8 +201,8 @@ async def _handle_status(
         f"recent_turn_count: {status['recent_turn_count']}",
         f"recursion_limit: {status['recursion_limit']}",
         f"last_tool_calls: {status['last_tool_counts']}",
-        f"discussion_mode: {status.get('discussion_mode', False)}",
-        f"discussion_log_path: {status.get('discussion_log_path', '') or 'none'}",
+        f"plan_mode: {status.get('plan_mode', False)}",
+        f"plan_log_path: {status.get('plan_log_path', '') or 'none'}",
     ]
     return SlashCommandResult(message="\n".join(lines))
 
@@ -218,17 +218,17 @@ async def _handle_discuss(
     if arg not in (None, "on", "off"):
         raise SlashCommandError("usage: /discuss [on|off]")
 
-    target_on = (not session.discussion_mode) if arg is None else (arg == "on")
-    if target_on == session.discussion_mode:
+    target_on = (not session.plan_mode) if arg is None else (arg == "on")
+    if target_on == session.plan_mode:
         return SlashCommandResult(
-            message=f"discussion mode already {'on' if target_on else 'off'}"
+            message=f"plan mode already {'on' if target_on else 'off'}"
         )
     if target_on:
-        path = await session.enter_discussion_mode()
-        return SlashCommandResult(message=f"discussion mode ON -> {path}")
-    await session.exit_discussion_mode()
+        path = await session.enter_plan_mode()
+        return SlashCommandResult(message=f"plan mode ON -> {path}")
+    await session.exit_plan_mode()
     return SlashCommandResult(
-        message="discussion mode OFF (md preserved; future turns -> chroma)"
+        message="plan mode OFF (md preserved; future turns -> chroma)"
     )
 
 

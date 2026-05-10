@@ -78,7 +78,7 @@ def _print_startup_trace(session) -> None:
 
 
 def _print_banner(session=None) -> None:
-    mode = "discussion" if getattr(session, "discussion_mode", False) else "default"
+    mode = "plan" if getattr(session, "plan_mode", False) else "default"
     print(f"Agent Chat (LangGraph mode). Type 'q' to quit.\nMode: {mode}\n")
 
 

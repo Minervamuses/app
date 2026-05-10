@@ -57,17 +57,17 @@ def test_slash_command_completer_ignores_normal_chat_text():
 def test_discuss_command_toggles_session(tmp_path):
     class FakeSession:
         config = object()
-        discussion_mode = False
-        discussion_log_path = None
+        plan_mode = False
+        plan_log_path = None
 
-        async def enter_discussion_mode(self):
-            self.discussion_mode = True
-            self.discussion_log_path = tmp_path / "discussion.md"
-            return self.discussion_log_path
+        async def enter_plan_mode(self):
+            self.plan_mode = True
+            self.plan_log_path = tmp_path / "plan.md"
+            return self.plan_log_path
 
-        async def exit_discussion_mode(self):
-            self.discussion_mode = False
-            self.discussion_log_path = None
+        async def exit_plan_mode(self):
+            self.plan_mode = False
+            self.plan_log_path = None
 
     registry = build_default_registry()
     session = FakeSession()
@@ -78,8 +78,8 @@ def test_discuss_command_toggles_session(tmp_path):
             SlashCommandContext(session=session, registry=registry),
         )
     )
-    assert session.discussion_mode is True
-    assert "discussion mode ON" in result.message
+    assert session.plan_mode is True
+    assert "plan mode ON" in result.message
 
     result = asyncio.run(
         execute_slash_command(
@@ -87,13 +87,13 @@ def test_discuss_command_toggles_session(tmp_path):
             SlashCommandContext(session=session, registry=registry),
         )
     )
-    assert session.discussion_mode is False
-    assert "discussion mode OFF" in result.message
+    assert session.plan_mode is False
+    assert "plan mode OFF" in result.message
 
 
 def test_discuss_command_rejects_extra_args():
     class FakeSession:
-        discussion_mode = False
+        plan_mode = False
 
     registry = build_default_registry()
 

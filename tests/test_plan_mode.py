@@ -1,4 +1,4 @@
-"""Tests for discussion-mode markdown persistence."""
+"""Tests for plan-mode markdown persistence."""
 
 import asyncio
 
@@ -77,18 +77,18 @@ def make_session(monkeypatch, tmp_path):
         )
         if graph is not None:
             session.graph = graph
-        return session, store, tmp_path / cfg.discussion_logs_dir
+        return session, store, tmp_path / cfg.plan_logs_dir
 
     return _make
 
 
-def test_discussion_writes_md_immediately(make_session):
+def test_plan_writes_md_immediately(make_session):
     session, store, log_dir = make_session(window=2)
-    asyncio.run(session.enter_discussion_mode())
+    asyncio.run(session.enter_plan_mode())
 
     for index in range(3):
         asyncio.run(session.turn(f"q{index}"))
-        content = session.discussion_log_path.read_text(encoding="utf-8")
+        content = session.plan_log_path.read_text(encoding="utf-8")
         assert f"## Turn {index + 1}" in content
         assert f"q{index}" in content
 
@@ -96,30 +96,30 @@ def test_discussion_writes_md_immediately(make_session):
     assert log_dir.exists()
 
 
-def test_exit_discussion_keeps_recent_turns_visible(make_session):
+def test_exit_plan_keeps_recent_turns_visible(make_session):
     session, _store, _log_dir = make_session(window=10)
-    asyncio.run(session.enter_discussion_mode())
-    asyncio.run(session.turn("discussion q1"))
-    asyncio.run(session.turn("discussion q2"))
+    asyncio.run(session.enter_plan_mode())
+    asyncio.run(session.turn("plan q1"))
+    asyncio.run(session.turn("plan q2"))
 
-    asyncio.run(session.exit_discussion_mode())
+    asyncio.run(session.exit_plan_mode())
 
     assert [turn.user_input for turn in session.recent_turns] == [
-        "discussion q1",
-        "discussion q2",
+        "plan q1",
+        "plan q2",
     ]
     prompt_contents = [message.content for message in session._prompt_history()]
-    assert "discussion q1" in prompt_contents
-    assert "discussion q2" in prompt_contents
+    assert "plan q1" in prompt_contents
+    assert "plan q2" in prompt_contents
 
 
 def test_no_chroma_leak_after_exit(make_session):
     session, store, _log_dir = make_session(window=2)
-    asyncio.run(session.enter_discussion_mode())
+    asyncio.run(session.enter_plan_mode())
     for index in range(5):
-        asyncio.run(session.turn(f"discussion {index}"))
+        asyncio.run(session.turn(f"plan {index}"))
 
-    asyncio.run(session.exit_discussion_mode())
+    asyncio.run(session.exit_plan_mode())
     for index in range(5):
         asyncio.run(session.turn(f"normal {index}"))
     asyncio.run(session.flush_recent_turns())
@@ -129,7 +129,7 @@ def test_no_chroma_leak_after_exit(make_session):
 
 def test_md_write_failure_aborts_turn(make_session, monkeypatch):
     session, store, _log_dir = make_session(window=2)
-    asyncio.run(session.enter_discussion_mode())
+    asyncio.run(session.enter_plan_mode())
 
     def fail_append(_path, _block):
         raise OSError("disk full")
@@ -150,10 +150,10 @@ def test_web_search_capture_in_md(make_session):
         graph=_WebSearchGraph(),
         web_search_tool_names={"tavily_search"},
     )
-    asyncio.run(session.enter_discussion_mode())
+    asyncio.run(session.enter_plan_mode())
     asyncio.run(session.turn("search for plan mode"))
 
-    content = session.discussion_log_path.read_text(encoding="utf-8")
+    content = session.plan_log_path.read_text(encoding="utf-8")
     assert "### Web search: tavily_search" in content
     assert '"query": "plan mode"' in content
     assert "search result payload" in content

@@ -30,8 +30,8 @@ class AgentConfig(RAGConfig):
     # evicted turns spill into the chat_history vector store.
     agent_recent_turns_window: int = 10
 
-    # Discussion mode markdown logs. Relative to the app project root.
-    discussion_logs_dir: str = "discussion_logs"
+    # Plan mode markdown logs. Relative to the app project root.
+    plan_logs_dir: str = "plan_logs"
 
     # Optional local skills directory. When unset, defaults to `<repo>/skills`.
     skills_dir: str | None = None

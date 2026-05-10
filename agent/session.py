@@ -96,8 +96,8 @@ class ChatSession:
     ):
         self.config = config
         self.recursion_limit = recursion_limit
-        self.discussion_mode = False
-        self.discussion_log_path: Path | None = None
+        self.plan_mode = False
+        self.plan_log_path: Path | None = None
         self.web_search_tool_names = frozenset(web_search_tool_names or ())
 
         self.loaded_skills = discover_skills(config)
@@ -134,7 +134,7 @@ class ChatSession:
         return build_skill_trace_entries(self.loaded_skills)
 
     async def _store_turn(self, turn: TurnRecord) -> None:
-        if turn.persist_target == "md_log":
+        if turn.persist_target == "plan_log":
             return
         if turn.persist_target == "none":
             return
@@ -150,44 +150,44 @@ class ChatSession:
             timestamp=turn.timestamp,
         )
 
-    def _new_discussion_log_file(self) -> Path:
+    def _new_plan_log_file(self) -> Path:
         created = datetime.now(timezone.utc)
         created_at = created.isoformat()
         safe_ts = created.strftime("%Y%m%dT%H%M%SZ")
-        log_dir = find_app_root() / self.config.discussion_logs_dir
+        log_dir = find_app_root() / self.config.plan_logs_dir
         log_dir.mkdir(parents=True, exist_ok=True)
-        path = log_dir / f"discussion-{self.session_id}-{safe_ts}.md"
+        path = log_dir / f"plan-{self.session_id}-{safe_ts}.md"
         header = (
             "---\n"
             "do_not_index: true\n"
-            "generated_by: agent.discussion_mode\n"
+            "generated_by: agent.plan_mode\n"
             f"session_id: {self.session_id}\n"
             f"created_at: {created_at}\n"
             "---\n\n"
-            "# Discussion log\n\n"
+            "# Plan log\n\n"
         )
         path.write_text(header, encoding="utf-8")
         return path
 
-    async def enter_discussion_mode(self) -> Path:
-        """Enable discussion mode for newly created turns."""
-        if self.discussion_mode:
-            if self.discussion_log_path is None:
-                self.discussion_log_path = self._new_discussion_log_file()
-            return self.discussion_log_path
-        self.discussion_log_path = self._new_discussion_log_file()
-        self.discussion_mode = True
-        return self.discussion_log_path
+    async def enter_plan_mode(self) -> Path:
+        """Enable plan mode for newly created turns."""
+        if self.plan_mode:
+            if self.plan_log_path is None:
+                self.plan_log_path = self._new_plan_log_file()
+            return self.plan_log_path
+        self.plan_log_path = self._new_plan_log_file()
+        self.plan_mode = True
+        return self.plan_log_path
 
-    async def exit_discussion_mode(self) -> None:
-        """Disable discussion mode without mutating prompt-visible turns."""
-        self.discussion_mode = False
-        self.discussion_log_path = None
+    async def exit_plan_mode(self) -> None:
+        """Disable plan mode without mutating prompt-visible turns."""
+        self.plan_mode = False
+        self.plan_log_path = None
 
     def _turn_used_web_search(self, tool_calls: list[dict]) -> bool:
         return any(call.get("name") in self.web_search_tool_names for call in tool_calls)
 
-    def _render_discussion_block(
+    def _render_plan_block(
         self,
         *,
         turn_id: int,
@@ -319,13 +319,13 @@ class ChatSession:
 
         turn_id = self._turn_counter + 1
         timestamp = datetime.now(timezone.utc).isoformat()
-        if self.discussion_mode:
-            if self.discussion_log_path is None:
-                raise RuntimeError("discussion mode is enabled without a log path")
-            target = "md_log"
-            log_path = str(self.discussion_log_path)
+        if self.plan_mode:
+            if self.plan_log_path is None:
+                raise RuntimeError("plan mode is enabled without a log path")
+            target = "plan_log"
+            log_path = str(self.plan_log_path)
             try:
-                block = self._render_discussion_block(
+                block = self._render_plan_block(
                     turn_id=turn_id,
                     timestamp=timestamp,
                     user_input=user_input,
@@ -335,7 +335,7 @@ class ChatSession:
                 )
                 await asyncio.to_thread(self._append_block_to_md, log_path, block)
             except Exception as exc:
-                logger.error("discussion md write failed for turn %s: %s", turn_id, exc)
+                logger.error("plan md write failed for turn %s: %s", turn_id, exc)
                 raise
         else:
             target = "chroma"
@@ -377,8 +377,8 @@ class ChatSession:
             "recent_turn_count": len(self.recent_turns),
             "recursion_limit": self.recursion_limit,
             "last_tool_counts": format_tool_counts(self.last_tool_calls) or "none",
-            "discussion_mode": self.discussion_mode,
-            "discussion_log_path": str(self.discussion_log_path) if self.discussion_log_path else "",
+            "plan_mode": self.plan_mode,
+            "plan_log_path": str(self.plan_log_path) if self.plan_log_path else "",
         }
 
     async def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
