@@ -24,6 +24,8 @@ class TurnRecord:
     assistant_output: str
     turn_id: int = 0
     timestamp: str = ""
+    persist_target: str = "chroma"
+    log_path: str | None = None
 
     def to_messages(self) -> list[BaseMessage]:
         msgs: list[BaseMessage] = [HumanMessage(content=self.user_input)]

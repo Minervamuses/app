@@ -46,3 +46,5 @@ def test_turn_record_carries_id_and_timestamp_metadata():
     )
     assert turn.turn_id == 7
     assert turn.timestamp == "2026-04-25T10:00:00+00:00"
+    assert turn.persist_target == "chroma"
+    assert turn.log_path is None
