@@ -192,6 +192,7 @@ def test_session_create_without_mcp(monkeypatch, tmp_path):
     session = asyncio.run(ChatSession.create(cfg, load_mcp=False))
     assert session is not None
     assert session.recent_turns == []
+    assert session.web_search_tool_names == frozenset()
 
 
 def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
@@ -246,9 +247,9 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
     monkeypatch.setattr("agent.graph.create_history_tool", lambda _c, store=None: fake_recall)
 
     async def fake_load():
-        return [fake_web]
+        return [fake_web], {"web_fetch": "web_search"}
 
-    monkeypatch.setattr("agent.mcp.load_mcp_tools", fake_load)
+    monkeypatch.setattr("agent.mcp.load_mcp_tools_with_families", fake_load)
 
     cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))
@@ -262,6 +263,7 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
         "web_fetch",
     ]
     assert session is not None
+    assert session.web_search_tool_names == frozenset({"web_fetch"})
 
 
 def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
@@ -310,7 +312,7 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
     async def failing_load():
         raise RuntimeError("mcp unavailable")
 
-    monkeypatch.setattr("agent.mcp.load_mcp_tools", failing_load)
+    monkeypatch.setattr("agent.mcp.load_mcp_tools_with_families", failing_load)
 
     cfg = AgentConfig(persist_dir=str(tmp_path))
     session = asyncio.run(ChatSession.create(cfg, load_mcp=True))

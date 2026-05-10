@@ -1,11 +1,13 @@
 """Multi-turn conversational session for the agent."""
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from agent.config import AgentConfig
 from agent.graph import build_graph
@@ -23,6 +25,7 @@ from agent.memory import (
     TurnRecord,
     assemble_prompt_history,
 )
+from agent.paths import find_app_root
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +92,13 @@ class ChatSession:
         extra_tools: list | None = None,
         history_store: ChatHistoryStore | None = None,
         progress_cb=None,
+        web_search_tool_names: set[str] | frozenset[str] | None = None,
     ):
         self.config = config
         self.recursion_limit = recursion_limit
+        self.discussion_mode = False
+        self.discussion_log_path: Path | None = None
+        self.web_search_tool_names = frozenset(web_search_tool_names or ())
 
         self.loaded_skills = discover_skills(config)
         skills_prompt = render_skills_prompt(self.loaded_skills)
@@ -127,6 +134,14 @@ class ChatSession:
         return build_skill_trace_entries(self.loaded_skills)
 
     async def _store_turn(self, turn: TurnRecord) -> None:
+        if turn.persist_target == "md_log":
+            return
+        if turn.persist_target == "none":
+            return
+        if turn.persist_target != "chroma":
+            raise ValueError(
+                f"unknown persist_target={turn.persist_target!r} on turn {turn.turn_id}"
+            )
         await asyncio.to_thread(
             self.history_store.add_turn,
             turn,
@@ -134,6 +149,105 @@ class ChatSession:
             turn_id=turn.turn_id,
             timestamp=turn.timestamp,
         )
+
+    def _new_discussion_log_file(self) -> Path:
+        created = datetime.now(timezone.utc)
+        created_at = created.isoformat()
+        safe_ts = created.strftime("%Y%m%dT%H%M%SZ")
+        log_dir = find_app_root() / self.config.discussion_logs_dir
+        log_dir.mkdir(parents=True, exist_ok=True)
+        path = log_dir / f"discussion-{self.session_id}-{safe_ts}.md"
+        header = (
+            "---\n"
+            "do_not_index: true\n"
+            "generated_by: agent.discussion_mode\n"
+            f"session_id: {self.session_id}\n"
+            f"created_at: {created_at}\n"
+            "---\n\n"
+            "# Discussion log\n\n"
+        )
+        path.write_text(header, encoding="utf-8")
+        return path
+
+    async def enter_discussion_mode(self) -> Path:
+        """Enable discussion mode for newly created turns."""
+        if self.discussion_mode:
+            if self.discussion_log_path is None:
+                self.discussion_log_path = self._new_discussion_log_file()
+            return self.discussion_log_path
+        self.discussion_log_path = self._new_discussion_log_file()
+        self.discussion_mode = True
+        return self.discussion_log_path
+
+    async def exit_discussion_mode(self) -> None:
+        """Disable discussion mode without mutating prompt-visible turns."""
+        self.discussion_mode = False
+        self.discussion_log_path = None
+
+    def _turn_used_web_search(self, tool_calls: list[dict]) -> bool:
+        return any(call.get("name") in self.web_search_tool_names for call in tool_calls)
+
+    def _render_discussion_block(
+        self,
+        *,
+        turn_id: int,
+        timestamp: str,
+        user_input: str,
+        answer: str,
+        new_messages: list,
+        tool_calls: list[dict],
+    ) -> str:
+        lines = [
+            f"## Turn {turn_id} - {timestamp}",
+            "",
+            "**User:**",
+            "",
+            user_input,
+            "",
+            "**Assistant:**",
+            "",
+            answer,
+            "",
+        ]
+        lines.extend(self._render_web_search_blocks(new_messages, tool_calls))
+        lines.extend(["---", ""])
+        return "\n".join(lines)
+
+    def _render_web_search_blocks(self, new_messages: list, tool_calls: list[dict]) -> list[str]:
+        web_calls = [call for call in tool_calls if call.get("name") in self.web_search_tool_names]
+        if not web_calls:
+            return []
+
+        tool_messages: dict[str, list[ToolMessage]] = {}
+        for message in new_messages:
+            if not isinstance(message, ToolMessage):
+                continue
+            call_id = getattr(message, "tool_call_id", None)
+            if call_id:
+                tool_messages.setdefault(call_id, []).append(message)
+
+        lines: list[str] = []
+        for call in web_calls:
+            call_id = call.get("id")
+            results = tool_messages.get(call_id, []) if call_id else []
+            if not results:
+                continue
+            lines.extend([
+                f"### Web search: {call.get('name', 'unknown')}",
+                "",
+                "```json",
+                json.dumps(call.get("args", {}), ensure_ascii=False, indent=2),
+                "```",
+                "",
+            ])
+            for result in results:
+                content = getattr(result, "content", "") or ""
+                lines.extend([str(content), ""])
+        return lines
+
+    def _append_block_to_md(self, log_path: str, block: str) -> None:
+        with Path(log_path).open("a", encoding="utf-8") as f:
+            f.write(block)
 
     async def _evict_overflow(self) -> None:
         """Spill turns past the window into the long-term store. Log + keep on failure."""
@@ -203,6 +317,41 @@ class ChatSession:
         answer = messages[-1].content if messages else ""
         answer = answer or ""
 
+        turn_id = self._turn_counter + 1
+        timestamp = datetime.now(timezone.utc).isoformat()
+        if self.discussion_mode:
+            if self.discussion_log_path is None:
+                raise RuntimeError("discussion mode is enabled without a log path")
+            target = "md_log"
+            log_path = str(self.discussion_log_path)
+            try:
+                block = self._render_discussion_block(
+                    turn_id=turn_id,
+                    timestamp=timestamp,
+                    user_input=user_input,
+                    answer=answer,
+                    new_messages=new_messages,
+                    tool_calls=tool_calls,
+                )
+                await asyncio.to_thread(self._append_block_to_md, log_path, block)
+            except Exception as exc:
+                logger.error("discussion md write failed for turn %s: %s", turn_id, exc)
+                raise
+        else:
+            target = "chroma"
+            log_path = None
+
+        self._turn_counter = turn_id
+        self.recent_turns.append(
+            TurnRecord(
+                user_input=user_input,
+                assistant_output=answer,
+                turn_id=turn_id,
+                timestamp=timestamp,
+                persist_target=target,
+                log_path=log_path,
+            )
+        )
         self.last_tool_calls = tool_calls
         self.last_trace_events = trace_events
         self.turn_logs.append({
@@ -211,16 +360,6 @@ class ChatSession:
             "trace_events": trace_events,
             "tool_counts": format_tool_counts(tool_calls),
         })
-
-        self._turn_counter += 1
-        self.recent_turns.append(
-            TurnRecord(
-                user_input=user_input,
-                assistant_output=answer,
-                turn_id=self._turn_counter,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-        )
         await self._evict_overflow()
 
         return answer, tool_calls
@@ -261,12 +400,18 @@ class ChatSession:
         """
         extra_tools: list = []
         if load_mcp:
-            from agent.mcp import load_mcp_tools
+            from agent.mcp import load_mcp_tools_with_families
 
             try:
-                extra_tools = await load_mcp_tools()
+                extra_tools, families = await load_mcp_tools_with_families()
             except Exception:
                 extra_tools = []
+                families = {}
+        else:
+            families = {}
+        web_search_tool_names = frozenset(
+            name for name, family in families.items() if family == "web_search"
+        )
         return cls(
             config,
             recursion_limit=recursion_limit,
@@ -274,4 +419,5 @@ class ChatSession:
             extra_tools=extra_tools,
             history_store=history_store,
             progress_cb=progress_cb,
+            web_search_tool_names=web_search_tool_names,
         )
