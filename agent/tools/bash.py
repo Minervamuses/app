@@ -74,7 +74,7 @@ def _render_approval_prompt(command: str, description: str) -> str:
         f"[bash] Agent wants to run a shell command.\n\n"
         f"  Why: {description or '(no description provided)'}\n"
         f"  Cmd: {command}\n\n"
-        f"Approve? [y/N] "
+        f"Approve? [y/N] (Enter = no) "
     )
 
 
