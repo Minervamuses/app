@@ -1,0 +1,21 @@
+capabilities:
+  file.read:
+    local_tools:
+      - read_file
+  rag.search:
+    local_tools:
+      - rag_explore
+      - rag_search
+      - rag_get_context
+  history.search:
+    local_tools:
+      - recall_history
+  shell.execute:
+    local_tools:
+      - bash
+  web.search:
+    mcp_families:
+      - web_search
+  github.repo.read:
+    mcp_families:
+      - github

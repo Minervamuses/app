@@ -10,7 +10,7 @@ from agent.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
+DEFAULT_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
 
 
 @dataclass(frozen=True)
