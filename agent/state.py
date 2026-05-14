@@ -20,3 +20,4 @@ class AgentState(TypedDict, total=False):
     denied_tools: list[str]
     validation_errors: list[str]
     validation_attempts: int
+    validation_retry_requested: bool

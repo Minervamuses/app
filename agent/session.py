@@ -287,6 +287,7 @@ class ChatSession:
             "denied_tools": sorted(runtime.denied_tools),
             "validation_errors": [],
             "validation_attempts": 0,
+            "validation_retry_requested": False,
         }
 
     def _render_plan_block(

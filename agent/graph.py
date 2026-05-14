@@ -1,7 +1,7 @@
 """LangGraph agent graph for conversational RAG."""
 
-from langgraph.graph import START, StateGraph
-from langgraph.prebuilt import tools_condition
+from langchain_core.messages import AIMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
 
 from agent.config import AgentConfig
 
@@ -10,6 +10,7 @@ from agent.history_rag import create_history_tool
 from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
 from agent.policy_tool_node import PolicyToolNode
+from agent.skills.validator import validate_skill_output
 from agent.state import AgentState
 from agent.tools import create_bash_tool, create_read_file_tool
 
@@ -27,6 +28,7 @@ def _skill_runtime_state(runtime) -> dict:
         "denied_tools": sorted(runtime.denied_tools),
         "validation_errors": [],
         "validation_attempts": 0,
+        "validation_retry_requested": False,
     }
 
 
@@ -105,14 +107,56 @@ def build_graph(
             return {}
         return _skill_runtime_state(skill_runtime_getter())
 
+    def skill_validator_node(state: AgentState):
+        active_skill = state.get("active_skill")
+        messages = state.get("messages") or []
+        last_message = messages[-1] if messages else None
+        text = getattr(last_message, "content", "") if last_message is not None else ""
+        violations = validate_skill_output(
+            active_skill=active_skill,
+            text=str(text or ""),
+        )
+        attempts = int(state.get("validation_attempts") or 0)
+        if not violations or attempts >= config.skill_max_validation_retries:
+            return {
+                "validation_errors": violations,
+                "validation_retry_requested": False,
+            }
+
+        retry_message = SystemMessage(content=(
+            "[Skill validation errors]\n"
+            + "\n".join(f"- {violation}" for violation in violations)
+            + "\nRevise the answer once to satisfy the active skill policy."
+        ))
+        return {
+            "messages": [retry_message],
+            "validation_errors": violations,
+            "validation_attempts": attempts + 1,
+            "validation_retry_requested": True,
+        }
+
+    def route_after_agent(state: AgentState):
+        messages = state.get("messages") or []
+        last_message = messages[-1] if messages else None
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
+            return "tools"
+        if state.get("active_skill") and config.skill_validation_enabled:
+            return "skill_validator"
+        return END
+
+    def route_after_validator(state: AgentState):
+        return "agent" if state.get("validation_retry_requested") else END
+
     graph = StateGraph(AgentState)
     graph.add_node("skill_loader", skill_loader_node)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", PolicyToolNode(tools, handle_tool_errors=_tool_error_to_message))
+    graph.add_node("skill_validator", skill_validator_node)
 
     graph.add_edge(START, "skill_loader")
     graph.add_edge("skill_loader", "agent")
-    graph.add_conditional_edges("agent", tools_condition)
+    graph.add_conditional_edges("agent", route_after_agent)
     graph.add_edge("tools", "agent")
+    graph.add_conditional_edges("skill_validator", route_after_validator)
 
     return graph.compile()

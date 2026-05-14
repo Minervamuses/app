@@ -131,6 +131,7 @@ def test_agent_state_skill_fields_are_optional():
     assert "messages" in AgentState.__optional_keys__
     assert "active_skill" in AgentState.__optional_keys__
     assert "loaded_references" in AgentState.__optional_keys__
+    assert "validation_retry_requested" in AgentState.__optional_keys__
 
 
 def test_agent_config_exposes_skill_runtime_toggles(tmp_path):
