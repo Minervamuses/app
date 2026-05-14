@@ -1,6 +1,7 @@
 """Tests for local skill discovery and prompt rendering."""
 
 from agent.config import AgentConfig
+from agent.state import AgentState
 from agent.skills import build_skill_trace_entries, build_skills_prompt, discover_skills
 from agent.session import ChatSession
 
@@ -124,3 +125,9 @@ description: Use when the user wants help with academic writing.
             "description": "Use when the user wants help with academic writing.",
         }
     ]
+
+
+def test_agent_state_skill_fields_are_optional():
+    assert "messages" in AgentState.__optional_keys__
+    assert "active_skill" in AgentState.__optional_keys__
+    assert "loaded_references" in AgentState.__optional_keys__
