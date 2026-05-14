@@ -53,29 +53,6 @@ def discover_skills(config: AgentConfig | None = None) -> list[SkillMetadata]:
     return skills
 
 
-def render_skills_prompt(skills: list[SkillMetadata]) -> str:
-    """Render the startup prompt block that advertises local skills."""
-    if not skills:
-        return ""
-
-    lines = [
-        "Local skills (metadata only at startup):",
-        "- Use a skill when the user's request matches its description.",
-        "- Before following a skill, read its full `SKILL.md` with `read_file`.",
-        "- After reading `SKILL.md`, read referenced files only when needed.",
-        "",
-    ]
-    for skill in skills:
-        display_path = _display_path(skill.path)
-        lines.append(f"- {skill.name}: {skill.description} (read `{display_path}`)")
-    return "\n".join(lines)
-
-
-def build_skills_prompt(config: AgentConfig | None = None) -> str:
-    """Discover skills and render the startup prompt block."""
-    return render_skills_prompt(discover_skills(config))
-
-
 def build_skill_trace_entries(skills: list[SkillMetadata]) -> list[dict]:
     """Return startup trace entries for skill metadata loaded into the prompt."""
     entries: list[dict] = []

@@ -22,7 +22,6 @@ from agent.skills import (
     build_skill_trace_entries,
     discover_skills,
     load_skill_runtime,
-    render_skills_prompt,
 )
 from agent.memory import (
     TurnRecord,
@@ -125,11 +124,7 @@ class ChatSession:
         self.web_search_tool_names = frozenset(web_search_tool_names or ())
 
         self.loaded_skills = discover_skills(config)
-        skills_prompt = render_skills_prompt(self.loaded_skills)
-        full_system_prompt = system_prompt
-        if skills_prompt:
-            full_system_prompt = f"{system_prompt}\n\n{skills_prompt}"
-        self.system_prompt_message = SystemMessage(content=full_system_prompt)
+        self.system_prompt_message = SystemMessage(content=system_prompt)
         self.recent_turns: list[TurnRecord] = []
 
         self.session_id = uuid.uuid4().hex
