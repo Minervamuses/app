@@ -19,7 +19,6 @@ from agent.history import (
 from agent.history_rag import ChatHistoryStore, get_chat_history_store
 from agent.skills import (
     SkillRuntime,
-    build_skill_trace_entries,
     discover_skills,
     load_skill_runtime,
 )
@@ -181,10 +180,6 @@ class ChatSession:
             "visible to you in this prompt - do NOT call recall_history to "
             "look for them."
         ))
-
-    def startup_trace_entries(self) -> list[dict]:
-        """Return synthetic trace entries for prompt-visible skill metadata."""
-        return build_skill_trace_entries(self.loaded_skills)
 
     async def _store_turn(self, turn: TurnRecord) -> None:
         if turn.persist_target == "plan_log":
@@ -420,7 +415,7 @@ class ChatSession:
                     self._progress_cb(node_name, new_msgs)
         new_messages = messages[len(input_messages):]
         tool_calls = extract_tool_calls(new_messages)
-        trace_events = self.startup_trace_entries() + [
+        trace_events = [
             {
                 "type": "tool",
                 "name": call["name"],

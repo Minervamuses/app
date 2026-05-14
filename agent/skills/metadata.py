@@ -1,4 +1,4 @@
-"""Discovery, trace metadata, and prompt rendering for local Agent Skills."""
+"""Discovery of local Agent Skills."""
 
 from __future__ import annotations
 
@@ -51,28 +51,6 @@ def discover_skills(config: AgentConfig | None = None) -> list[SkillMetadata]:
             continue
         skills.append(metadata)
     return skills
-
-
-def build_skill_trace_entries(skills: list[SkillMetadata]) -> list[dict]:
-    """Return startup trace entries for skill metadata loaded into the prompt."""
-    entries: list[dict] = []
-    for skill in skills:
-        entries.append({
-            "type": "skill_metadata",
-            "name": skill.name,
-            "path": _display_path(skill.path),
-            "load": "metadata",
-            "description": skill.description,
-        })
-    return entries
-
-
-def _display_path(path: Path) -> str:
-    """Prefer a cwd-relative display path when possible."""
-    try:
-        return str(path.resolve().relative_to(Path.cwd()))
-    except ValueError:
-        return str(path.resolve())
 
 
 def _read_skill_metadata(skill_file: Path) -> SkillMetadata | None:

@@ -4,7 +4,6 @@ from agent.skills.broker import resolve_capabilities
 from agent.skills.metadata import (
     DEFAULT_SKILLS_DIR,
     SkillMetadata,
-    build_skill_trace_entries,
     discover_skills,
     resolve_skills_dir,
 )
@@ -19,7 +18,6 @@ from agent.skills.validator import validate_skill_output
 __all__ = [
     "DEFAULT_SKILLS_DIR",
     "SkillMetadata",
-    "build_skill_trace_entries",
     "discover_skills",
     "resolve_capabilities",
     "resolve_skills_dir",

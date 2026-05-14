@@ -37,45 +37,6 @@ def test_chat_cli_flushes_recent_turns_on_quit(monkeypatch):
     assert calls == ["turn:hello", "flush"]
 
 
-def test_chat_cli_prints_skill_startup_trace(monkeypatch, capsys):
-    from agent.cli import chat
-
-    class FakeSession:
-        recursion_limit = 32
-
-        def startup_trace_entries(self) -> list[dict]:
-            return [
-                {
-                    "type": "skill_metadata",
-                    "name": "academic-paper-writing",
-                    "path": "skills/academic-paper-writing/SKILL.md",
-                    "load": "metadata",
-                }
-            ]
-
-        async def turn(self, user_input: str) -> str:
-            return f"echo:{user_input}"
-
-        async def flush_recent_turns(self) -> None:
-            return None
-
-    async def fake_create(*args, **kwargs):
-        return FakeSession()
-
-    inputs = iter(["q"])
-
-    async def fake_read_line(_prompt: str) -> str:
-        return next(inputs)
-
-    monkeypatch.setattr(chat.ChatSession, "create", fake_create)
-
-    args = argparse.Namespace(max_turns=32, no_mcp=True)
-    asyncio.run(chat._run(args, read_line=fake_read_line))
-
-    output = capsys.readouterr().out
-    assert "skill academic-paper-writing metadata loaded from skills/academic-paper-writing/SKILL.md" in output
-
-
 @pytest.mark.parametrize(
     "quit_input",
     [

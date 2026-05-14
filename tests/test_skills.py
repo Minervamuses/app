@@ -2,7 +2,7 @@
 
 from agent.config import AgentConfig
 from agent.state import AgentState
-from agent.skills import build_skill_trace_entries, discover_skills
+from agent.skills import discover_skills
 from agent.session import ChatSession
 
 
@@ -32,35 +32,6 @@ description: Use when the user wants to draft a paper
         "Use when the user wants to draft a paper abstract or revise a manuscript introduction."
     )
     assert skills[0].path == skill_file.resolve()
-
-
-def test_build_skill_trace_entries_exposes_prompt_visible_metadata(tmp_path):
-    skills_dir = tmp_path / "skills"
-    target = skills_dir / "paper-writing"
-    target.mkdir(parents=True)
-    skill_file = target / "SKILL.md"
-    skill_file.write_text(
-        """---
-name: paper-writing
-description: Use when the user wants help with academic writing.
----
-""",
-        encoding="utf-8",
-    )
-
-    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
-    skills = discover_skills(cfg)
-    entries = build_skill_trace_entries(skills)
-
-    assert entries == [
-        {
-            "type": "skill_metadata",
-            "name": "paper-writing",
-            "path": str(skill_file.resolve()),
-            "load": "metadata",
-            "description": "Use when the user wants help with academic writing.",
-        }
-    ]
 
 
 def test_chat_session_discovers_skills_without_injecting_into_system_prompt(tmp_path, monkeypatch):
