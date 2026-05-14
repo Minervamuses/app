@@ -10,6 +10,12 @@ from agent.skills.metadata import (
     render_skills_prompt,
     resolve_skills_dir,
 )
+from agent.skills.runtime import (
+    SkillRuntime,
+    find_skill_metadata,
+    load_skill_manifest,
+    load_skill_runtime,
+)
 
 __all__ = [
     "DEFAULT_SKILLS_DIR",
@@ -20,4 +26,8 @@ __all__ = [
     "render_skills_prompt",
     "resolve_capabilities",
     "resolve_skills_dir",
+    "SkillRuntime",
+    "find_skill_metadata",
+    "load_skill_manifest",
+    "load_skill_runtime",
 ]
