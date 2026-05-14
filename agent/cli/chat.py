@@ -36,9 +36,12 @@ def _normalize_cli_command(value: str) -> str:
     return "".join(visible_chars).strip().casefold()
 
 
+def _is_blank_input(value: str) -> bool:
+    return not _normalize_cli_command(value)
+
+
 def _is_exit_input(value: str) -> bool:
-    command = _normalize_cli_command(value)
-    return not command or command in _EXIT_COMMANDS
+    return _normalize_cli_command(value) in _EXIT_COMMANDS
 
 
 def _print_progress(node_name: str, new_msgs: list) -> None:
@@ -102,6 +105,8 @@ async def _run(
                 print()
                 break
 
+            if _is_blank_input(raw_input):
+                continue
             if _is_exit_input(raw_input):
                 break
 
