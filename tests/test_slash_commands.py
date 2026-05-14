@@ -5,6 +5,7 @@ import asyncio
 import pytest
 from prompt_toolkit.document import Document
 
+from agent.skills import SkillMetadata
 from agent.cli.prompting import SlashCommandCompleter
 from agent.cli.slash_commands import (
     SlashCommandContext,
@@ -69,6 +70,57 @@ class _FakeModeSession:
     async def exit_plan_mode(self):
         self.plan_mode = False
         self.plan_log_path = None
+
+
+class _FakeSkillSession:
+    def __init__(self, loaded_skills):
+        self.config = object()
+        self.loaded_skills = loaded_skills
+        self.active_skill_runtime = None
+        self.activated = []
+        self.deactivated = False
+
+    def activate_skill(self, name, task_mode=None):
+        class Runtime:
+            def __init__(self, name, task_mode):
+                self.name = name
+                self.task_mode = task_mode
+
+        runtime = Runtime(name, task_mode)
+        self.active_skill_runtime = runtime
+        self.activated.append((name, task_mode))
+        return runtime
+
+    def deactivate_skill(self):
+        self.active_skill_runtime = None
+        self.deactivated = True
+
+
+def _write_skill(tmp_path, name="paper-writing"):
+    root = tmp_path / "skills" / name
+    root.mkdir(parents=True)
+    skill_file = root / "SKILL.md"
+    skill_file.write_text(
+        f"""---
+name: {name}
+description: Use when writing papers.
+---
+""",
+        encoding="utf-8",
+    )
+    (root / "manifest.yaml").write_text(
+        """
+task_modes:
+  - revision
+  - drafting
+""",
+        encoding="utf-8",
+    )
+    return SkillMetadata(
+        name=name,
+        description="Use when writing papers.",
+        path=skill_file,
+    )
 
 
 def test_handle_mode_oneshot_switches_to_plan(tmp_path):
@@ -196,6 +248,95 @@ def test_handle_mode_rejects_extra_args(tmp_path):
         asyncio.run(
             execute_slash_command(
                 parse_slash_command("/mode plan extra"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+
+def test_handle_skill_oneshot_activates_skill_with_mode(tmp_path):
+    skill = _write_skill(tmp_path)
+    session = _FakeSkillSession([skill])
+    registry = build_default_registry()
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/skill paper-writing revision"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.activated == [("paper-writing", "revision")]
+    assert "skill -> paper-writing revision" in result.message
+
+
+def test_handle_skill_deactivates_with_none(tmp_path):
+    skill = _write_skill(tmp_path)
+    session = _FakeSkillSession([skill])
+    registry = build_default_registry()
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/skill none"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.deactivated is True
+    assert result.message == "skill -> none"
+
+
+def test_handle_skill_interactive_selection_and_mode(monkeypatch, tmp_path):
+    skill = _write_skill(tmp_path)
+    session = _FakeSkillSession([skill])
+    registry = build_default_registry()
+    inputs = iter(["1", "1"])
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return next(inputs)
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/skill"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.activated == [("paper-writing", "revision")]
+    assert "skill -> paper-writing revision" in result.message
+
+
+def test_handle_skill_interactive_deactivate(monkeypatch, tmp_path):
+    skill = _write_skill(tmp_path)
+    session = _FakeSkillSession([skill])
+    registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return "0"
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/skill"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.deactivated is True
+    assert result.message == "skill -> none"
+
+
+def test_handle_skill_unknown_name_raises(tmp_path):
+    skill = _write_skill(tmp_path)
+    session = _FakeSkillSession([skill])
+    registry = build_default_registry()
+
+    with pytest.raises(SlashCommandError, match="unknown skill"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/skill mystery"),
                 SlashCommandContext(session=session, registry=registry),
             )
         )

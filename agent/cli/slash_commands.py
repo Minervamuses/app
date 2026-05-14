@@ -7,6 +7,7 @@ import shlex
 from typing import Awaitable, Callable
 
 from agent.paths import find_app_root
+from agent.skills import SkillMetadata, discover_skills, load_skill_manifest
 from rag import ingest_repo, ingest_single, list_diff, prune_orphans
 
 
@@ -137,6 +138,11 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_mode,
             ),
             SlashCommand(
+                name="skill",
+                description="Activate or deactivate a local skill.",
+                handler=_handle_skill,
+            ),
+            SlashCommand(
                 name="init",
                 description="Ingest the parent repo (excluding this app project).",
                 handler=_handle_init,
@@ -203,6 +209,8 @@ async def _handle_status(
         f"last_tool_calls: {status['last_tool_counts']}",
         f"plan_mode: {status.get('plan_mode', False)}",
         f"plan_log_path: {status.get('plan_log_path', '') or 'none'}",
+        f"active_skill: {status.get('active_skill', '') or 'none'}",
+        f"task_mode: {status.get('task_mode', '') or 'none'}",
     ]
     return SlashCommandResult(message="\n".join(lines))
 
@@ -312,6 +320,128 @@ async def _handle_mode(
 
     suffix = f" -> {log_path}" if log_path else ""
     return SlashCommandResult(message=f"mode -> {target_name}{suffix}")
+
+
+def _session_skills(session: object) -> list[SkillMetadata]:
+    loaded = getattr(session, "loaded_skills", None)
+    if loaded is not None:
+        return list(loaded)
+    config = getattr(session, "config", None)
+    return discover_skills(config)
+
+
+def _render_skill_prompt(session: object) -> str:
+    current = getattr(getattr(session, "active_skill_runtime", None), "name", "")
+    current_display = current or "none"
+    lines = [f"Current skill: {current_display}", "Available skills:"]
+    lines.append("  [0] none  - deactivate active skill")
+    for idx, skill in enumerate(_session_skills(session), start=1):
+        lines.append(f"  [{idx}] {skill.name}  - {skill.description}")
+    lines.append("Select (number or name; Enter to cancel): ")
+    return "\n".join(lines)
+
+
+def _resolve_skill_choice(raw: str, skills: list[SkillMetadata]) -> str | None:
+    cleaned = raw.strip().lower()
+    if not cleaned or cleaned in {"q", "cancel"}:
+        return None
+    if cleaned in {"0", "none", "off", "deactivate"}:
+        return "none"
+    if cleaned.isdigit():
+        idx = int(cleaned) - 1
+        if 0 <= idx < len(skills):
+            return skills[idx].name
+        raise SlashCommandError(f"invalid choice: {cleaned}")
+    return cleaned
+
+
+def _find_skill(skills: list[SkillMetadata], name: str) -> SkillMetadata | None:
+    normalized = name.casefold()
+    for skill in skills:
+        if skill.name.casefold() == normalized:
+            return skill
+    return None
+
+
+def _task_modes_for_skill(skill: SkillMetadata) -> list[str]:
+    manifest = load_skill_manifest(skill.path.parent)
+    modes = manifest.get("task_modes")
+    if not isinstance(modes, list):
+        return []
+    return [mode for mode in modes if isinstance(mode, str)]
+
+
+def _render_skill_mode_prompt(skill_name: str, modes: list[str]) -> str:
+    lines = [f"Task mode for {skill_name}:", "Available modes:"]
+    lines.append("  [0] none  - no task mode")
+    for idx, mode in enumerate(modes, start=1):
+        lines.append(f"  [{idx}] {mode}")
+    lines.append("Select (number or name; Enter for none): ")
+    return "\n".join(lines)
+
+
+def _resolve_skill_mode_choice(raw: str, modes: list[str]) -> str | None:
+    cleaned = raw.strip().lower()
+    if not cleaned or cleaned in {"0", "none"}:
+        return None
+    if cleaned.isdigit():
+        idx = int(cleaned) - 1
+        if 0 <= idx < len(modes):
+            return modes[idx]
+        raise SlashCommandError(f"invalid choice: {cleaned}")
+    if cleaned not in modes:
+        valid = ", ".join(modes)
+        raise SlashCommandError(f"unknown task mode: {cleaned} (available: {valid})")
+    return cleaned
+
+
+async def _handle_skill(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    if len(parsed.args) > 2:
+        raise SlashCommandError("usage: /skill [name|none] [mode]")
+
+    session = context.session
+    skills = _session_skills(session)
+
+    if parsed.args:
+        target_name = parsed.args[0].strip().lower()
+    else:
+        raw = await asyncio.to_thread(input, _render_skill_prompt(session))
+        target_name = _resolve_skill_choice(raw, skills)
+        if target_name is None:
+            return SlashCommandResult(message="cancelled")
+
+    if target_name in {"none", "off", "deactivate"}:
+        session.deactivate_skill()
+        return SlashCommandResult(message="skill -> none")
+
+    skill = _find_skill(skills, target_name)
+    if skill is None:
+        valid = ", ".join(skill.name for skill in skills) or "none"
+        raise SlashCommandError(
+            f"unknown skill: {target_name} (available: {valid})"
+        )
+
+    if len(parsed.args) == 2:
+        task_mode = parsed.args[1].strip().lower()
+    elif parsed.args:
+        task_mode = None
+    else:
+        modes = _task_modes_for_skill(skill)
+        if modes:
+            raw = await asyncio.to_thread(
+                input,
+                _render_skill_mode_prompt(skill.name, modes),
+            )
+            task_mode = _resolve_skill_mode_choice(raw, modes)
+        else:
+            task_mode = None
+
+    runtime = session.activate_skill(skill.name, task_mode)
+    suffix = f" {runtime.task_mode}" if runtime.task_mode else ""
+    return SlashCommandResult(message=f"skill -> {runtime.name}{suffix}")
 
 
 async def _handle_clear(
