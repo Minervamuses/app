@@ -133,6 +133,14 @@ def test_agent_state_skill_fields_are_optional():
     assert "loaded_references" in AgentState.__optional_keys__
 
 
+def test_agent_config_exposes_skill_runtime_toggles(tmp_path):
+    cfg = AgentConfig(persist_dir=str(tmp_path))
+
+    assert cfg.skill_validation_enabled is True
+    assert cfg.skill_max_validation_retries == 1
+    assert cfg.skill_capability_map_path is None
+
+
 def test_chat_session_activate_skill_sets_status_and_prompt_context(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     skills_dir = tmp_path / "skills"

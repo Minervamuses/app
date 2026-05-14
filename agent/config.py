@@ -40,3 +40,8 @@ class AgentConfig(RAGConfig):
 
     # Optional local skills directory. When unset, defaults to `<repo>/skills`.
     skills_dir: str | None = None
+
+    # Skill runtime controls.
+    skill_validation_enabled: bool = True
+    skill_max_validation_retries: int = 1
+    skill_capability_map_path: str | None = None
