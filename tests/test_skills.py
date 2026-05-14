@@ -131,3 +131,96 @@ def test_agent_state_skill_fields_are_optional():
     assert "messages" in AgentState.__optional_keys__
     assert "active_skill" in AgentState.__optional_keys__
     assert "loaded_references" in AgentState.__optional_keys__
+
+
+def test_chat_session_activate_skill_sets_status_and_prompt_context(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / "skills"
+    target = skills_dir / "paper-writing"
+    refs = target / "references"
+    refs.mkdir(parents=True)
+    (target / "SKILL.md").write_text(
+        """---
+name: paper-writing
+description: Use when the user wants help with academic writing.
+---
+
+# Paper Writing
+""",
+        encoding="utf-8",
+    )
+    (refs / "guide.md").write_text("reference guide", encoding="utf-8")
+    (target / "manifest.yaml").write_text(
+        """
+capabilities:
+  required:
+    - file.read
+resources:
+  - path: references/guide.md
+    pinned: true
+task_modes:
+  - revision
+tool_policy:
+  disallow:
+    - bash
+""",
+        encoding="utf-8",
+    )
+
+    class _FakeGraph:
+        async def astream(self, state, config=None, stream_mode="updates"):
+            if False:  # pragma: no cover
+                yield state
+
+    monkeypatch.setattr(
+        "agent.session.build_graph",
+        lambda _cfg, extra_tools=None, history_store=None: _FakeGraph(),
+    )
+
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir="skills")
+    session = ChatSession(cfg)
+    runtime = session.activate_skill("paper-writing", "revision")
+
+    status = session.status_snapshot()
+    prompt = "\n".join(message.content for message in session._prompt_history())
+
+    assert runtime.name == "paper-writing"
+    assert status["active_skill"] == "paper-writing"
+    assert status["task_mode"] == "revision"
+    assert "[Active skill]" in prompt
+    assert "# Paper Writing" in prompt
+    assert "reference guide" in prompt
+
+
+def test_chat_session_deactivate_skill_clears_status(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    skills_dir = tmp_path / "skills"
+    target = skills_dir / "paper-writing"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text(
+        """---
+name: paper-writing
+description: Use when the user wants help with academic writing.
+---
+""",
+        encoding="utf-8",
+    )
+
+    class _FakeGraph:
+        async def astream(self, state, config=None, stream_mode="updates"):
+            if False:  # pragma: no cover
+                yield state
+
+    monkeypatch.setattr(
+        "agent.session.build_graph",
+        lambda _cfg, extra_tools=None, history_store=None: _FakeGraph(),
+    )
+
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir="skills")
+    session = ChatSession(cfg)
+    session.activate_skill("paper-writing")
+    session.deactivate_skill()
+
+    status = session.status_snapshot()
+    assert status["active_skill"] == ""
+    assert status["task_mode"] == ""

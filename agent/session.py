@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,8 +18,10 @@ from agent.history import (
 )
 from agent.history_rag import ChatHistoryStore, get_chat_history_store
 from agent.skills import (
+    SkillRuntime,
     build_skill_trace_entries,
     discover_skills,
+    load_skill_runtime,
     render_skills_prompt,
 )
 from agent.memory import (
@@ -93,6 +96,11 @@ Workflow:
 DEFAULT_RECURSION_LIMIT = 32
 
 
+@dataclass(frozen=True)
+class _ToolRef:
+    name: str
+
+
 class ChatSession:
     """Multi-turn conversational retrieval session backed by LangGraph."""
 
@@ -105,11 +113,15 @@ class ChatSession:
         history_store: ChatHistoryStore | None = None,
         progress_cb=None,
         web_search_tool_names: set[str] | frozenset[str] | None = None,
+        mcp_families: dict[str, str] | None = None,
     ):
         self.config = config
         self.recursion_limit = recursion_limit
         self.plan_mode = False
         self.plan_log_path: Path | None = None
+        self.active_skill_runtime: SkillRuntime | None = None
+        self.extra_tools = list(extra_tools or [])
+        self.mcp_families = dict(mcp_families or {})
         self.web_search_tool_names = frozenset(web_search_tool_names or ())
 
         self.loaded_skills = discover_skills(config)
@@ -140,10 +152,22 @@ class ChatSession:
             self.system_prompt_message,
             self.recent_turns,
         )
-        hint = self._build_plan_mode_hint()
-        if hint is None:
+        hints = [
+            hint
+            for hint in (
+                self._build_active_skill_hint(),
+                self._build_plan_mode_hint(),
+            )
+            if hint is not None
+        ]
+        if not hints:
             return base
-        return [base[0], hint, *base[1:]]
+        return [base[0], *hints, *base[1:]]
+
+    def _build_active_skill_hint(self) -> SystemMessage | None:
+        if self.active_skill_runtime is None:
+            return None
+        return SystemMessage(content=self.active_skill_runtime.context_block())
 
     def _build_plan_mode_hint(self) -> SystemMessage | None:
         """Tell the LLM that some visible turns are plan-mode (md only),
@@ -216,6 +240,53 @@ class ChatSession:
         """Disable plan mode without mutating prompt-visible turns."""
         self.plan_mode = False
         self.plan_log_path = None
+
+    def activate_skill(self, name: str, task_mode: str | None = None) -> SkillRuntime:
+        """Activate a local skill for subsequent turns."""
+        runtime = load_skill_runtime(
+            name,
+            config=self.config,
+            all_tools=self._all_tool_refs(),
+            mcp_families=self.mcp_families,
+            task_mode=task_mode,
+        )
+        self.active_skill_runtime = runtime
+        return runtime
+
+    def deactivate_skill(self) -> None:
+        """Deactivate the current local skill, if any."""
+        self.active_skill_runtime = None
+
+    def _all_tool_refs(self) -> list[_ToolRef]:
+        local_tool_names = [
+            "rag_explore",
+            "rag_search",
+            "rag_get_context",
+            "recall_history",
+            "read_file",
+            "bash",
+        ]
+        extra_tool_names = [
+            getattr(tool, "name", str(tool))
+            for tool in self.extra_tools
+        ]
+        return [_ToolRef(name) for name in dict.fromkeys([*local_tool_names, *extra_tool_names])]
+
+    def _active_skill_state(self) -> dict:
+        runtime = self.active_skill_runtime
+        if runtime is None:
+            return {}
+        return {
+            "active_skill": runtime.name,
+            "skill_root": str(runtime.root),
+            "skill_instructions": runtime.instructions,
+            "loaded_references": dict(runtime.pinned_references),
+            "task_mode": runtime.task_mode,
+            "allowed_tools": sorted(runtime.allowed_tools),
+            "denied_tools": sorted(runtime.denied_tools),
+            "validation_errors": [],
+            "validation_attempts": 0,
+        }
 
     def _render_plan_block(
         self,
@@ -336,8 +407,12 @@ class ChatSession:
         """
         input_messages = [*self._prompt_history(), HumanMessage(content=user_input)]
         messages: list = list(input_messages)
+        initial_state = {
+            "messages": input_messages,
+            **self._active_skill_state(),
+        }
         async for update in self.graph.astream(
-            {"messages": input_messages},
+            initial_state,
             config={"recursion_limit": self.recursion_limit},
             stream_mode="updates",
         ):
@@ -422,6 +497,16 @@ class ChatSession:
             "last_tool_counts": format_tool_counts(self.last_tool_calls) or "none",
             "plan_mode": self.plan_mode,
             "plan_log_path": str(self.plan_log_path) if self.plan_log_path else "",
+            "active_skill": (
+                self.active_skill_runtime.name
+                if self.active_skill_runtime is not None
+                else ""
+            ),
+            "task_mode": (
+                self.active_skill_runtime.task_mode
+                if self.active_skill_runtime is not None and self.active_skill_runtime.task_mode
+                else ""
+            ),
         }
 
     async def turn_with_trace(self, user_input: str) -> tuple[str, list[dict]]:
@@ -465,4 +550,5 @@ class ChatSession:
             history_store=history_store,
             progress_cb=progress_cb,
             web_search_tool_names=web_search_tool_names,
+            mcp_families=families,
         )
