@@ -56,7 +56,36 @@ def build_graph(
     tools.append(create_bash_tool(config))
     if extra_tools:
         tools = tools + list(extra_tools)
-    model_with_tools = model.bind_tools(tools)
+    tools_by_name = {getattr(tool, "name", str(tool)): tool for tool in tools}
+    tool_order = [getattr(tool, "name", str(tool)) for tool in tools]
+    bound_model_cache = {
+        (None, None, (), ()): model.bind_tools(tools),
+    }
+
+    def _select_tools(state: AgentState) -> list:
+        allowed = set(state.get("allowed_tools") or [])
+        denied = set(state.get("denied_tools") or [])
+        if not allowed and not denied:
+            return tools
+        selected_names = [
+            name
+            for name in tool_order
+            if (not allowed or name in allowed) and name not in denied
+        ]
+        return [tools_by_name[name] for name in selected_names]
+
+    def _model_for_state(state: AgentState):
+        allowed = tuple(sorted(state.get("allowed_tools") or []))
+        denied = tuple(sorted(state.get("denied_tools") or []))
+        key = (
+            state.get("active_skill"),
+            state.get("task_mode"),
+            allowed,
+            denied,
+        )
+        if key not in bound_model_cache:
+            bound_model_cache[key] = model.bind_tools(_select_tools(state))
+        return bound_model_cache[key]
 
     def agent_node(state: AgentState):
         prompt_messages = prepare_messages_for_agent(
@@ -64,7 +93,7 @@ def build_graph(
             max_messages=config.agent_max_messages,
             max_tool_interactions=config.agent_max_tool_interactions,
         )
-        return {"messages": [model_with_tools.invoke(prompt_messages)]}
+        return {"messages": [_model_for_state(state).invoke(prompt_messages)]}
 
     def _tool_error_to_message(exc: Exception) -> str:
         return f"Tool error: {type(exc).__name__}: {exc}"

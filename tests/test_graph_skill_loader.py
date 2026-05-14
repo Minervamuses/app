@@ -87,3 +87,50 @@ def test_skill_loader_populates_state_from_runtime(monkeypatch, tmp_path):
     assert result["loaded_references"] == {"references/guide.md": "guide"}
     assert result["allowed_tools"] == ["read_file"]
     assert result["denied_tools"] == ["bash"]
+
+
+def test_agent_node_binds_filtered_tools_for_active_skill(monkeypatch, tmp_path):
+    bind_calls: list[list[str]] = []
+
+    class RecordingModel:
+        def bind_tools(self, tools):
+            bind_calls.append([tool.name for tool in tools])
+
+            class Bound:
+                def invoke(self, _messages):
+                    return AIMessage(content="ok")
+
+            return Bound()
+
+    monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
+    )
+    monkeypatch.setattr(
+        "agent.graph.create_history_tool",
+        lambda _cfg, store=None: _recall_history,
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path))
+    graph = build_graph(cfg)
+    state = {
+        "messages": [HumanMessage(content="hi")],
+        "active_skill": "paper-writing",
+        "task_mode": "revision",
+        "allowed_tools": ["read_file"],
+        "denied_tools": ["bash"],
+    }
+
+    graph.invoke(state)
+    graph.invoke(state)
+
+    assert bind_calls[0] == [
+        "rag_explore",
+        "rag_search",
+        "rag_get_context",
+        "recall_history",
+        "read_file",
+        "bash",
+    ]
+    assert bind_calls[1] == ["read_file"]
+    assert len(bind_calls) == 2
