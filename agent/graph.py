@@ -1,7 +1,7 @@
 """LangGraph agent graph for conversational RAG."""
 
 from langgraph.graph import START, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import tools_condition
 
 from agent.config import AgentConfig
 
@@ -9,6 +9,7 @@ from agent.adapters.langchain import create_rag_tools
 from agent.history_rag import create_history_tool
 from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
+from agent.policy_tool_node import PolicyToolNode
 from agent.state import AgentState
 from agent.tools import create_bash_tool, create_read_file_tool
 
@@ -78,7 +79,7 @@ def build_graph(
     graph = StateGraph(AgentState)
     graph.add_node("skill_loader", skill_loader_node)
     graph.add_node("agent", agent_node)
-    graph.add_node("tools", ToolNode(tools, handle_tool_errors=_tool_error_to_message))
+    graph.add_node("tools", PolicyToolNode(tools, handle_tool_errors=_tool_error_to_message))
 
     graph.add_edge(START, "skill_loader")
     graph.add_edge("skill_loader", "agent")
