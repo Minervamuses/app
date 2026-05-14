@@ -13,10 +13,27 @@ from agent.state import AgentState
 from agent.tools import create_bash_tool, create_read_file_tool
 
 
+def _skill_runtime_state(runtime) -> dict:
+    if runtime is None:
+        return {}
+    return {
+        "active_skill": runtime.name,
+        "skill_root": str(runtime.root),
+        "skill_instructions": runtime.instructions,
+        "loaded_references": dict(runtime.pinned_references),
+        "task_mode": runtime.task_mode,
+        "allowed_tools": sorted(runtime.allowed_tools),
+        "denied_tools": sorted(runtime.denied_tools),
+        "validation_errors": [],
+        "validation_attempts": 0,
+    }
+
+
 def build_graph(
     config: AgentConfig,
     extra_tools: list | None = None,
     history_store=None,
+    skill_runtime_getter=None,
 ):
     """Build and compile the conversational RAG agent graph.
 
@@ -25,6 +42,7 @@ def build_graph(
         extra_tools: Optional additional LangChain-compatible tools (e.g. MCP
             tools loaded at startup) appended after the local agent tools.
         history_store: Optional store injected into the recall_history tool.
+        skill_runtime_getter: Optional callable returning the active SkillRuntime.
 
     Returns:
         A compiled LangGraph that accepts AgentState and manages
@@ -50,11 +68,20 @@ def build_graph(
     def _tool_error_to_message(exc: Exception) -> str:
         return f"Tool error: {type(exc).__name__}: {exc}"
 
+    def skill_loader_node(state: AgentState):
+        if state.get("skill_instructions"):
+            return {}
+        if skill_runtime_getter is None:
+            return {}
+        return _skill_runtime_state(skill_runtime_getter())
+
     graph = StateGraph(AgentState)
+    graph.add_node("skill_loader", skill_loader_node)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", ToolNode(tools, handle_tool_errors=_tool_error_to_message))
 
-    graph.add_edge(START, "agent")
+    graph.add_edge(START, "skill_loader")
+    graph.add_edge("skill_loader", "agent")
     graph.add_conditional_edges("agent", tools_condition)
     graph.add_edge("tools", "agent")
 

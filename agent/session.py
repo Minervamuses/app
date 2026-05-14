@@ -139,6 +139,7 @@ class ChatSession:
             config,
             extra_tools=extra_tools,
             history_store=self.history_store,
+            skill_runtime_getter=lambda: self.active_skill_runtime,
         )
 
         self.turn_logs: list[dict] = []

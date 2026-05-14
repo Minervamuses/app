@@ -107,7 +107,7 @@ description: Use when the user wants help with academic writing.
 
     monkeypatch.setattr(
         "agent.session.build_graph",
-        lambda _cfg, extra_tools=None, history_store=None: _FakeGraph(),
+        lambda _cfg, extra_tools=None, history_store=None, **kwargs: _FakeGraph(),
     )
 
     cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir="skills")
@@ -174,7 +174,7 @@ tool_policy:
 
     monkeypatch.setattr(
         "agent.session.build_graph",
-        lambda _cfg, extra_tools=None, history_store=None: _FakeGraph(),
+        lambda _cfg, extra_tools=None, history_store=None, **kwargs: _FakeGraph(),
     )
 
     cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir="skills")
@@ -213,7 +213,7 @@ description: Use when the user wants help with academic writing.
 
     monkeypatch.setattr(
         "agent.session.build_graph",
-        lambda _cfg, extra_tools=None, history_store=None: _FakeGraph(),
+        lambda _cfg, extra_tools=None, history_store=None, **kwargs: _FakeGraph(),
     )
 
     cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir="skills")

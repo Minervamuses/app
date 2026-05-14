@@ -63,7 +63,7 @@ def make_session(monkeypatch, tmp_path):
     monkeypatch.setattr("agent.session.find_app_root", lambda: tmp_path)
     monkeypatch.setattr(
         "agent.session.build_graph",
-        lambda _cfg, extra_tools=None, history_store=None: _AnswerGraph(),
+        lambda _cfg, extra_tools=None, history_store=None, **kwargs: _AnswerGraph(),
     )
 
     def _make(window: int = 2, graph=None, web_search_tool_names=None):
