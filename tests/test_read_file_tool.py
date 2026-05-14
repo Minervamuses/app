@@ -2,14 +2,25 @@
 
 import json
 
+from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
+from langgraph.graph import START, StateGraph
+from langgraph.prebuilt import ToolNode
 
 from agent.config import AgentConfig
+from agent.state import AgentState
 from agent.tools.read_file import MAX_BYTES, create_read_file_tool
 
 
 def _make_tool(tmp_path) -> StructuredTool:
     return create_read_file_tool(AgentConfig(persist_dir=str(tmp_path)))
+
+
+def _invoke_tool_node(tool, state):
+    graph = StateGraph(AgentState)
+    graph.add_node("tools", ToolNode([tool]))
+    graph.add_edge(START, "tools")
+    return graph.compile().invoke(state)
 
 
 def test_create_read_file_tool_returns_structured_tool(tmp_path):
@@ -67,3 +78,73 @@ def test_read_file_directory_path_returns_error(tmp_path):
 
     assert "error" in payload
     assert "not a regular file" in payload["error"]
+
+
+def test_read_file_resolves_relative_path_against_active_skill_root(tmp_path):
+    skill_root = tmp_path / "skills" / "paper"
+    refs = skill_root / "references"
+    refs.mkdir(parents=True)
+    target = refs / "guide.md"
+    target.write_text("guide text", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_file",
+                "args": {"path": "references/guide.md"},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+    result = _invoke_tool_node(tool, {
+        "messages": [ai_message],
+        "skill_root": str(skill_root),
+    })
+    payload = json.loads(result["messages"][-1].content)
+
+    assert payload["path"] == str(target.resolve())
+    assert payload["content"] == "guide text"
+
+
+def test_read_file_without_skill_root_uses_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "references" / "guide.md"
+    target.parent.mkdir()
+    target.write_text("cwd guide", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    payload = json.loads(tool.invoke({"path": "references/guide.md"}))
+
+    assert payload["path"] == str(target.resolve())
+    assert payload["content"] == "cwd guide"
+
+
+def test_read_file_blocks_skill_root_escape(tmp_path):
+    skill_root = tmp_path / "skills" / "paper"
+    skill_root.mkdir(parents=True)
+
+    tool = _make_tool(tmp_path)
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_file",
+                "args": {"path": "../outside.md"},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+    result = _invoke_tool_node(tool, {
+        "messages": [ai_message],
+        "skill_root": str(skill_root),
+    })
+    payload = json.loads(result["messages"][-1].content)
+
+    assert "error" in payload
+    assert "escapes active skill root" in payload["error"]

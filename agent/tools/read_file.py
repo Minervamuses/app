@@ -9,16 +9,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Annotated
 
+from langgraph.prebuilt import InjectedState
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from agent.config import AgentConfig
 
 TOOL_NAME = "read_file"
 TOOL_DESCRIPTION = (
     "Read the contents of a text file from disk. Accepts absolute or "
-    "working-directory-relative paths. Rejects files larger than 1 MB. "
+    "working-directory-relative paths. When a skill is active, relative paths "
+    "are first resolved against the active skill root. Rejects files larger than 1 MB. "
     "Returns a JSON object with `path`, `size`, and `content`. On failure "
     "returns a JSON object with an `error` field."
 )
@@ -26,20 +29,25 @@ TOOL_DESCRIPTION = (
 MAX_BYTES = 1_048_576
 
 
-class ReadFileInput(BaseModel):
-    """Input schema for the read_file tool."""
-
-    path: str = Field(
-        description="Absolute or cwd-relative path to a UTF-8 text file."
-    )
-
-
 def _error(message: str) -> str:
     return json.dumps({"error": message}, ensure_ascii=False)
 
 
-def _read_file(path: str) -> str:
-    resolved = Path(path).expanduser().resolve()
+def _read_file(path: str, skill_root: str | None = None) -> str:
+    raw_path = Path(path).expanduser()
+    if skill_root and not raw_path.is_absolute():
+        root = Path(skill_root).expanduser().resolve()
+        candidate = (root / raw_path).resolve()
+        if not candidate.is_relative_to(root):
+            return _error(f"path escapes active skill root: {path}")
+        if candidate.exists():
+            return _read_resolved_file(candidate)
+
+    resolved = raw_path.resolve()
+    return _read_resolved_file(resolved)
+
+
+def _read_resolved_file(resolved: Path) -> str:
 
     if not resolved.exists():
         return _error(f"path does not exist: {resolved}")
@@ -61,8 +69,15 @@ def create_read_file_tool(config: AgentConfig) -> StructuredTool:
     """Build the read_file tool. `config` accepted for factory symmetry."""
     del config
 
-    def _run(path: str) -> str:
-        return _read_file(path)
+    def _run(
+        path: Annotated[
+            str,
+            Field(description="Absolute or cwd-relative path to a UTF-8 text file."),
+        ],
+        state: Annotated[dict, InjectedState] | None = None,
+    ) -> str:
+        skill_root = state.get("skill_root") if isinstance(state, dict) else None
+        return _read_file(path, skill_root=skill_root)
 
     _run.__name__ = TOOL_NAME
 
@@ -70,6 +85,5 @@ def create_read_file_tool(config: AgentConfig) -> StructuredTool:
         func=_run,
         name=TOOL_NAME,
         description=TOOL_DESCRIPTION,
-        args_schema=ReadFileInput,
-        infer_schema=False,
+        infer_schema=True,
     )
