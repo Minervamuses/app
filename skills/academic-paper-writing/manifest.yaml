@@ -1,0 +1,28 @@
+capabilities:
+  required:
+    - file.read
+    - rag.search
+  optional:
+    - id: web.search
+      use_when: target journal guidelines or current venue information is needed
+
+resources:
+  - path: references/section-playbooks.md
+    use_when: abstract, title, keywords, empirical paper sections, or paragraph-level revision
+    pinned: true
+  - path: references/literature-review.md
+    use_when: literature review, review article, or synthesis-heavy introduction
+    pinned: false
+  - path: references/submission-and-integrity.md
+    use_when: journal fit, cover letter, reviewer response, publication ethics, AI disclosure, or reporting checklists
+    pinned: false
+
+task_modes:
+  - revision
+  - literature-review
+  - drafting
+  - submission-support
+
+tool_policy:
+  disallow:
+    - bash
