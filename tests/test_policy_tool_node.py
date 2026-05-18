@@ -66,7 +66,8 @@ def test_policy_tool_node_denies_matching_tool_with_same_call_id():
     message = result["messages"][-1]
     assert isinstance(message, ToolMessage)
     assert message.tool_call_id == "call-1"
-    assert message.content == "Tool denied by active skill policy: bash"
+    assert message.content == "Tool error: denied by active skill policy: bash"
+    assert message.status == "error"
 
 
 def test_policy_tool_node_handles_mixed_allowed_and_denied_calls():
@@ -88,7 +89,8 @@ def test_policy_tool_node_handles_mixed_allowed_and_denied_calls():
     messages = result["messages"][-2:]
     assert [message.tool_call_id for message in messages] == ["call-1", "call-2"]
     assert messages[0].content == "ok"
-    assert messages[1].content == "Tool denied by active skill policy: bash"
+    assert messages[1].content == "Tool error: denied by active skill policy: bash"
+    assert messages[1].status == "error"
 
 
 def test_policy_tool_node_denies_unlisted_tool_when_allowlist_is_present():
@@ -106,7 +108,8 @@ def test_policy_tool_node_denies_unlisted_tool_when_allowlist_is_present():
 
     message = result["messages"][-1]
     assert message.tool_call_id == "call-1"
-    assert message.content == "Tool denied by active skill policy: bash"
+    assert message.content == "Tool error: denied by active skill policy: bash"
+    assert message.status == "error"
 
 
 def test_policy_tool_node_active_empty_policy_denies_all_tools():
@@ -124,4 +127,5 @@ def test_policy_tool_node_active_empty_policy_denies_all_tools():
 
     message = result["messages"][-1]
     assert message.tool_call_id == "call-1"
-    assert message.content == "Tool denied by active skill policy: echo"
+    assert message.content == "Tool error: denied by active skill policy: echo"
+    assert message.status == "error"

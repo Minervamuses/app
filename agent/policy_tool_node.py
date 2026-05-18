@@ -65,9 +65,10 @@ class PolicyToolNode(ToolNode):
                 or (not allowed and not denied)
             ):
                 denied_messages.append(ToolMessage(
-                    content=f"Tool denied by active skill policy: {name}",
+                    content=f"Tool error: denied by active skill policy: {name}",
                     tool_call_id=call_id,
                     name=name,
+                    status="error",
                 ))
             else:
                 allowed_calls.append(call)
