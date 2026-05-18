@@ -14,6 +14,7 @@ from agent.skills.broker import (
     load_capability_map,
     resolve_capabilities,
 )
+from agent.skills.manifest_schema import validate_skill_manifest
 from agent.skills.metadata import SkillMetadata, discover_skills
 
 
@@ -148,7 +149,7 @@ def load_skill_manifest(root: Path) -> dict[str, Any]:
         data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         raise ValueError(f"skill manifest must be a mapping: {manifest_path}")
-    return data
+    return validate_skill_manifest(data, source=manifest_path)
 
 
 def _load_pinned_references(

@@ -116,6 +116,105 @@ capabilities:
         )
 
 
+def test_load_skill_runtime_rejects_manifest_typo_key(tmp_path):
+    skills_dir, root = _write_skill(tmp_path)
+    (root / "manifest.yaml").write_text(
+        """
+capabilites:
+  required:
+    - file.read
+""",
+        encoding="utf-8",
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+
+    with pytest.raises(ValueError, match="capabilites"):
+        load_skill_runtime(
+            "paper",
+            config=cfg,
+            all_tools=[_read_file],
+            capability_map={
+                "capabilities": {"file.read": {"local_tools": ["read_file"]}}
+            },
+        )
+
+
+def test_load_skill_runtime_rejects_non_bool_pinned(tmp_path):
+    skills_dir, root = _write_skill(tmp_path)
+    (root / "manifest.yaml").write_text(
+        """
+capabilities:
+  required:
+    - file.read
+resources:
+  - path: references/guide.md
+    pinned: "yes"
+""",
+        encoding="utf-8",
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+
+    with pytest.raises(ValueError, match="pinned"):
+        load_skill_runtime(
+            "paper",
+            config=cfg,
+            all_tools=[_read_file],
+            capability_map={
+                "capabilities": {"file.read": {"local_tools": ["read_file"]}}
+            },
+        )
+
+
+def test_load_skill_runtime_rejects_empty_capabilities_without_policy(tmp_path):
+    skills_dir, root = _write_skill(tmp_path)
+    (root / "manifest.yaml").write_text(
+        """
+capabilities: {}
+""",
+        encoding="utf-8",
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+
+    with pytest.raises(ValueError, match="capabilities must not be empty"):
+        load_skill_runtime(
+            "paper",
+            config=cfg,
+            all_tools=[_read_file],
+            capability_map={"capabilities": {}},
+        )
+
+
+def test_load_skill_runtime_allows_unavailable_optional_capability(tmp_path):
+    skills_dir, root = _write_skill(tmp_path)
+    (root / "manifest.yaml").write_text(
+        """
+capabilities:
+  required:
+    - file.read
+  optional:
+    - id: web.search
+      use_when: current venue information is needed
+""",
+        encoding="utf-8",
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+
+    runtime = load_skill_runtime(
+        "paper",
+        config=cfg,
+        all_tools=[_read_file],
+        capability_map={
+            "capabilities": {
+                "file.read": {"local_tools": ["read_file"]},
+                "web.search": {"mcp_families": ["web_search"]},
+            }
+        },
+    )
+
+    assert runtime.allowed_tools == frozenset({"read_file"})
+    assert runtime.capability_resolution.unresolved_optional == frozenset({"web.search"})
+
+
 def test_load_skill_runtime_rejects_oversized_pinned_reference(tmp_path):
     skills_dir, root = _write_skill(tmp_path)
     (root / "references" / "guide.md").write_text("x" * 20, encoding="utf-8")
