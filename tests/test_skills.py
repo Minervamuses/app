@@ -84,6 +84,8 @@ def test_agent_config_exposes_skill_runtime_toggles(tmp_path):
     assert cfg.skill_validation_enabled is True
     assert cfg.skill_max_validation_retries == 1
     assert cfg.skill_capability_map_path is None
+    assert cfg.skill_max_pinned_reference_chars == 65536
+    assert cfg.skill_max_total_skill_context_chars == 200000
 
 
 def test_chat_session_activate_skill_sets_status_and_prompt_context(tmp_path, monkeypatch):

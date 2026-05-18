@@ -111,7 +111,12 @@ def load_skill_runtime(
         capability_resolution=capability_resolution,
         task_mode=task_mode,
     )
-    pinned_references = _load_pinned_references(runtime, manifest)
+    pinned_references = _load_pinned_references(runtime, manifest, config)
+    _validate_total_skill_context(
+        instructions=runtime.instructions,
+        pinned_references=pinned_references,
+        config=config,
+    )
     return SkillRuntime(
         name=runtime.name,
         root=runtime.root,
@@ -149,6 +154,7 @@ def load_skill_manifest(root: Path) -> dict[str, Any]:
 def _load_pinned_references(
     runtime: SkillRuntime,
     manifest: Mapping[str, Any],
+    config: AgentConfig,
 ) -> dict[str, str]:
     resources = manifest.get("resources")
     if not isinstance(resources, list):
@@ -163,8 +169,38 @@ def _load_pinned_references(
         path = item.get("path")
         if not isinstance(path, str):
             continue
-        loaded[path] = runtime.read_skill_resource(path)
+        content = runtime.read_skill_resource(path)
+        _validate_pinned_reference_size(path, content, config)
+        loaded[path] = content
     return loaded
+
+
+def _validate_pinned_reference_size(
+    path: str,
+    content: str,
+    config: AgentConfig,
+) -> None:
+    limit = config.skill_max_pinned_reference_chars
+    size = len(content)
+    if size > limit:
+        raise ValueError(
+            f"pinned skill reference too large: {path} "
+            f"({size} chars, limit {limit})"
+        )
+
+
+def _validate_total_skill_context(
+    *,
+    instructions: str,
+    pinned_references: Mapping[str, str],
+    config: AgentConfig,
+) -> None:
+    limit = config.skill_max_total_skill_context_chars
+    size = len(instructions) + sum(len(content) for content in pinned_references.values())
+    if size > limit:
+        raise ValueError(
+            f"total skill context too large: {size} chars (limit {limit})"
+        )
 
 
 def _validate_task_mode(task_mode: str | None, manifest: Mapping[str, Any]) -> None:

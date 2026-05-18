@@ -116,6 +116,46 @@ capabilities:
         )
 
 
+def test_load_skill_runtime_rejects_oversized_pinned_reference(tmp_path):
+    skills_dir, root = _write_skill(tmp_path)
+    (root / "references" / "guide.md").write_text("x" * 20, encoding="utf-8")
+    cfg = AgentConfig(
+        persist_dir=str(tmp_path),
+        skills_dir=str(skills_dir),
+        skill_max_pinned_reference_chars=10,
+    )
+
+    with pytest.raises(ValueError, match="pinned skill reference too large"):
+        load_skill_runtime(
+            "paper",
+            config=cfg,
+            all_tools=[_read_file],
+            capability_map={
+                "capabilities": {"file.read": {"local_tools": ["read_file"]}}
+            },
+        )
+
+
+def test_load_skill_runtime_rejects_oversized_total_skill_context(tmp_path):
+    skills_dir, _root = _write_skill(tmp_path)
+    cfg = AgentConfig(
+        persist_dir=str(tmp_path),
+        skills_dir=str(skills_dir),
+        skill_max_pinned_reference_chars=1000,
+        skill_max_total_skill_context_chars=20,
+    )
+
+    with pytest.raises(ValueError, match="total skill context too large"):
+        load_skill_runtime(
+            "paper",
+            config=cfg,
+            all_tools=[_read_file],
+            capability_map={
+                "capabilities": {"file.read": {"local_tools": ["read_file"]}}
+            },
+        )
+
+
 def test_read_skill_resource_resolves_relative_to_skill_root(tmp_path):
     skills_dir, _root = _write_skill(tmp_path)
     cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))

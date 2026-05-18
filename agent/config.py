@@ -45,3 +45,5 @@ class AgentConfig(RAGConfig):
     skill_validation_enabled: bool = True
     skill_max_validation_retries: int = 1
     skill_capability_map_path: str | None = None
+    skill_max_pinned_reference_chars: int = 65536
+    skill_max_total_skill_context_chars: int = 200000
