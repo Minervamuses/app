@@ -1,6 +1,6 @@
 """Skill discovery and runtime helpers."""
 
-from agent.skills.broker import resolve_capabilities
+from agent.skills.broker import CapabilityResolution, resolve_capabilities
 from agent.skills.metadata import (
     DEFAULT_SKILLS_DIR,
     SkillMetadata,
@@ -17,6 +17,7 @@ from agent.skills.validator import validate_skill_output
 
 __all__ = [
     "DEFAULT_SKILLS_DIR",
+    "CapabilityResolution",
     "SkillMetadata",
     "discover_skills",
     "resolve_capabilities",

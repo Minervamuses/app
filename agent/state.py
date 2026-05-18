@@ -18,6 +18,7 @@ class AgentState(TypedDict, total=False):
     task_mode: str | None
     allowed_tools: list[str]
     denied_tools: list[str]
+    tool_policy_active: bool
     validation_errors: list[str]
     validation_attempts: int
     validation_retry_requested: bool

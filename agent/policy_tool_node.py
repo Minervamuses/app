@@ -39,10 +39,11 @@ class PolicyToolNode(ToolNode):
         if not isinstance(input, Mapping):
             return None
 
+        policy_active = bool(input.get("tool_policy_active"))
+        if not policy_active:
+            return None
         allowed = set(input.get("allowed_tools") or [])
         denied = set(input.get("denied_tools") or [])
-        if not allowed and not denied:
-            return None
 
         messages = input.get("messages") or []
         if not messages:
@@ -58,7 +59,11 @@ class PolicyToolNode(ToolNode):
             name = call.get("name", "")
             call_id = call.get("id", "")
             call_order.append(call_id)
-            if name in denied or (allowed and name not in allowed):
+            if (
+                name in denied
+                or (allowed and name not in allowed)
+                or (not allowed and not denied)
+            ):
                 denied_messages.append(ToolMessage(
                     content=f"Tool denied by active skill policy: {name}",
                     tool_call_id=call_id,

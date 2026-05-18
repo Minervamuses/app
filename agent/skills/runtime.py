@@ -9,7 +9,11 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 from agent.config import AgentConfig
-from agent.skills.broker import load_capability_map, resolve_capabilities
+from agent.skills.broker import (
+    CapabilityResolution,
+    load_capability_map,
+    resolve_capabilities,
+)
 from agent.skills.metadata import SkillMetadata, discover_skills
 
 
@@ -24,7 +28,13 @@ class SkillRuntime:
     pinned_references: dict[str, str]
     allowed_tools: frozenset[str]
     denied_tools: frozenset[str]
+    capability_resolution: CapabilityResolution
     task_mode: str | None = None
+
+    @property
+    def tool_policy_active(self) -> bool:
+        """Whether this skill has an active tool policy."""
+        return self.capability_resolution.policy_active
 
     def read_skill_resource(self, rel_path: str) -> str:
         """Read a resource path relative to this skill root."""
@@ -84,7 +94,7 @@ def load_skill_runtime(
     cap_map = capability_map or load_capability_map(
         getattr(config, "skill_capability_map_path", None)
     )
-    allowed, denied = resolve_capabilities(
+    capability_resolution = resolve_capabilities(
         manifest,
         all_tools,
         mcp_families or {},
@@ -96,8 +106,9 @@ def load_skill_runtime(
         instructions=instructions,
         manifest=manifest,
         pinned_references={},
-        allowed_tools=frozenset(allowed),
-        denied_tools=frozenset(denied),
+        allowed_tools=capability_resolution.allowed,
+        denied_tools=capability_resolution.denied,
+        capability_resolution=capability_resolution,
         task_mode=task_mode,
     )
     pinned_references = _load_pinned_references(runtime, manifest)
@@ -109,6 +120,7 @@ def load_skill_runtime(
         pinned_references=pinned_references,
         allowed_tools=runtime.allowed_tools,
         denied_tools=runtime.denied_tools,
+        capability_resolution=runtime.capability_resolution,
         task_mode=runtime.task_mode,
     )
 

@@ -284,6 +284,7 @@ class ChatSession:
             "task_mode": runtime.task_mode,
             "allowed_tools": sorted(runtime.allowed_tools),
             "denied_tools": sorted(runtime.denied_tools),
+            "tool_policy_active": runtime.tool_policy_active,
             "validation_errors": [],
             "validation_attempts": 0,
             "validation_retry_requested": False,

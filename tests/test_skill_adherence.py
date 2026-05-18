@@ -103,6 +103,7 @@ def test_active_skill_state_and_prompt_are_ready_before_turn(tmp_path, monkeypat
     assert state["loaded_references"] == {
         "references/section-playbooks.md": "section reference"
     }
+    assert state["tool_policy_active"] is True
     assert "# Academic Paper Writing" in prompt_text
 
 
@@ -131,6 +132,7 @@ def test_active_skill_policy_disallows_bash(tmp_path, monkeypatch):
 
     assert "read_file" in runtime.allowed_tools
     assert "bash" in runtime.denied_tools
+    assert runtime.tool_policy_active is True
 
 
 def test_validator_catches_uncited_quantitative_claim_for_academic_skill():

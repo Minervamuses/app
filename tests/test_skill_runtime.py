@@ -86,7 +86,34 @@ def test_load_skill_runtime_reads_skill_and_pinned_references(tmp_path):
     assert runtime.pinned_references == {"references/guide.md": "guide text"}
     assert runtime.allowed_tools == frozenset({"read_file"})
     assert runtime.denied_tools == frozenset({"bash"})
+    assert runtime.tool_policy_active is True
+    assert runtime.capability_resolution.requested_required == frozenset({"file.read"})
+    assert runtime.capability_resolution.requested_optional == frozenset({"shell.execute"})
+    assert runtime.capability_resolution.unresolved_optional == frozenset({"shell.execute"})
     assert runtime.task_mode == "revision"
+
+
+def test_load_skill_runtime_rejects_unknown_required_capability(tmp_path):
+    skills_dir, root = _write_skill(tmp_path)
+    (root / "manifest.yaml").write_text(
+        """
+capabilities:
+  required:
+    - shell.exec
+""",
+        encoding="utf-8",
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+
+    with pytest.raises(ValueError, match="shell.exec"):
+        load_skill_runtime(
+            "paper",
+            config=cfg,
+            all_tools=[_read_file, _bash],
+            capability_map={
+                "capabilities": {"shell.execute": {"local_tools": ["bash"]}}
+            },
+        )
 
 
 def test_read_skill_resource_resolves_relative_to_skill_root(tmp_path):

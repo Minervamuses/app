@@ -75,6 +75,7 @@ def test_skill_loader_populates_state_from_runtime(monkeypatch, tmp_path):
         task_mode="revision",
         allowed_tools=frozenset({"read_file"}),
         denied_tools=frozenset({"bash"}),
+        tool_policy_active=True,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path))
     graph = build_graph(cfg, skill_runtime_getter=lambda: runtime)
@@ -87,6 +88,7 @@ def test_skill_loader_populates_state_from_runtime(monkeypatch, tmp_path):
     assert result["loaded_references"] == {"references/guide.md": "guide"}
     assert result["allowed_tools"] == ["read_file"]
     assert result["denied_tools"] == ["bash"]
+    assert result["tool_policy_active"] is True
 
 
 def test_agent_node_binds_filtered_tools_for_active_skill(monkeypatch, tmp_path):
@@ -119,6 +121,7 @@ def test_agent_node_binds_filtered_tools_for_active_skill(monkeypatch, tmp_path)
         "task_mode": "revision",
         "allowed_tools": ["read_file"],
         "denied_tools": ["bash"],
+        "tool_policy_active": True,
     }
 
     graph.invoke(state)
@@ -134,3 +137,86 @@ def test_agent_node_binds_filtered_tools_for_active_skill(monkeypatch, tmp_path)
     ]
     assert bind_calls[1] == ["read_file"]
     assert len(bind_calls) == 2
+
+
+def test_agent_node_binds_all_except_denied_for_disallow_only_policy(
+    monkeypatch,
+    tmp_path,
+):
+    bind_calls: list[list[str]] = []
+
+    class RecordingModel:
+        def bind_tools(self, tools):
+            bind_calls.append([tool.name for tool in tools])
+
+            class Bound:
+                def invoke(self, _messages):
+                    return AIMessage(content="ok")
+
+            return Bound()
+
+    monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
+    )
+    monkeypatch.setattr(
+        "agent.graph.create_history_tool",
+        lambda _cfg, store=None: _recall_history,
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path))
+    graph = build_graph(cfg)
+
+    graph.invoke({
+        "messages": [HumanMessage(content="hi")],
+        "active_skill": "paper-writing",
+        "task_mode": "revision",
+        "allowed_tools": [],
+        "denied_tools": ["bash"],
+        "tool_policy_active": True,
+    })
+
+    assert bind_calls[1] == [
+        "rag_explore",
+        "rag_search",
+        "rag_get_context",
+        "recall_history",
+        "read_file",
+    ]
+
+
+def test_agent_node_binds_no_tools_for_active_empty_policy(monkeypatch, tmp_path):
+    bind_calls: list[list[str]] = []
+
+    class RecordingModel:
+        def bind_tools(self, tools):
+            bind_calls.append([tool.name for tool in tools])
+
+            class Bound:
+                def invoke(self, _messages):
+                    return AIMessage(content="ok")
+
+            return Bound()
+
+    monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
+    )
+    monkeypatch.setattr(
+        "agent.graph.create_history_tool",
+        lambda _cfg, store=None: _recall_history,
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path))
+    graph = build_graph(cfg)
+
+    graph.invoke({
+        "messages": [HumanMessage(content="hi")],
+        "active_skill": "paper-writing",
+        "task_mode": "revision",
+        "allowed_tools": [],
+        "denied_tools": [],
+        "tool_policy_active": True,
+    })
+
+    assert bind_calls[1] == []

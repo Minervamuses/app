@@ -26,6 +26,7 @@ def _skill_runtime_state(runtime) -> dict:
         "task_mode": runtime.task_mode,
         "allowed_tools": sorted(runtime.allowed_tools),
         "denied_tools": sorted(runtime.denied_tools),
+        "tool_policy_active": runtime.tool_policy_active,
         "validation_errors": [],
         "validation_attempts": 0,
         "validation_retry_requested": False,
@@ -61,27 +62,35 @@ def build_graph(
     tools_by_name = {getattr(tool, "name", str(tool)): tool for tool in tools}
     tool_order = [getattr(tool, "name", str(tool)) for tool in tools]
     bound_model_cache = {
-        (None, None, (), ()): model.bind_tools(tools),
+        (None, None, False, (), ()): model.bind_tools(tools),
     }
 
     def _select_tools(state: AgentState) -> list:
+        policy_active = bool(state.get("tool_policy_active"))
         allowed = set(state.get("allowed_tools") or [])
         denied = set(state.get("denied_tools") or [])
-        if not allowed and not denied:
+        if not policy_active:
             return tools
-        selected_names = [
-            name
-            for name in tool_order
-            if (not allowed or name in allowed) and name not in denied
-        ]
+        if allowed:
+            selected_names = [
+                name
+                for name in tool_order
+                if name in allowed and name not in denied
+            ]
+        elif denied:
+            selected_names = [name for name in tool_order if name not in denied]
+        else:
+            selected_names = []
         return [tools_by_name[name] for name in selected_names]
 
     def _model_for_state(state: AgentState):
+        policy_active = bool(state.get("tool_policy_active"))
         allowed = tuple(sorted(state.get("allowed_tools") or []))
         denied = tuple(sorted(state.get("denied_tools") or []))
         key = (
             state.get("active_skill"),
             state.get("task_mode"),
+            policy_active,
             allowed,
             denied,
         )

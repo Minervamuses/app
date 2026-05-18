@@ -74,6 +74,7 @@ def test_agent_state_skill_fields_are_optional():
     assert "messages" in AgentState.__optional_keys__
     assert "active_skill" in AgentState.__optional_keys__
     assert "loaded_references" in AgentState.__optional_keys__
+    assert "tool_policy_active" in AgentState.__optional_keys__
     assert "validation_retry_requested" in AgentState.__optional_keys__
 
 

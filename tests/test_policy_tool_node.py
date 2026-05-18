@@ -60,6 +60,7 @@ def test_policy_tool_node_denies_matching_tool_with_same_call_id():
         "messages": [ai_message],
         "allowed_tools": ["echo"],
         "denied_tools": ["bash"],
+        "tool_policy_active": True,
     })
 
     message = result["messages"][-1]
@@ -81,6 +82,7 @@ def test_policy_tool_node_handles_mixed_allowed_and_denied_calls():
         "messages": [ai_message],
         "allowed_tools": ["echo"],
         "denied_tools": ["bash"],
+        "tool_policy_active": True,
     })
 
     messages = result["messages"][-2:]
@@ -99,8 +101,27 @@ def test_policy_tool_node_denies_unlisted_tool_when_allowlist_is_present():
         "messages": [ai_message],
         "allowed_tools": ["echo"],
         "denied_tools": [],
+        "tool_policy_active": True,
     })
 
     message = result["messages"][-1]
     assert message.tool_call_id == "call-1"
     assert message.content == "Tool denied by active skill policy: bash"
+
+
+def test_policy_tool_node_active_empty_policy_denies_all_tools():
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[_tool_call("echo", "call-1", {"text": "ok"})],
+    )
+
+    result = _invoke_policy_node({
+        "messages": [ai_message],
+        "allowed_tools": [],
+        "denied_tools": [],
+        "tool_policy_active": True,
+    })
+
+    message = result["messages"][-1]
+    assert message.tool_call_id == "call-1"
+    assert message.content == "Tool denied by active skill policy: echo"
