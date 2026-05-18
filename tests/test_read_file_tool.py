@@ -123,6 +123,75 @@ def test_read_file_without_skill_root_uses_cwd(tmp_path, monkeypatch):
     assert payload["content"] == "cwd guide"
 
 
+def test_read_file_active_skill_reference_missing_does_not_fallback_to_cwd(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    skill_root = tmp_path / "skills" / "paper"
+    skill_root.mkdir(parents=True)
+    cwd_target = tmp_path / "references" / "missing.md"
+    cwd_target.parent.mkdir()
+    cwd_target.write_text("cwd guide", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_file",
+                "args": {"path": "references/missing.md"},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+    result = _invoke_tool_node(tool, {
+        "messages": [ai_message],
+        "skill_root": str(skill_root),
+    })
+    payload = json.loads(result["messages"][-1].content)
+
+    assert "error" in payload
+    assert "does not exist" in payload["error"]
+    assert str(cwd_target.resolve()) not in payload["error"]
+
+
+def test_read_file_active_skill_non_resource_relative_path_uses_cwd(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    skill_root = tmp_path / "skills" / "paper"
+    skill_root.mkdir(parents=True)
+    (skill_root / "draft.md").write_text("skill draft", encoding="utf-8")
+    cwd_target = tmp_path / "draft.md"
+    cwd_target.write_text("cwd draft", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_file",
+                "args": {"path": "draft.md"},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+    result = _invoke_tool_node(tool, {
+        "messages": [ai_message],
+        "skill_root": str(skill_root),
+    })
+    payload = json.loads(result["messages"][-1].content)
+
+    assert payload["path"] == str(cwd_target.resolve())
+    assert payload["content"] == "cwd draft"
+
+
 def test_read_file_blocks_skill_root_escape(tmp_path):
     skill_root = tmp_path / "skills" / "paper"
     skill_root.mkdir(parents=True)

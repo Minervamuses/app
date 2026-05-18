@@ -21,27 +21,37 @@ TOOL_NAME = "read_file"
 TOOL_DESCRIPTION = (
     "Read the contents of a text file from disk. Accepts absolute or "
     "working-directory-relative paths. When a skill is active, relative paths "
-    "are first resolved against the active skill root. Rejects files larger than 1 MB. "
+    "starting with references/, assets/, or scripts/ are resolved only against "
+    "the active skill root and do not fall back to the working directory. "
+    "Other relative paths are resolved from the working directory. Rejects files larger than 1 MB. "
     "Returns a JSON object with `path`, `size`, and `content`. On failure "
     "returns a JSON object with an `error` field."
 )
 
 MAX_BYTES = 1_048_576
+SKILL_RESOURCE_DIRS = frozenset({"references", "assets", "scripts"})
 
 
 def _error(message: str) -> str:
     return json.dumps({"error": message}, ensure_ascii=False)
 
 
+def _is_skill_resource_path(path: Path) -> bool:
+    return bool(path.parts) and path.parts[0] in SKILL_RESOURCE_DIRS
+
+
+def _would_escape_skill_root(path: Path, root: Path) -> bool:
+    return not (root / path).resolve().is_relative_to(root)
+
+
 def _read_file(path: str, skill_root: str | None = None) -> str:
     raw_path = Path(path).expanduser()
     if skill_root and not raw_path.is_absolute():
         root = Path(skill_root).expanduser().resolve()
-        candidate = (root / raw_path).resolve()
-        if not candidate.is_relative_to(root):
+        if _would_escape_skill_root(raw_path, root):
             return _error(f"path escapes active skill root: {path}")
-        if candidate.exists():
-            return _read_resolved_file(candidate)
+        if _is_skill_resource_path(raw_path):
+            return _read_resolved_file((root / raw_path).resolve())
 
     resolved = raw_path.resolve()
     return _read_resolved_file(resolved)
