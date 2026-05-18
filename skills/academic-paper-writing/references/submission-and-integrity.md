@@ -35,7 +35,15 @@ Before submission, verify:
 - keywords are present if required
 - figures, tables, and supplementary files are named consistently
 - word count and figure/table counts are accurate
-- funding, acknowledgments, disclosures, and ethics statements are present where needed
+- ethics approval, consent, waiver, or exemption statements are present where needed
+- trial registration, preregistration, or protocol registration is reported when applicable
+- data availability, code availability, and materials availability statements follow the venue policy
+- competing interests, funding, acknowledgments, and funding-role statements are present where needed
+- author contributions follow the venue format
+- supplementary materials are consistent with the manuscript
+- figure and table permissions are addressed
+- image manipulation and figure integrity have been checked
+- duplicate submission, redundant publication, and salami-slicing risks have been checked
 
 If the venue gives explicit instructions, follow those instructions even when they differ from generic norms.
 
@@ -84,11 +92,19 @@ When disagreeing:
 - defend with evidence, method, or scope
 - do not argue from ego or intention
 
+When a table is useful, use this structure:
+
+| Reviewer comment | Response | Manuscript change | Location |
+|---|---|---|---|
+| [summarize or quote comment] | Thank the reviewer for the specific point, then state the action or rationale. | [brief revised wording or change made] | [section, page, paragraph, line, table, or figure if known] |
+
+Do not claim a change was made unless the revised text is supplied or the user has confirmed it.
+
 ## Authorship and acknowledgments
 
 Use a conservative standard for authorship.
 
-For biomedical and many adjacent fields, the ICMJE four-part test is a strong default reference:
+For biomedical and many adjacent fields, the ICMJE four-part test is a strong default reference, but it is not a universal rule for every discipline or venue:
 
 - substantial contribution to the work
 - drafting or critical intellectual revision
@@ -96,6 +112,16 @@ For biomedical and many adjacent fields, the ICMJE four-part test is a strong de
 - accountability for the work
 
 Do not assign authorship only for funding, supervision, proofreading, or language polishing. Those belong in acknowledgments unless the field follows a different written policy.
+
+For contribution statements, use the venue's required format. If no format is specified, offer a CRediT-style contribution statement as a descriptive taxonomy. Do not use CRediT to decide who qualifies as an author.
+
+Example contribution statement pattern:
+
+```text
+Author contributions: [Name] contributed to conceptualization and methodology. [Name] contributed to data curation and formal analysis. [Name] drafted the initial manuscript. All authors reviewed and approved the submitted version.
+```
+
+Edit this only from user-supplied contribution facts. Do not invent author roles.
 
 ## Conflicts, funding, and transparency
 
@@ -109,11 +135,19 @@ Rules:
 
 - AI tools are not authors.
 - Humans remain responsible for accuracy, originality, attribution, and disclosure.
-- If AI was used in a way the venue requires to be disclosed, say so clearly in the appropriate place.
+- If AI was used and the venue permits or requires disclosure, prepare a transparent disclosure in the appropriate place.
 - Do not paraphrase sources so closely that the wording remains effectively copied.
 - Do not cite works you have not actually verified.
 
 If the user asks for references without a source set, offer search terms or a placeholder bibliography structure instead of invented citations.
+
+AI-use disclosure template:
+
+```text
+During manuscript preparation, the authors used [tool name/version] to assist with [specific use, such as language editing, outline organization, formatting, or translation support]. The authors reviewed and edited the AI-assisted output and remain responsible for the manuscript content.
+```
+
+Only use this template if it matches the user's actual workflow. Do not imply AI performed experiments, analysis, peer review, citation verification, authorship, or accountability.
 
 ## Reporting guidelines
 
@@ -126,6 +160,8 @@ Examples:
 
 If the field is health or clinical research, look for the specific reporting guideline that matches the design before finalizing the manuscript.
 
+For more detailed routing, read `reporting-guidelines.md`.
+
 ## Source notes
 
 - Elsevier Researcher Academy on journal fit: https://researcheracademy.elsevier.com/publication-process/finding-right-journal
@@ -134,6 +170,8 @@ If the field is health or clinical research, look for the specific reporting gui
 - ICMJE on manuscript preparation: https://www.icmje.org/recommendations/browse/manuscript-preparation/preparing-for-submission.html?page=0
 - ICMJE on authorship: https://www.icmje.org/recommendations/browse/roles-and-responsibilities/defining-the-role-of-authors-and-contributors.html
 - ICMJE on conflicts of interest: https://www.icmje.org/recommendations/browse/roles-and-responsibilities/author-responsibilities--conflicts-of-interest.html
+- CRediT contributor role taxonomy: https://credit.niso.org/
 - EQUATOR on reporting guidelines: https://www.equator-network.org/about-us/what-is-a-reporting-guideline/
 - PRISMA 2020: https://www.prisma-statement.org/prisma-2020
 - STROBE: https://www.strobe-statement.org/
+- SPIRIT statement: https://spirit-statement.org/spirit-statement/

@@ -13,6 +13,12 @@ resources:
   - path: references/literature-review.md
     use_when: literature review, review article, or synthesis-heavy introduction
     pinned: false
+  - path: references/reporting-guidelines.md
+    use_when: study-type reporting guideline routing, protocol checks, systematic review, scoping review, diagnostic accuracy, prediction model, intervention, case report, animal study, or reporting checklist questions
+    pinned: false
+  - path: references/qualitative-research.md
+    use_when: qualitative interviews, focus groups, ethnography, thematic analysis, grounded theory, discourse analysis, case study, qualitative coding, reflexivity, or trustworthiness
+    pinned: false
   - path: references/submission-and-integrity.md
     use_when: journal fit, cover letter, reviewer response, publication ethics, AI disclosure, or reporting checklists
     pinned: false

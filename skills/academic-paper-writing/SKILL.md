@@ -57,6 +57,8 @@ Collect or infer:
 
 - Empirical paper sections, abstract, title, keywords, or paragraph-level rewriting -> read `references/section-playbooks.md`
 - Literature review, review article, or synthesis-heavy introduction -> read `references/literature-review.md`
+- Reporting guideline selection, study-type checklist, protocol, systematic review, scoping review, diagnostic accuracy, prediction model, intervention, case report, or animal study -> read `references/reporting-guidelines.md`
+- Qualitative interviews, focus groups, ethnography, thematic analysis, grounded theory, discourse analysis, case study, or qualitative coding -> read `references/qualitative-research.md`
 - Journal fit, cover letter, submission package, reviewer response, authorship, conflicts, AI disclosure, or reporting checklists -> read `references/submission-and-integrity.md`
 
 If the request spans multiple areas, read the relevant references and combine them.
