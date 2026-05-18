@@ -36,11 +36,11 @@ START → skill_loader → agent ⇄ tools (PolicyToolNode)
                     skill_validator → (END 或回 agent)
 ```
 
-**skill_loader**：如果 session 有 active skill 而 state 還沒注入，就把 `SkillRuntime` 的 `instructions` / `pinned_references` / `allowed_tools` / `denied_tools` 拷貝進 state。沒 active skill 時是 no-op。
+**skill_loader**：如果 session 有 active skill 而 state 還沒注入，就把 `SkillRuntime` 的 `instructions` / `pinned_references` / `allowed_tools` / `denied_tools` / `tool_policy_active` 拷貝進 state。沒 active skill 時是 no-op。
 
-**agent**：用「目前 active skill 的 tool 過濾結果」rebound model（per-turn cache key 是 `(active_skill, task_mode, allowed, denied)`），把 `_prompt_history()` 組好的 messages 丟給 LLM，回傳「純文字」或「tool call 請求」。
+**agent**：用「目前 active skill 的 tool 過濾結果」rebound model（per-turn cache key 是 `(active_skill, task_mode, tool_policy_active, allowed, denied)`），把 `_prompt_history()` 組好的 messages 丟給 LLM，回傳「純文字」或「tool call 請求」。
 
-**tools (PolicyToolNode)**：包在 LangGraph 內建 `ToolNode` 外面。policy 都空 → 直接 delegate；有 deny / allow list → 把 LLM 的 tool_calls 拆成 allowed / denied 兩堆，denied 那堆生成 `ToolMessage(content="Tool denied by active skill policy: ...")`、`tool_call_id` 對齊原本的 call ID，allowed 那堆走真正的 ToolNode。tool 拋例外時會被包成 `Tool error: ...` 丟回 agent，**不會炸掉整輪對話**。
+**tools (PolicyToolNode)**：包在 LangGraph 內建 `ToolNode` 外面。`tool_policy_active=False` → 直接 delegate；`tool_policy_active=True` → 把 LLM 的 tool_calls 拆成 allowed / denied 兩堆，deny rules 優先於 grants。denied 那堆生成 `ToolMessage(content="Tool error: denied by active skill policy: ...", status="error")`、`tool_call_id` 對齊原本的 call ID，allowed 那堆走真正的 ToolNode。tool 拋例外時會被包成 `Tool error: ...` 丟回 agent，**不會炸掉整輪對話**。
 
 **skill_validator**：只在 active skill 存在、且當前 AIMessage 沒有 tool_calls（= 最終回答）時跑。執行確定性檢查（regex 抓百分比後無 citation marker 之類），命中違規且 `validation_attempts < skill_max_validation_retries` → 注入 `[Skill validation errors]` SystemMessage 並 route 回 agent；否則 → END。
 
@@ -71,7 +71,7 @@ Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「
 
 | Tool | 用途 |
 |------|------|
-| `read_file` | 讀單一 UTF-8 文字檔。預設是 absolute / cwd-relative path；**active skill 存在時**，相對路徑會先 resolve 到 `skill_root`（traversal 擋掉），找不到才 fall back 到 cwd。1 MB 上限 |
+| `read_file` | 讀單一 UTF-8 文字檔。預設是 absolute / cwd-relative path；**active skill 存在時**，`references/`、`assets/`、`scripts/` 開頭的相對路徑只會 resolve 到 `skill_root`，找不到就回 error，不會 fall back 到 cwd；其他相對路徑仍走 cwd。擋 path traversal、敏感路徑 denylist，1 MB 上限 |
 
 讀本地草稿、reviewer comments、plan log、active skill bundle 裡的 reference 檔等。**只能讀檔，不能列目錄** — 列目錄要用 `bash`。
 
@@ -114,7 +114,7 @@ Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「
 
 ### 工具註冊三層機制
 
-1. **功能綁定** — `agent/graph.py` build 一個 list，**按 active skill 動態 filter** 後餵給 `model.bind_tools(...)`（送 schema 給 LLM）。`(active_skill, task_mode, allowed, denied)` 為 key 的 LRU cache 避免每 turn rebuild
+1. **功能綁定** — `agent/graph.py` build 一個 list，**按 active skill 動態 filter** 後餵給 `model.bind_tools(...)`（送 schema 給 LLM）。`(active_skill, task_mode, tool_policy_active, allowed, denied)` 為 key 的 LRU cache 避免每 turn rebuild
 2. **Dispatch 把關** — `PolicyToolNode` 在 tool 真正執行前再 check 一次 allow/deny list；防止模型用緩存 schema、或被 prompt injection 誘導 call denied tool
 3. **語意提示** — `agent/session.py:SYSTEM_PROMPT` 列出每個工具家族的描述、選用時機、注意事項
 
@@ -178,10 +178,10 @@ skills/<name>/
 
 **啟用流程：**
 
-1. 使用者 `/skill` → 互動 picker 列出 `skills/<name>/` 下所有 SKILL.md 的 name（不顯示 description，不寫進 prompt）。`[0] none` 用來 deactivate。若 skill manifest 宣告 `task_modes`，picker 走二段：先選 skill，再選 task mode。`/skill <name> [mode]` 為 one-shot。
-2. `session.activate_skill(name, mode)` 同步：讀 SKILL.md → 解析 manifest → 透過 capability broker 把宣告的 capability 對應到實際 tool 名稱（含 MCP family）→ load 所有 `pinned: true` 的 reference → 組 `SkillRuntime` 寫進 `session.active_skill_runtime`。
+1. 使用者 `/skill` → 互動 picker 列出 `skills/<name>/` 下所有 SKILL.md 的 name 與 description（只給使用者選，不寫進 prompt）。`[0] none` 用來 deactivate。若 skill manifest 宣告 `task_modes`，picker 走二段：先選 skill，再選 task mode。`/skill <name> [mode]` 為 one-shot；輸入錯誤會轉成 `SlashCommandError`，不炸掉 chat loop。
+2. `session.activate_skill(name, mode)` 同步：讀 SKILL.md → 解析並 schema validate manifest → 透過 capability broker 把宣告的 capability 對應到實際 tool 名稱（含 MCP family）→ required capability 無法解析就 fail fast → load 所有 `pinned: true` 的 reference 並檢查單檔 / total context 上限 → 組 `SkillRuntime` 寫進 `session.active_skill_runtime`。
 3. 之後每 turn，`_prompt_history()` 在 system prompt 之後插入一條 ephemeral `SystemMessage`（內容是 SkillRuntime.context_block()），帶 `[Active skill]` 標題、SKILL.md 全文、pinned references。Hint 不持久化。
-4. graph `skill_loader_node` 在每 turn 開頭把 SkillRuntime 的 `allowed_tools` / `denied_tools` 拷貝進 state；agent_node 依此 filter tools 重新 bind；PolicyToolNode 在 dispatch 層再 enforce 一次。
+4. graph `skill_loader_node` 在每 turn 開頭把 SkillRuntime 的 `tool_policy_active` / `allowed_tools` / `denied_tools` 拷貝進 state；agent_node 依此 filter tools 重新 bind；PolicyToolNode 在 dispatch 層再 enforce 一次。只有 `tool_policy_active=False` 才代表 no policy；不能再用 allowed / denied 是否同時為空推論。
 5. skill_validator_node 在最終 AIMessage 上跑 deterministic checks（per-skill rule）；違規且未超 retry 上限 → 回 agent 改寫；否則 → END。
 
 **Capability map（`agent/skills/capability_map.yaml`）：**
@@ -193,10 +193,10 @@ capabilities:
   file.read:    { local_tools: [read_file] }
   rag.search:   { local_tools: [rag_search, rag_explore, rag_get_context] }
   web.search:   { mcp_families: [web_search] }
-  shell.exec:   { local_tools: [bash] }
+  shell.execute: { local_tools: [bash] }
 ```
 
-**禁止繞道**：`agent/skills/runtime.py:SkillRuntime.read_skill_resource()` 強制把 `rel_path` join 到 `skill_root` 然後 `is_relative_to(root)` traversal guard；`read_file` 在 active skill 下對 relative path 也走 skill_root 優先解析。Reference 檔放在 `skills/<name>/references/` 下，SKILL.md 可以寫 `read references/foo.md`，模型 / runtime 都解析得到。
+**禁止繞道**：`agent/skills/runtime.py:SkillRuntime.read_skill_resource()` 強制把 `rel_path` join 到 `skill_root` 然後 `is_relative_to(root)` traversal guard；`read_file` 在 active skill 下對 `references/`、`assets/`、`scripts/` 開頭的 relative path 也只解析到 skill bundle，找不到就報錯，不 fallback 到 cwd。讀一般 cwd 草稿仍使用普通相對路徑或 absolute path；absolute path 會先經過敏感檔名 / path segment denylist。
 
 **Skills 不會自動進 prompt**：startup 不再 inject metadata block、不再印 banner。模型對「有哪些 skill 可用」是色盲的；被使用者問起時透過 `bash ls skills/` 現查（需要使用者批准）。`/skill` 是唯一啟用入口。
 
@@ -297,3 +297,5 @@ skill -> academic-paper-writing (revision)
 | `skill_validation_enabled` | `True` | 是否跑 skill_validator node |
 | `skill_max_validation_retries` | 1 | validator 違規時最多回 agent 改寫幾次 |
 | `skill_capability_map_path` | `None` | capability map yaml 路徑；None → `agent/skills/capability_map.yaml` |
+| `skill_max_pinned_reference_chars` | 65536 | 單一 pinned reference 可進 skill context 的最大字元數 |
+| `skill_max_total_skill_context_chars` | 200000 | SKILL.md + pinned references 組成的 skill context 最大字元數 |

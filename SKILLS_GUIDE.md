@@ -19,18 +19,19 @@ Skills 有一份開放標準（Agent Skills），但各家 runtime（特別是 C
 
 ## 一、什麼是 Skill
 
-Skill 是一個資料夾，裡面有一個 `SKILL.md` 檔案。`SKILL.md` 包含：
+Skill 是一個資料夾，至少包含一個 `SKILL.md` 檔案。`SKILL.md` 包含：
 
-1. **YAML frontmatter** — 給 agent 用來判斷「何時該載入這個 skill」的 metadata
-2. **Markdown 內文** — 載入後，agent 該照著做的指令
+1. **YAML frontmatter** — 給 `/skill` picker 顯示與辨識的 metadata
+2. **Markdown 內文** — 使用者明確啟用後，agent 該照著做的指令
+3. **manifest.yaml（選用，本專案擴充）** — 宣告 task modes、resource、capability、tool policy
 
 Skill 採用**漸進式揭露（progressive disclosure）**：
 
-- **啟動時**：agent 只把每個 skill 的 frontmatter（name + description）放進 system prompt
-- **觸發時**：使用者請求匹配某個 description，agent 才用讀檔工具讀完整 SKILL.md
-- **延伸時**：SKILL.md 可引用同目錄的其他檔案，agent 按需再讀
+- **啟動時**：agent 不把 skill 清單、frontmatter 或 description 自動塞進 system prompt
+- **啟用時**：只有使用者透過 `/skill` 或 `/skill <name> [mode]` 明確選擇，runtime 才載入完整 `SKILL.md`
+- **延伸時**：`SKILL.md` 可引用同目錄的其他檔案；active skill 下，`references/`、`assets/`、`scripts/` 開頭的路徑會被限制在 skill bundle 內
 
-這個機制讓我們可以塞很多 skill，但 context 不會爆。
+這個機制讓我們可以維持可預期的手動啟用路徑，避免 agent 自行掃描、判斷或自動啟用 skills。
 
 ---
 
@@ -42,7 +43,8 @@ Skill 採用**漸進式揭露（progressive disclosure）**：
 skills/
 └── <skill-name>/
     ├── SKILL.md           # 必要
-    ├── <reference>.md     # 選用，補充文件
+    ├── manifest.yaml      # 選用，本專案 runtime metadata
+    ├── references/*.md    # 選用，補充文件
     ├── scripts/           # 選用，可執行腳本（需 bash 工具支援）
     └── assets/            # 選用，模板或資源檔
 ```
@@ -58,7 +60,7 @@ skills/
 ```markdown
 ---
 name: skill-name
-description: Use when the user wants to ... [具體觸發條件]
+description: Use when the user wants to ... [具體適用情境]
 ---
 
 # Skill 標題
@@ -78,7 +80,7 @@ description: Use when the user wants to ... [具體觸發條件]
 | 欄位 | 必要性 | 說明 |
 |------|--------|------|
 | `name` | 建議 | Skill 識別碼。省略時會用資料夾名稱推導。kebab-case。 |
-| `description` | **強烈建議** | Agent 判斷是否觸發此 skill 的唯一依據。詳見下方寫作指引。 |
+| `description` | **強烈建議** | `/skill` picker 顯示給使用者看的辨識文字。詳見下方寫作指引。 |
 
 **標準也定義但本專案通常不用：**
 
@@ -93,14 +95,53 @@ description: Use when the user wants to ... [具體觸發條件]
 
 ---
 
-## 三、Description 寫作指引（最重要）
+### manifest.yaml 欄位（本專案擴充）
 
-`description` 是整個 skill 唯一影響「會不會被觸發」的欄位。寫得不好，skill 就只是死檔案。
+`manifest.yaml` 是本專案 runtime 使用的嚴格 schema。未知 top-level key、型別錯誤、空的 `capabilities: {}` 都會在 skill 啟用時 raise `ValueError`，讓問題早點暴露。
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| `capabilities.required` | string list | 必要 capability。必須存在於 `agent/skills/capability_map.yaml`，且能解析到目前可用 tool；否則啟用失敗。 |
+| `capabilities.optional` | string list 或 `{id, use_when}` list | 選用 capability。不存在或目前不可用時不阻止啟用，但仍視為 active policy，不會退回全工具開放。 |
+| `resources` | list | 每項需有 `path: string`，可選 `use_when: string`、`pinned: bool`。`pinned: "yes"` 這類字串不是 bool，會被拒絕。 |
+| `task_modes` | string list | `/skill <name> <mode>` 可選模式。非法 mode 會回 slash command error，不會炸掉 CLI loop。 |
+| `tool_policy.disallow` | string list | 明確禁止 tool。deny rules 優先於 capability grants。 |
+
+範例：
+
+```yaml
+capabilities:
+  required:
+    - file.read
+    - rag.search
+  optional:
+    - id: web.search
+      use_when: target journal guidelines or current venue information is needed
+
+resources:
+  - path: references/checklist.md
+    use_when: checklist-heavy tasks
+    pinned: false
+
+task_modes:
+  - revision
+  - drafting
+
+tool_policy:
+  disallow:
+    - bash
+```
+
+Pinned resources 會在啟用 skill 時直接放進每回合 context，受 `skill_max_pinned_reference_chars` 與 `skill_max_total_skill_context_chars` 限制。只 pin 每次都必要、且很小的檔案；其他 reference 讓 agent 在 active skill 下按需讀取。
+
+## 三、Description 寫作指引
+
+`description` 不會讓 agent 自動啟用 skill。本專案只允許使用者透過 `/skill` 明確啟用；description 的作用是讓 picker 中的選項容易辨認，也讓人類維護者快速理解用途。
 
 ### 公式
 
 ```
-What it does + When to use it + （選用）Specific triggers / Negative triggers
+What it does + When to use it + （選用）Specific signals / Negative cases
 ```
 
 ### 不好的寫法
@@ -109,7 +150,7 @@ What it does + When to use it + （選用）Specific triggers / Negative trigger
 description: Translates text to formal Chinese.
 ```
 
-問題：只說功能，agent 不知道使用者講什麼話的時候該觸發。
+問題：只說功能，使用者在 picker 裡不容易判斷該不該選它。
 
 ### 好的寫法
 
@@ -119,25 +160,24 @@ description: Use when the user wants to translate text into formal written
   professional documents. Do NOT use for casual translation or spoken Chinese.
 ```
 
-差別：明確列出觸發情境（商務書信、正式 email、專業文件）和反觸發情境（口語、休閒翻譯）。Agent 在做選擇題的時候，這種寫法準確率高很多。
+差別：明確列出適用情境（商務書信、正式 email、專業文件）和不適用情境（口語、休閒翻譯）。使用者選 skill 時比較不容易選錯。
 
 ### Description 寫作清單
 
 - [ ] 寫出**做什麼**（What）
 - [ ] 寫出**何時用**（When）— 列出具體的使用者請求型態
 - [ ] 必要時寫出**何時不用**（When NOT）— 用 "Do NOT use for..." 或 "Not for..."
-- [ ] 用英文寫（觸發判斷用英文較精準，內文可用中文）
+- [ ] 用英文寫（方便維護與跨 runtime 閱讀，內文可用中文）
 - [ ] 不超過 3-4 句
 
-### 觸發強度
+### 選項辨識度
 
-如果發現某個 skill 應該被觸發但沒被觸發（undertriggering），可以把 description 寫得更積極一點：
+如果發現使用者常選錯或不知道該選哪個 skill，可以把 description 寫得更具體一點：
 
 ```yaml
-description: Use when the user wants to translate ... Make sure to use this
-  skill whenever the user mentions formal letters, official documents,
-  business communication, or asks for a 公文-style translation, even if they
-  don't explicitly say "formal".
+description: Use when the user wants to translate ... Especially relevant for
+  formal letters, official documents, business communication, or 公文-style
+  translation, even if the user does not explicitly say "formal".
 ```
 
 ---
@@ -255,7 +295,7 @@ $name                          # ❌ 沒有具名參數這種東西
 
 ### 簡單判別法
 
-如果某個欄位或語法**不在本文件第二、第三、第四節**中，就不要用。
+如果某個欄位或語法**不在本文件列出的標準 frontmatter、SKILL.md 內文寫法，或本專案 `manifest.yaml` 擴充**中，就不要用。
 
 ---
 
@@ -370,15 +410,22 @@ Group findings by severity:
    - `name`：與資料夾同名
    - `description`：套用第三節的公式
 
-4. **撰寫內文**
+4. **視需要撰寫 manifest.yaml**
+   - 需要限制 tool 或宣告 capability 時，使用 `capabilities` / `tool_policy.disallow`
+   - 需要 task mode 時，使用 `task_modes`
+   - 需要 reference routing 時，使用 `resources`
+   - 不要寫空的 `capabilities: {}`；沒有 policy 就省略 `capabilities` / `tool_policy`
+
+5. **撰寫內文**
    - 祈使句、結構化、舉例
    - 控制在 500 行以內
 
-5. **本地驗證**
-   - 啟動 agent，下幾個會觸發此 skill 的提示
-   - 確認 agent 真的有讀 SKILL.md 並照做
+6. **本地驗證**
+   - 啟動 agent，用 `/skill <name>` 或 `/skill <name> <mode>` 明確啟用
+   - 確認啟用時沒有 manifest validation / capability resolution 錯誤
+   - 確認 agent 真的有讀 `SKILL.md` 並照做
 
-6. **不需要的東西不要加**
+7. **不需要的東西不要加**
    - 不要為了「看起來專業」加一堆 Claude Code 專屬欄位
    - 不要在內文塞 `` !`command` `` 這種不會生效的語法
 
@@ -393,10 +440,14 @@ Group findings by severity:
 - [ ] 有 YAML frontmatter，且只用第二節列出的標準欄位
 - [ ] `description` 同時說明 What 和 When
 - [ ] `description` 用英文撰寫
+- [ ] 若有 `manifest.yaml`，欄位符合本文件列出的 schema，沒有未知 top-level key
+- [ ] required capability 都存在於 `agent/skills/capability_map.yaml`
+- [ ] `resources[].pinned` 使用真正 bool，不使用 `"yes"` / `"no"` 字串
+- [ ] `references/`、`assets/`、`scripts/` 內的檔案只依賴 skill bundle 內路徑，不假設會 fallback 到 cwd
 - [ ] 內文不含第五節列出的 Claude Code 專屬語法
 - [ ] 內文用祈使句
 - [ ] 內文 ≤ 500 行（超過就拆檔）
-- [ ] 本地驗證過會被正確觸發
+- [ ] 本地驗證過可透過 `/skill <name>` 正確啟用
 
 ---
 
@@ -405,7 +456,7 @@ Group findings by severity:
 如果你是 Claude Code、Codex、或其他 AI 助手，正在閱讀這份文件以協助修改本專案的 skills：
 
 1. **不要相信你的訓練資料中關於 Claude Code skill 格式的記憶**——本專案不是 Claude Code，許多 Claude Code 功能在這裡不會生效
-2. **以本文件第二、三、四節為唯一格式來源**
+2. **以本文件列出的標準 frontmatter、`manifest.yaml` 擴充、SKILL.md 內文寫法為格式來源**
 3. **第五節列出的所有東西都不要主動加進來**，即使它們在 Claude Code 文件中是合法的
 4. **若使用者要求加入第五節列出的非標準欄位**，請先指出本文件，並確認使用者是否真的要本專案 agent 開始實作這些行為（這是 runtime 工程，不是寫個 frontmatter 就會生效）
 5. **拿不準時，回頭讀一次第二節的標準格式**
