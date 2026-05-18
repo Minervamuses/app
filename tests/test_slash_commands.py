@@ -96,6 +96,19 @@ class _FakeSkillSession:
         self.deactivated = True
 
 
+class _ValidatingSkillSession(_FakeSkillSession):
+    def activate_skill(self, name, task_mode=None):
+        from agent.skills import load_skill_manifest
+
+        skill = next(skill for skill in self.loaded_skills if skill.name == name)
+        manifest = load_skill_manifest(skill.path.parent)
+        modes = manifest.get("task_modes")
+        valid_modes = {mode for mode in modes if isinstance(mode, str)}
+        if task_mode is not None and task_mode not in valid_modes:
+            raise ValueError(f"unknown task mode for skill: {task_mode}")
+        return super().activate_skill(name, task_mode)
+
+
 def _write_skill(tmp_path, name="paper-writing"):
     root = tmp_path / "skills" / name
     root.mkdir(parents=True)
@@ -269,6 +282,20 @@ def test_handle_skill_oneshot_activates_skill_with_mode(tmp_path):
     assert "skill -> paper-writing revision" in result.message
 
 
+def test_handle_skill_oneshot_bad_mode_raises_slash_command_error(tmp_path):
+    skill = _write_skill(tmp_path)
+    session = _ValidatingSkillSession([skill])
+    registry = build_default_registry()
+
+    with pytest.raises(SlashCommandError, match="failed to activate skill"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/skill paper-writing wrong-mode"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+
 def test_handle_skill_deactivates_with_none(tmp_path):
     skill = _write_skill(tmp_path)
     session = _FakeSkillSession([skill])
@@ -305,6 +332,29 @@ def test_handle_skill_interactive_selection_and_mode(monkeypatch, tmp_path):
 
     assert session.activated == [("paper-writing", "revision")]
     assert "skill -> paper-writing revision" in result.message
+
+
+def test_handle_skill_interactive_manifest_error_raises_slash_command_error(
+    monkeypatch,
+    tmp_path,
+):
+    skill = _write_skill(tmp_path)
+    (skill.path.parent / "manifest.yaml").write_text("task_modes: [", encoding="utf-8")
+    session = _FakeSkillSession([skill])
+    registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return "1"
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    with pytest.raises(SlashCommandError, match="failed to activate skill"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/skill"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
 
 
 def test_handle_skill_interactive_deactivate(monkeypatch, tmp_path):

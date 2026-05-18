@@ -6,6 +6,8 @@ from pathlib import Path
 import shlex
 from typing import Awaitable, Callable
 
+import yaml
+
 from agent.paths import find_app_root
 from agent.skills import SkillMetadata, discover_skills, load_skill_manifest
 from rag import ingest_repo, ingest_single, list_diff, prune_orphans
@@ -13,6 +15,9 @@ from rag import ingest_repo, ingest_single, list_diff, prune_orphans
 
 class SlashCommandError(ValueError):
     """Raised when CLI slash command input is invalid."""
+
+
+_SKILL_USER_ERRORS = (KeyError, ValueError, OSError, yaml.YAMLError)
 
 
 @dataclass(frozen=True)
@@ -371,6 +376,10 @@ def _task_modes_for_skill(skill: SkillMetadata) -> list[str]:
     return [mode for mode in modes if isinstance(mode, str)]
 
 
+def _skill_command_error(exc: Exception) -> SlashCommandError:
+    return SlashCommandError(f"failed to activate skill: {exc}")
+
+
 def _render_skill_mode_prompt(skill_name: str, modes: list[str]) -> str:
     lines = [f"Task mode for {skill_name}:", "Available modes:"]
     lines.append("  [0] none  - no task mode")
@@ -429,7 +438,10 @@ async def _handle_skill(
     elif parsed.args:
         task_mode = None
     else:
-        modes = _task_modes_for_skill(skill)
+        try:
+            modes = _task_modes_for_skill(skill)
+        except _SKILL_USER_ERRORS as exc:
+            raise _skill_command_error(exc) from exc
         if modes:
             raw = await asyncio.to_thread(
                 input,
@@ -439,7 +451,10 @@ async def _handle_skill(
         else:
             task_mode = None
 
-    runtime = session.activate_skill(skill.name, task_mode)
+    try:
+        runtime = session.activate_skill(skill.name, task_mode)
+    except _SKILL_USER_ERRORS as exc:
+        raise _skill_command_error(exc) from exc
     suffix = f" {runtime.task_mode}" if runtime.task_mode else ""
     return SlashCommandResult(message=f"skill -> {runtime.name}{suffix}")
 
