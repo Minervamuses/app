@@ -30,6 +30,7 @@ TOOL_DESCRIPTION = (
 
 MAX_BYTES = 1_048_576
 SKILL_RESOURCE_DIRS = frozenset({"references", "assets", "scripts"})
+SENSITIVE_BASENAME_PREFIXES = ("credentials", "token", "secret", "secrets")
 
 
 def _error(message: str) -> str:
@@ -42,6 +43,19 @@ def _is_skill_resource_path(path: Path) -> bool:
 
 def _would_escape_skill_root(path: Path, root: Path) -> bool:
     return not (root / path).resolve().is_relative_to(root)
+
+
+def _is_sensitive_path(path: Path) -> bool:
+    parts = {part.casefold() for part in path.parts}
+    if ".ssh" in parts:
+        return True
+
+    name = path.name.casefold()
+    if name == ".env" or name.startswith(".env."):
+        return True
+    if name == "id_rsa" or name.startswith("id_rsa."):
+        return True
+    return any(name.startswith(prefix) for prefix in SENSITIVE_BASENAME_PREFIXES)
 
 
 def _read_file(path: str, skill_root: str | None = None) -> str:
@@ -58,6 +72,9 @@ def _read_file(path: str, skill_root: str | None = None) -> str:
 
 
 def _read_resolved_file(resolved: Path) -> str:
+
+    if _is_sensitive_path(resolved):
+        return _error("path blocked by sensitive denylist")
 
     if not resolved.exists():
         return _error(f"path does not exist: {resolved}")

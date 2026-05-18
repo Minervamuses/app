@@ -80,6 +80,68 @@ def test_read_file_directory_path_returns_error(tmp_path):
     assert "not a regular file" in payload["error"]
 
 
+def test_read_file_blocks_env_file_without_leaking_path(tmp_path):
+    target = tmp_path / ".env"
+    target.write_text("SECRET=value", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    payload = json.loads(tool.invoke({"path": str(target)}))
+
+    assert payload == {"error": "path blocked by sensitive denylist"}
+    assert str(target) not in payload["error"]
+
+
+def test_read_file_blocks_ssh_config_without_leaking_path(tmp_path):
+    target = tmp_path / ".ssh" / "config"
+    target.parent.mkdir()
+    target.write_text("Host example", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    payload = json.loads(tool.invoke({"path": str(target)}))
+
+    assert payload == {"error": "path blocked by sensitive denylist"}
+    assert str(target) not in payload["error"]
+
+
+def test_read_file_does_not_block_token_documentation_by_substring(tmp_path):
+    target = tmp_path / "access_token_design.md"
+    target.write_text("doc", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    payload = json.loads(tool.invoke({"path": str(target)}))
+
+    assert payload["content"] == "doc"
+
+
+def test_read_file_blocks_sensitive_skill_resource_path(tmp_path):
+    skill_root = tmp_path / "skills" / "paper"
+    refs = skill_root / "references"
+    refs.mkdir(parents=True)
+    target = refs / ".env"
+    target.write_text("SECRET=value", encoding="utf-8")
+
+    tool = _make_tool(tmp_path)
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_file",
+                "args": {"path": "references/.env"},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+    result = _invoke_tool_node(tool, {
+        "messages": [ai_message],
+        "skill_root": str(skill_root),
+    })
+    payload = json.loads(result["messages"][-1].content)
+
+    assert payload == {"error": "path blocked by sensitive denylist"}
+
+
 def test_read_file_resolves_relative_path_against_active_skill_root(tmp_path):
     skill_root = tmp_path / "skills" / "paper"
     refs = skill_root / "references"
