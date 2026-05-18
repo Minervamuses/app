@@ -77,6 +77,15 @@ def test_validate_skill_output_allows_percentage_with_citation_marker():
     assert violations == []
 
 
+def test_validate_skill_output_skips_unregistered_skill():
+    violations = validate_skill_output(
+        active_skill="other-skill",
+        text="The intervention improved retention by 42%.",
+    )
+
+    assert violations == []
+
+
 def test_skill_validator_retries_once_then_accepts_clean_revision(monkeypatch, tmp_path):
     model = _SequencedModel([
         "The intervention improved retention by 42%.",
