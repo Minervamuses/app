@@ -33,6 +33,12 @@ Skill 採用**漸進式揭露（progressive disclosure）**：
 
 這個機制讓我們可以維持可預期的手動啟用路徑，避免 agent 自行掃描、判斷或自動啟用 skills。
 
+### Internal helper skill：`_prompt-master`
+
+`skills/_prompt-master/` 是 `/thinking extended` controller 使用的內部 helper。它一次性 vendor 自 `nidhinjs/prompt-master`，controller 只直接讀取 `SKILL.md` 作為 prompt rewrite 的 system context，不透過 skill loader 自動啟用，也不會改變使用者當前 active skill。
+
+如果使用者手動執行 `/skill _prompt-master`，它仍會走一般 skill runtime，並套用自己的 `manifest.yaml` tool policy。這個資料夾名稱前面的 `_` 是內部 helper 例外；一般新增給使用者選用的 skill 仍應使用 kebab-case。
+
 ---
 
 ## 二、標準格式
@@ -54,6 +60,7 @@ skills/
 - 資料夾名稱使用 **kebab-case**（小寫字母、數字、連字號）
 - 長度上限 64 字元
 - 必須叫 `SKILL.md`（大小寫敏感）。`skill.md`、`Skill.md`、`README.md` 都不會被識別
+- 只有 internal helper 可以使用 `_` 前綴，例如 `skills/_prompt-master/`
 
 ### SKILL.md 結構
 
@@ -221,6 +228,20 @@ description: ...
 - 情況 A：怎麼處理
 - 情況 B：怎麼處理
 ```
+
+### Extended Thinking 與 Skills
+
+`/thinking extended` 不會自動啟用任何使用者 skill。它保留目前 active skill 的 context 與 tool policy，另外用 `_prompt-master` helper 把使用者輸入重寫成較清楚的 agent prompt。
+
+啟用 `/thinking extended` 前，必須直接在 `agent/config.py` 的 `AgentConfig` 填入三個角色 model 欄位：
+
+```python
+thinking_reviewer_model: str = "openai/gpt-5.2"
+thinking_rewrite_model: str = "anthropic/claude-haiku-5"
+thinking_repair_model: str = "meta-llama/llama-3.1-8b-instruct"
+```
+
+這些欄位預設是空字串；任一未填時，`/thinking extended` 會拒絕切換。這是刻意設計，避免 Extended mode 靜默退回 `llm_model` 造成同 model 自審。第一版不從 `.env` 或 CLI 參數讀取這三個欄位；`.env` 只保留 `OPENROUTER_API_KEY` 這類 secret。
 
 ### 漸進式揭露（檔案拆分）
 
