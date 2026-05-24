@@ -78,3 +78,39 @@ def test_eval_cli_passes_extra_tools_and_saves_metadata(monkeypatch, tmp_path):
     assert len(result_files) == 1
     payload = json.loads(result_files[0].read_text(encoding="utf-8"))
     assert payload["metadata"] == {"available_tools": ["web_fetch"]}
+
+
+def test_eval_cli_runs_thinking_suite(monkeypatch, tmp_path):
+    class FakeThinkingReviewerEvaluator:
+        def __init__(self, _config):
+            pass
+
+        def generate(self, n=0, output_path=None):
+            return [{"id": "thinking-case"}]
+
+        def evaluate(self, cases):
+            return EvalResult(
+                name="ThinkingReviewer",
+                total=len(cases),
+                scores={"reviewer_detection_accuracy": 1.0},
+                details=[],
+                metadata={"cases": len(cases)},
+            )
+
+    monkeypatch.setattr(
+        eval_cli,
+        "ThinkingReviewerEvaluator",
+        FakeThinkingReviewerEvaluator,
+    )
+
+    result = eval_cli._run_suite(
+        suite="thinking",
+        config=AgentConfig(persist_dir=str(tmp_path)),
+        generate_n=None,
+        cases_path=None,
+        output_dir=str(tmp_path),
+        extra_tools=[],
+    )
+
+    assert result.name == "ThinkingReviewer"
+    assert result.metadata == {"cases": 1}

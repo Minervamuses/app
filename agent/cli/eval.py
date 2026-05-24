@@ -3,6 +3,7 @@
 Usage:
     python -m agent.cli.eval --suite behavior
     python -m agent.cli.eval --suite e2e --generate 15
+    python -m agent.cli.eval --suite thinking
     python -m agent.cli.eval --all --generate 5
     python -m agent.cli.eval --suite e2e --cases eval/e2e_cases.json
     python -m agent.cli.eval --all --generate 5 --output eval/
@@ -21,9 +22,10 @@ from agent.config import AgentConfig
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
 from agent.evaluation.endtoend import EndToEndEvaluator
+from agent.evaluation.thinking import ThinkingReviewerEvaluator
 from agent.mcp import load_mcp_tools
 
-SUITE_NAMES = ("behavior", "e2e")
+SUITE_NAMES = ("behavior", "e2e", "thinking")
 _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
@@ -42,6 +44,8 @@ def _run_suite(
         evaluator = BehaviorEvaluator(config, extra_tools=extra_tools)
     elif suite == "e2e":
         evaluator = EndToEndEvaluator(config, extra_tools=extra_tools)
+    elif suite == "thinking":
+        evaluator = ThinkingReviewerEvaluator(config)
     else:
         raise ValueError(f"Unknown suite: {suite}")
 
@@ -58,8 +62,8 @@ def _run_suite(
             save_path = str(Path(output_dir) / f"{suite}_cases_{timestamp}.json")
         cases = evaluator.generate(n=generate_n, output_path=save_path)
         print(f"[{suite}] Generated {len(cases)} cases" + (f" → {save_path}" if save_path else ""))
-    elif suite == "behavior":
-        # Behavior has built-in cases
+    elif suite in {"behavior", "thinking"}:
+        # Behavior and thinking reviewer suites have built-in cases.
         cases = evaluator.generate()
         print(f"[{suite}] Using {len(cases)} built-in cases")
     else:
