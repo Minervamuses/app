@@ -121,6 +121,12 @@ def test_route_review_report_blocks_reviser_for_blocker():
     assert route_review_report(report, attempts=0) == "ask_user"
 
 
+def test_route_review_report_blocker_overrides_pass_decision():
+    report = _report(_finding(severity="blocker"), decision="pass")
+
+    assert route_review_report(report, attempts=0) == "ask_user"
+
+
 def test_append_assumption_note_only_for_assumption_route():
     spec = _task_spec(
         decision="proceed_with_assumptions",

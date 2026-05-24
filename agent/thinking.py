@@ -99,14 +99,14 @@ def route_review_report(
     max_attempts: int = MAX_REVIEW_ATTEMPTS,
 ) -> ReviewRoute:
     """Route review findings with blocker/user-input checks before revision."""
-    if report.decision == "pass":
-        return "pass"
     if any(finding.needs_user_input for finding in report.findings):
         return "ask_user"
     if report.decision == "block" or any(
         finding.severity == "blocker" for finding in report.findings
     ):
         return "ask_user"
+    if report.decision == "pass":
+        return "pass"
     if attempts >= max_attempts:
         return "stop"
     if any(finding.severity == "major" for finding in report.findings):
