@@ -3,45 +3,43 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field, ValidationError
 
 
-TaskDecision = Literal["proceed", "proceed_with_assumptions", "need_clarification", "block"]
 ReviewSeverity = Literal["blocker", "major", "minor", "note"]
 ReviewDecision = Literal["pass", "revise", "block"]
-TaskRoute = Literal["write", "clarify", "block"]
 ReviewRoute = Literal["pass", "revise", "ask_user", "stop"]
 
 MAX_REVIEW_ATTEMPTS = 2
+REVISER_FORMAT_WARNING = (
+    "（注意：本次回應的 reviser 輸出格式異常，可能混入內部審稿討論，請斟酌使用。）"
+)
+
+logger = logging.getLogger(__name__)
 
 
 class ThinkingOutputError(ValueError):
     """Raised when an extended-thinking LLM step returns invalid structured output."""
 
 
-class TaskSpec(BaseModel):
-    task: str
-    task_type: str
-    target_output: str
+class Clarify(BaseModel):
+    """Prompt rewrite result asking the user for missing information."""
 
-    confidence: Literal["high", "medium", "low"]
-    decision: TaskDecision
+    text: str
 
-    known_from_user: list[str]
-    known_from_context: list[str]
-    allowed_assumptions: list[str]
-    forbidden_assumptions: list[str]
-    missing_info: list[str]
 
-    constraints: list[str]
-    success_criteria: list[str]
+class Rewrite(BaseModel):
+    """Prompt rewrite result containing a clarified agent prompt."""
 
-    writer_instruction: str
-    reviewer_instruction: str
+    prompt: str
+
+
+RewriteResult = Clarify | Rewrite
 
 
 class ReviewFinding(BaseModel):
@@ -60,10 +58,24 @@ class ReviewReport(BaseModel):
     summary_for_reviser: str
 
 
+class RevisedDraft(BaseModel):
+    draft: str
+    rebuttal: str = ""
+    format_warning: str = ""
+
+
 _JSON_FENCE_RE = re.compile(
     r"^\s*```(?:json)?\s*(?P<body>.*?)\s*```\s*$",
     re.IGNORECASE | re.DOTALL,
 )
+_SECTION_MARKER_RE = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?(DRAFT|REBUTTAL)[ \t]*:"
+    r"(?:\*\*)?[ \t]*(.*)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_CLARIFY_SENTINEL = "<<CLARIFY>>"
+_TRUNCATED = "... [truncated]"
+_OLDER_EVIDENCE_TRUNCATED = "... [older evidence truncated]"
 _T = TypeVar("_T", bound=BaseModel)
 
 
@@ -83,13 +95,34 @@ def parse_structured_output(model_type: type[_T], text: str) -> _T:
         raise ThinkingOutputError(f"invalid {model_type.__name__}: {exc}") from exc
 
 
-def route_task_spec(spec: TaskSpec) -> TaskRoute:
-    """Route the compiler decision without forcing an unsafe executable task."""
-    if spec.decision in {"proceed", "proceed_with_assumptions"}:
-        return "write"
-    if spec.decision == "need_clarification":
-        return "clarify"
-    return "block"
+def trim_tail(text: str, max_chars: int) -> str:
+    """Head-truncate text while preserving its tail."""
+    if not text:
+        return ""
+    if max_chars <= 0:
+        return _TRUNCATED
+    if len(text) <= max_chars:
+        return text
+    marker = f"{_TRUNCATED}\n"
+    keep = max(max_chars - len(marker), 0)
+    if keep <= 0:
+        return _TRUNCATED
+    return marker + text[-keep:]
+
+
+def trim_head(text: str, max_chars: int) -> str:
+    """Tail-truncate text while preserving its head."""
+    if not text:
+        return ""
+    if max_chars <= 0:
+        return _TRUNCATED
+    if len(text) <= max_chars:
+        return text
+    marker = f"\n{_TRUNCATED}"
+    keep = max(max_chars - len(marker), 0)
+    if keep <= 0:
+        return _TRUNCATED
+    return text[:keep] + marker
 
 
 def route_review_report(
@@ -114,19 +147,6 @@ def route_review_report(
     return "pass"
 
 
-def render_task_spec_stop_message(spec: TaskSpec) -> str:
-    """Render the compiler clarification/block response."""
-    if spec.decision == "need_clarification":
-        heading = "需要補充資訊才能安全完成："
-    else:
-        heading = "目前不能安全完成這個任務："
-    missing = spec.missing_info or spec.forbidden_assumptions or spec.constraints
-    if not missing:
-        return heading
-    bullets = "\n".join(f"- {item}" for item in missing)
-    return f"{heading}\n{bullets}"
-
-
 def render_review_stop_message(report: ReviewReport) -> str:
     """Render a user-facing stop message for blocker or missing-input findings."""
     findings = [
@@ -141,83 +161,114 @@ def render_review_stop_message(report: ReviewReport) -> str:
     return "\n".join(lines)
 
 
-def append_assumption_note(answer: str, spec: TaskSpec) -> str:
-    """Append a concise assumption note for proceed_with_assumptions."""
-    if spec.decision != "proceed_with_assumptions" or not spec.allowed_assumptions:
-        return answer
-    lines = ["", "採用的假設："]
-    lines.extend(f"- {item}" for item in spec.allowed_assumptions)
-    return answer.rstrip() + "\n".join(lines)
-
-
-def task_spec_messages(
+def render_route_message(
+    route: ReviewRoute,
+    draft: str,
+    report: ReviewReport,
     *,
+    format_warning: str = "",
+) -> str:
+    """Render the final user-visible message for a reviewer route."""
+    if route == "ask_user":
+        return render_review_stop_message(report)
+    if route == "stop":
+        answer = (
+            draft.rstrip()
+            + "\n\n仍需確認處：\n"
+            + (report.summary_for_reviser or "Reviewer 仍指出未完全修正的問題。")
+        )
+        return _prepend_warning(answer, format_warning)
+    return _prepend_warning(draft, format_warning)
+
+
+def rewrite_messages(
+    *,
+    skill_text: str,
     user_input: str,
     visible_context: str,
     skill_context: str,
 ) -> list:
-    """Build compiler messages for a structured TaskSpec JSON response."""
+    """Build prompt-master rewrite messages."""
+    wrapper = """
+
+[Internal extended-thinking wrapper]
+You are one step in an internal pipeline. The target tool is a LangGraph
+research agent with these tool families: rag_explore, rag_search,
+rag_get_context, recall_history, read_file, bash, MCP web_search, MCP github,
+and any currently active local skill.
+
+Rewrite the user's prompt as natural-language instructions for that agent.
+
+硬性禁令：你不得新增以下「原始輸入、visible context 與 active skill context」
+三者都未提供的內容：
+- citation, DOI, page number, quote
+- 數據、樣本數、dataset 名稱、統計結果
+- 研究方法細節、實驗條件、研究發現
+- 對使用者意圖的擴張詮釋
+
+If required facts are missing, do not fill them in. Ask the user instead.
+
+If you need more information:
+Return first line exactly <<CLARIFY>>, then list at most 3 clarification
+questions.
+
+If enough information is present:
+Return only the rewritten prompt. Do not add a prefix, explanation, or code
+fence.
+""".strip()
     return [
-        SystemMessage(content=(
-            "You compile the user's request into a strict TaskSpec JSON object. "
-            "Return only valid JSON matching the requested schema. Do not solve the task."
-        )),
+        SystemMessage(content=f"{skill_text.rstrip()}\n\n{wrapper}"),
         HumanMessage(content=(
-            "TaskSpec schema fields:\n"
-            "- task, task_type, target_output\n"
-            "- confidence: high|medium|low\n"
-            "- decision: proceed|proceed_with_assumptions|need_clarification|block\n"
-            "- known_from_user, known_from_context, allowed_assumptions, "
-            "forbidden_assumptions, missing_info, constraints, success_criteria\n"
-            "- writer_instruction, reviewer_instruction\n\n"
-            f"User input:\n{user_input}\n\n"
-            f"Visible context:\n{visible_context or '(none)'}\n\n"
-            f"Active skill context:\n{skill_context or '(none)'}"
+            f"Original user input:\n{user_input}\n\n"
+            "Visible context (recent turns, tail-truncated):\n"
+            f"{visible_context or '(none)'}\n\n"
+            "Active skill context (head-truncated):\n"
+            f"{skill_context or '(none)'}"
         )),
     ]
 
 
 def review_messages(
     *,
-    user_input: str,
-    task_spec: TaskSpec,
+    raw_user_input: str,
+    rewritten_prompt: str,
     draft: str,
     skill_context: str,
+    evidence_trace_summary: str,
+    previous_rebuttal: str,
 ) -> list:
     """Build reviewer messages for a structured ReviewReport JSON response."""
     return [
         SystemMessage(content=(
-            "You review the draft against the TaskSpec. Return only valid JSON "
-            "matching ReviewReport. Do not rewrite the draft."
+            "You are an independent reviewer for extended thinking mode. "
+            "Review the draft against the raw user input, rewritten prompt, "
+            "active skill context, evidence trace, and previous rebuttal. "
+            "Return only valid JSON matching ReviewReport. Do not rewrite the draft."
         )),
         HumanMessage(content=(
-            f"User input:\n{user_input}\n\n"
-            f"TaskSpec JSON:\n{task_spec.model_dump_json(indent=2)}\n\n"
+            "ReviewReport schema:\n"
+            "{\n"
+            '  "decision": "pass|revise|block",\n'
+            '  "findings": [\n'
+            "    {\n"
+            '      "severity": "blocker|major|minor|note",\n'
+            '      "dimension": "instruction following|background logic|method logic|'
+            'claim-evidence alignment|citation integrity|section coherence|other",\n'
+            '      "location": "where the issue appears",\n'
+            '      "problem": "what is wrong",\n'
+            '      "evidence_from_draft": "quote or paraphrase from the draft",\n'
+            '      "revision_instruction": "specific fix or user question",\n'
+            '      "needs_user_input": true\n'
+            "    }\n"
+            "  ],\n"
+            '  "summary_for_reviser": "concise actionable summary"\n'
+            "}\n\n"
+            f"Raw user input:\n{raw_user_input}\n\n"
+            f"Rewritten prompt:\n{rewritten_prompt}\n\n"
             f"Active skill context:\n{skill_context or '(none)'}\n\n"
+            f"Evidence trace summary:\n{evidence_trace_summary or '(none)'}\n\n"
+            f"Previous rebuttal:\n{previous_rebuttal or '(none)'}\n\n"
             f"Draft:\n{draft}"
-        )),
-    ]
-
-
-def reviser_messages(
-    *,
-    user_input: str,
-    task_spec: TaskSpec,
-    draft: str,
-    review_report: ReviewReport,
-) -> list:
-    """Build reviser messages constrained to safe major findings only."""
-    return [
-        SystemMessage(content=(
-            "Revise the draft only for major findings that do not require user input. "
-            "Do not add citations, data, methods, findings, or assumptions forbidden "
-            "by the TaskSpec. Return only the revised answer text."
-        )),
-        HumanMessage(content=(
-            f"User input:\n{user_input}\n\n"
-            f"TaskSpec JSON:\n{task_spec.model_dump_json(indent=2)}\n\n"
-            f"Original draft:\n{draft}\n\n"
-            f"ReviewReport JSON:\n{review_report.model_dump_json(indent=2)}"
         )),
     ]
 
@@ -227,65 +278,275 @@ def invoke_text(model, messages: list) -> str:
     response = model.invoke(messages)
     content = getattr(response, "content", response)
     if isinstance(content, list):
-        return "\n".join(str(part) for part in content)
+        return "\n".join(_content_part_to_text(part) for part in content)
     return str(content or "").strip()
 
 
-def compile_task_spec(
+def rewrite_prompt(
     model,
     *,
+    skill_text: str,
     user_input: str,
     visible_context: str = "",
     skill_context: str = "",
-) -> TaskSpec:
-    """Run the compiler LLM step and parse a TaskSpec."""
+) -> RewriteResult:
+    """Run prompt-master rewrite and parse clarify vs rewritten prompt."""
     text = invoke_text(
         model,
-        task_spec_messages(
+        rewrite_messages(
+            skill_text=skill_text,
             user_input=user_input,
             visible_context=visible_context,
             skill_context=skill_context,
         ),
     )
-    return parse_structured_output(TaskSpec, text)
+    stripped = text.lstrip()
+    if stripped.startswith(_CLARIFY_SENTINEL):
+        return Clarify(text=stripped[len(_CLARIFY_SENTINEL):].strip())
+    return Rewrite(prompt=text.strip())
 
 
 def review_draft(
     model,
     *,
-    user_input: str,
-    task_spec: TaskSpec,
+    raw_user_input: str,
+    rewritten_prompt: str,
     draft: str,
     skill_context: str = "",
+    evidence_trace_summary: str = "",
+    previous_rebuttal: str = "",
 ) -> ReviewReport:
     """Run the reviewer LLM step and parse a ReviewReport."""
     text = invoke_text(
         model,
         review_messages(
-            user_input=user_input,
-            task_spec=task_spec,
+            raw_user_input=raw_user_input,
+            rewritten_prompt=rewritten_prompt,
             draft=draft,
             skill_context=skill_context,
+            evidence_trace_summary=evidence_trace_summary,
+            previous_rebuttal=previous_rebuttal,
         ),
     )
     return parse_structured_output(ReviewReport, text)
 
 
-def revise_draft(
-    model,
+def summarize_tool_trace(
+    tool_calls: list[dict],
+    new_messages: list,
     *,
-    user_input: str,
-    task_spec: TaskSpec,
-    draft: str,
-    review_report: ReviewReport,
+    source_label: str,
+    per_result_chars: int = 500,
 ) -> str:
-    """Run the reviser LLM step."""
-    return invoke_text(
-        model,
-        reviser_messages(
-            user_input=user_input,
-            task_spec=task_spec,
-            draft=draft,
-            review_report=review_report,
-        ),
+    """Summarize graph tool calls and matching ToolMessage result excerpts."""
+    lines = [f"=== {source_label} ==="]
+    if not tool_calls:
+        lines.append("Tool calls: none")
+        return "\n".join(lines)
+
+    tool_messages = _tool_messages_by_call_id(new_messages)
+    seen: set[tuple[str, str, str]] = set()
+    for call in tool_calls:
+        name = str(call.get("name", "unknown"))
+        args_text = json.dumps(call.get("args", {}), ensure_ascii=False, sort_keys=True)
+        result_text = _tool_result_text(tool_messages.get(str(call.get("id")), []))
+        result_excerpt = trim_head(result_text, per_result_chars) if result_text else "(no result)"
+        key = (name, args_text, result_excerpt)
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.extend([
+            f"- tool: {name}",
+            f"  args: {args_text}",
+            "  result_excerpt: |",
+            *_indent_block(result_excerpt, "    "),
+        ])
+    return "\n".join(lines)
+
+
+def append_tool_trace(
+    existing: str,
+    tool_calls: list[dict],
+    new_messages: list,
+    *,
+    source_label: str,
+    per_result_chars: int = 500,
+    total_chars_cap: int = 4000,
+) -> str:
+    """Append one trace segment and keep the newest evidence within a char cap."""
+    new_segment = summarize_tool_trace(
+        tool_calls,
+        new_messages,
+        source_label=source_label,
+        per_result_chars=per_result_chars,
     )
+    combined = "\n\n".join(part for part in (existing.strip(), new_segment.strip()) if part)
+    if total_chars_cap <= 0 or len(combined) <= total_chars_cap:
+        return combined
+    marker = f"{_OLDER_EVIDENCE_TRUNCATED}\n"
+    keep = max(total_chars_cap - len(marker), 0)
+    if keep <= 0:
+        return _OLDER_EVIDENCE_TRUNCATED
+    return marker + combined[-keep:]
+
+
+def parse_reviser_output(text: str, *, repair_model=None) -> RevisedDraft:
+    """Parse DRAFT/REBUTTAL output with repair and conservative fallbacks."""
+    parsed = _parse_marked_reviser_output(text)
+    if parsed is not None:
+        return parsed
+
+    if repair_model is not None:
+        try:
+            repaired = invoke_text(
+                repair_model,
+                [
+                    SystemMessage(content=(
+                        "Split the following text strictly into two sections marked "
+                        "DRAFT: and REBUTTAL:. Preserve the user's visible draft content. "
+                        "Move internal disagreement or reviewer discussion into REBUTTAL. "
+                        "Return only the two marked sections."
+                    )),
+                    HumanMessage(content=text),
+                ],
+            )
+            parsed = _parse_marked_reviser_output(repaired)
+            if parsed is not None:
+                return parsed
+            logger.warning("reviser output marker repair failed")
+        except Exception as exc:  # pragma: no cover - logging-only safety path
+            logger.warning("reviser output marker repair raised: %s", exc)
+
+    stripped = _heuristic_strip_tail(text)
+    if stripped is not None:
+        return stripped
+
+    logger.error("reviser output marker parsing failed; using whole text as draft")
+    return RevisedDraft(
+        draft=text.strip(),
+        rebuttal="",
+        format_warning=REVISER_FORMAT_WARNING,
+    )
+
+
+def extract_draft_for_user(text: str) -> str:
+    """Return the DRAFT section when markers exist, otherwise the whole text."""
+    parsed = _parse_marked_reviser_output(text)
+    if parsed is None:
+        return text.strip()
+    return parsed.draft
+
+
+def _parse_marked_reviser_output(text: str) -> RevisedDraft | None:
+    matches = list(_SECTION_MARKER_RE.finditer(text))
+    draft_match = next(
+        (match for match in matches if match.group(1).casefold() == "draft"),
+        None,
+    )
+    if draft_match is None:
+        return None
+
+    rebuttal_match = next(
+        (
+            match
+            for match in matches
+            if match.start() > draft_match.start()
+            and match.group(1).casefold() == "rebuttal"
+        ),
+        None,
+    )
+    draft_end = rebuttal_match.start() if rebuttal_match else len(text)
+    draft = _section_text(text, draft_match, draft_end).strip()
+    if not draft:
+        return None
+    if rebuttal_match is None:
+        return RevisedDraft(draft=draft, rebuttal="")
+    rebuttal = _section_text(text, rebuttal_match, len(text)).strip()
+    return RevisedDraft(draft=draft, rebuttal=rebuttal)
+
+
+def _section_text(text: str, match: re.Match[str], end: int) -> str:
+    inline = match.group(2).strip()
+    body = text[match.end():end].lstrip("\r\n")
+    if inline and body:
+        return f"{inline}\n{body}"
+    return inline or body
+
+
+def _heuristic_strip_tail(text: str) -> RevisedDraft | None:
+    raw = text.strip()
+    if not raw:
+        return RevisedDraft(draft="", rebuttal="", format_warning=REVISER_FORMAT_WARNING)
+    paragraphs = [
+        part.strip()
+        for part in re.split(r"\n\s*\n|(?=^#{1,6}\s+)", raw, flags=re.MULTILINE)
+        if part.strip()
+    ]
+    if len(paragraphs) <= 1:
+        return None
+
+    internal_keywords = (
+        "REBUTTAL",
+        "rebuttal",
+        "駁斥",
+        "我不同意",
+        "I disagree",
+        "Reviewer feedback",
+        "Internal note",
+        "(none)",
+    )
+    stripped_parts: list[str] = []
+    while paragraphs and any(keyword in paragraphs[-1] for keyword in internal_keywords):
+        stripped_parts.insert(0, paragraphs.pop())
+    if not stripped_parts:
+        return None
+
+    draft = "\n\n".join(paragraphs).strip()
+    rebuttal = "\n\n".join(stripped_parts).strip()
+    stripped_chars = len(rebuttal)
+    if not draft or stripped_chars > len(raw) * 0.5:
+        logger.error("reviser heuristic fallback stripped too much internal text")
+        return None
+    return RevisedDraft(draft=draft, rebuttal=rebuttal)
+
+
+def _tool_messages_by_call_id(new_messages: list) -> dict[str, list[ToolMessage]]:
+    tool_messages: dict[str, list[ToolMessage]] = {}
+    for message in new_messages:
+        if not isinstance(message, ToolMessage):
+            continue
+        call_id = getattr(message, "tool_call_id", None)
+        if call_id:
+            tool_messages.setdefault(str(call_id), []).append(message)
+    return tool_messages
+
+
+def _tool_result_text(messages: list[ToolMessage]) -> str:
+    return "\n".join(
+        _message_content_to_text(getattr(message, "content", ""))
+        for message in messages
+    ).strip()
+
+
+def _message_content_to_text(content: Any) -> str:
+    if isinstance(content, list):
+        return "\n".join(_content_part_to_text(part) for part in content)
+    return str(content or "")
+
+
+def _content_part_to_text(part: Any) -> str:
+    if isinstance(part, dict):
+        text = part.get("text")
+        if text is not None:
+            return str(text)
+    return str(part)
+
+
+def _indent_block(text: str, prefix: str) -> list[str]:
+    return [f"{prefix}{line}" for line in text.splitlines() or [""]]
+
+
+def _prepend_warning(answer: str, warning: str) -> str:
+    if not warning:
+        return answer
+    return f"{warning}\n\n{answer}"

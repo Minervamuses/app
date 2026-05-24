@@ -17,7 +17,12 @@ from agent.history import (
     format_tool_counts,
 )
 from agent.history_rag import ChatHistoryStore, get_chat_history_store
-from agent.llm.openrouter import get_chat_model
+from agent.llm.thinking import (
+    ExtendedModeNotConfigured,
+    ThinkingRole,
+    get_chat_model_for_role,
+    require_thinking_models,
+)
 from agent.skills import (
     SkillRuntime,
     discover_skills,
@@ -25,16 +30,18 @@ from agent.skills import (
 )
 from agent.skills.validator import validate_skill_output
 from agent.thinking import (
-    MAX_REVIEW_ATTEMPTS,
+    Clarify,
     ThinkingOutputError,
-    append_assumption_note,
-    compile_task_spec,
-    render_review_stop_message,
-    render_task_spec_stop_message,
+    append_tool_trace,
+    extract_draft_for_user,
+    parse_reviser_output,
+    render_route_message,
     review_draft,
-    revise_draft,
     route_review_report,
-    route_task_spec,
+    rewrite_prompt,
+    summarize_tool_trace,
+    trim_head,
+    trim_tail,
 )
 from agent.memory import (
     TurnRecord,
@@ -116,6 +123,22 @@ Workflow:
 
 DEFAULT_RECURSION_LIMIT = 32
 
+_REVISER_INSTRUCTION = """你可以對每一個 reviewer finding 做以下其中之一：
+(a) 修改 draft 以處理該 finding；
+(b) 駁斥該 finding 並在 REBUTTAL 段說明你不同意的理由。
+
+硬性禁令：
+- 不要新增無法佐證的 citation / DOI / 數據 / 樣本數 / 方法細節 / 研究發現。
+- 不要新增原始 user input 與可見 context 未提供的事實。
+
+回應格式必須嚴格使用兩個區段標記：
+
+DRAFT:
+<新版 draft 全文。這段會被回給使用者，所以保持乾淨、不要包含內部審稿討論。>
+
+REBUTTAL:
+<對 reviewer findings 的反對說明；若無，寫 (none)。這段只給下輪 Reviewer 看，不會回給使用者。>"""
+
 
 @dataclass(frozen=True)
 class _ToolRef:
@@ -167,7 +190,8 @@ class ChatSession:
             history_store=self.history_store,
             skill_runtime_getter=lambda: self.active_skill_runtime,
         )
-        self._thinking_model = None
+        self._thinking_role_models: dict[str, object] = {}
+        self._prompt_master_skill_text_cache: str | None = None
 
         self.turn_logs: list[dict] = []
         self.last_tool_calls: list[dict] = []
@@ -413,24 +437,58 @@ class ChatSession:
             ])
         return "\n".join(lines).strip()
 
-    def _get_thinking_model(self):
-        if self._thinking_model is None:
-            self._thinking_model = get_chat_model(self.config)
-        return self._thinking_model
+    def _get_thinking_role_model(self, role: ThinkingRole):
+        if role not in self._thinking_role_models:
+            self._thinking_role_models[role] = get_chat_model_for_role(
+                self.config,
+                role=role,
+            )
+        return self._thinking_role_models[role]
 
-    def _task_spec_hint(self, task_spec) -> SystemMessage:
-        return SystemMessage(content=(
-            "[Extended thinking TaskSpec]\n"
-            "Use this TaskSpec as a supplemental constraint. It does not replace "
-            "the raw user input or visible context.\n\n"
-            f"{task_spec.model_dump_json(indent=2)}\n\n"
-            f"Writer instruction:\n{task_spec.writer_instruction}\n\n"
-            "Do not self-review. Produce the best draft answer under these constraints."
-        ))
+    def _prompt_master_skill_text(self) -> str:
+        if self._prompt_master_skill_text_cache is None:
+            path = find_app_root() / "skills" / "_prompt-master" / "SKILL.md"
+            self._prompt_master_skill_text_cache = path.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+        return self._prompt_master_skill_text_cache
+
+    def _rewrite_hints(
+        self,
+        *,
+        raw_user_input: str,
+        rewritten_prompt: str,
+    ) -> list[SystemMessage]:
+        return [
+            SystemMessage(content=f"[Original user input]\n{raw_user_input}"),
+            SystemMessage(content=f"[Rewritten by prompt-master]\n{rewritten_prompt}"),
+        ]
+
+    def _reviser_hints(
+        self,
+        *,
+        raw_user_input: str,
+        rewritten_prompt: str,
+        draft: str,
+        report,
+    ) -> list[SystemMessage]:
+        return [
+            *self._rewrite_hints(
+                raw_user_input=raw_user_input,
+                rewritten_prompt=rewritten_prompt,
+            ),
+            SystemMessage(content=f"[Previous draft]\n{draft}"),
+            SystemMessage(content=(
+                "[Reviewer feedback]\n"
+                f"{report.model_dump_json(indent=2)}"
+            )),
+            SystemMessage(content=f"[Reviser instruction]\n{_REVISER_INSTRUCTION}"),
+        ]
 
     def _extended_error_message(self, exc: Exception) -> str:
         return (
-            "Extended mode 無法解析結構化輸出，已停止以避免不安全改寫。\n"
+            "Extended mode 無法安全完成本 turn，已停止以避免不安全改寫。\n"
             f"- {exc}"
         )
 
@@ -619,23 +677,20 @@ class ChatSession:
             extra_system_messages=[validation_hint],
         )
         return _GraphTurnResult(
-            answer=validation_result.answer,
+            answer=extract_draft_for_user(validation_result.answer),
             new_messages=[*new_messages, *validation_result.new_messages],
             tool_calls=[*tool_calls, *validation_result.tool_calls],
             trace_events=[*trace_events, *validation_result.trace_events],
         )
 
     async def _run_extended_turn(self, user_input: str) -> tuple[str, list[dict]]:
-        model = self._get_thinking_model()
-        skill_context = self._active_skill_context_block()
         try:
-            task_spec = compile_task_spec(
-                model,
-                user_input=user_input,
-                visible_context=self._visible_context_text(),
-                skill_context=skill_context,
-            )
-        except ThinkingOutputError as exc:
+            require_thinking_models(self.config)
+            rewrite_model = self._get_thinking_role_model("rewrite")
+            reviewer_model = self._get_thinking_role_model("reviewer")
+            repair_model = self._get_thinking_role_model("repair")
+            prompt_master_skill = self._prompt_master_skill_text()
+        except (ExtendedModeNotConfigured, RuntimeError, OSError) as exc:
             answer = self._extended_error_message(exc)
             await self._record_turn(
                 user_input=user_input,
@@ -646,9 +701,23 @@ class ChatSession:
             )
             return answer, []
 
-        task_route = route_task_spec(task_spec)
-        if task_route in {"clarify", "block"}:
-            answer = render_task_spec_stop_message(task_spec)
+        skill_context = self._active_skill_context_block()
+        try:
+            rewrite_result = rewrite_prompt(
+                rewrite_model,
+                skill_text=prompt_master_skill,
+                user_input=user_input,
+                visible_context=trim_tail(
+                    self._visible_context_text(),
+                    self.config.thinking_rewrite_visible_chars,
+                ),
+                skill_context=trim_head(
+                    skill_context,
+                    self.config.thinking_rewrite_skill_chars,
+                ),
+            )
+        except Exception as exc:
+            answer = self._extended_error_message(exc)
             await self._record_turn(
                 user_input=user_input,
                 answer=answer,
@@ -658,88 +727,110 @@ class ChatSession:
             )
             return answer, []
 
+        if isinstance(rewrite_result, Clarify):
+            answer = rewrite_result.text or "需要補充資訊才能安全完成這個任務。"
+            await self._record_turn(
+                user_input=user_input,
+                answer=answer,
+                new_messages=[],
+                tool_calls=[],
+                trace_events=[],
+            )
+            return answer, []
+
+        rewritten_prompt = rewrite_result.prompt
         writer_result = await self._run_graph_turn(
-            user_input,
-            extra_system_messages=[self._task_spec_hint(task_spec)],
+            rewritten_prompt,
+            extra_system_messages=self._rewrite_hints(
+                raw_user_input=user_input,
+                rewritten_prompt=rewritten_prompt,
+            ),
         )
         draft = writer_result.answer
-        current = writer_result
+        new_messages = list(writer_result.new_messages)
+        tool_calls = list(writer_result.tool_calls)
+        trace_events = list(writer_result.trace_events)
+        evidence_trace_summary = summarize_tool_trace(
+            writer_result.tool_calls,
+            writer_result.new_messages,
+            source_label="[Writer]",
+            per_result_chars=self.config.thinking_tool_trace_chars,
+        )
+        rebuttal_history: list[str] = []
+        format_warning = ""
         attempts = 0
+        final_route = None
 
         while True:
             try:
                 report = review_draft(
-                    model,
-                    user_input=user_input,
-                    task_spec=task_spec,
+                    reviewer_model,
+                    raw_user_input=user_input,
+                    rewritten_prompt=rewritten_prompt,
                     draft=draft,
                     skill_context=skill_context,
+                    evidence_trace_summary=evidence_trace_summary,
+                    previous_rebuttal=rebuttal_history[-1] if rebuttal_history else "",
                 )
             except ThinkingOutputError as exc:
                 answer = self._extended_error_message(exc)
-                current = _GraphTurnResult(
-                    answer=answer,
-                    new_messages=current.new_messages,
-                    tool_calls=current.tool_calls,
-                    trace_events=current.trace_events,
-                )
+                final_route = None
                 break
 
             review_route = route_review_report(report, attempts=attempts)
-            if review_route == "pass":
-                answer = append_assumption_note(draft, task_spec)
-                current = _GraphTurnResult(
-                    answer=answer,
-                    new_messages=current.new_messages,
-                    tool_calls=current.tool_calls,
-                    trace_events=current.trace_events,
-                )
-                break
-            if review_route == "ask_user":
-                answer = render_review_stop_message(report)
-                current = _GraphTurnResult(
-                    answer=answer,
-                    new_messages=current.new_messages,
-                    tool_calls=current.tool_calls,
-                    trace_events=current.trace_events,
-                )
-                break
-            if review_route == "stop":
-                answer = (
-                    draft.rstrip()
-                    + "\n\n仍需確認處：\n"
-                    + (report.summary_for_reviser or "Reviewer 仍指出未完全修正的問題。")
-                )
-                current = _GraphTurnResult(
-                    answer=answer,
-                    new_messages=current.new_messages,
-                    tool_calls=current.tool_calls,
-                    trace_events=current.trace_events,
+            if review_route in {"pass", "ask_user", "stop"}:
+                final_route = review_route
+                answer = render_route_message(
+                    review_route,
+                    draft,
+                    report,
+                    format_warning=format_warning,
                 )
                 break
 
-            draft = revise_draft(
-                model,
-                user_input=user_input,
-                task_spec=task_spec,
-                draft=draft,
-                review_report=report,
+            reviser_result = await self._run_graph_turn(
+                rewritten_prompt,
+                extra_system_messages=self._reviser_hints(
+                    raw_user_input=user_input,
+                    rewritten_prompt=rewritten_prompt,
+                    draft=draft,
+                    report=report,
+                ),
             )
+            parsed = parse_reviser_output(
+                reviser_result.answer,
+                repair_model=repair_model,
+            )
+            draft = parsed.draft
+            format_warning = format_warning or parsed.format_warning
+            evidence_trace_summary = append_tool_trace(
+                evidence_trace_summary,
+                reviser_result.tool_calls,
+                reviser_result.new_messages,
+                source_label=f"[Reviser round {attempts + 1}]",
+                per_result_chars=self.config.thinking_tool_trace_chars,
+                total_chars_cap=self.config.thinking_tool_trace_total_chars,
+            )
+            rebuttal_history.append(parsed.rebuttal)
             attempts += 1
-            current = _GraphTurnResult(
-                answer=draft,
+            new_messages.extend(reviser_result.new_messages)
+            tool_calls.extend(reviser_result.tool_calls)
+            trace_events.extend(reviser_result.trace_events)
+
+        current = _GraphTurnResult(
+            answer=answer,
+            new_messages=new_messages,
+            tool_calls=tool_calls,
+            trace_events=trace_events,
+        )
+        if final_route in {"pass", "stop"}:
+            current = await self._apply_final_skill_validation(
+                user_input=user_input,
+                answer=current.answer,
                 new_messages=current.new_messages,
                 tool_calls=current.tool_calls,
                 trace_events=current.trace_events,
             )
-
-        current = await self._apply_final_skill_validation(
-            user_input=user_input,
-            answer=current.answer,
-            new_messages=current.new_messages,
-            tool_calls=current.tool_calls,
-            trace_events=current.trace_events,
-        )
         await self._record_turn(
             user_input=user_input,
             answer=current.answer,

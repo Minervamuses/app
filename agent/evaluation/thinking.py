@@ -7,10 +7,9 @@ from pathlib import Path
 
 from agent.config import AgentConfig
 from agent.evaluation.base import BaseEvaluator, EvalResult
-from agent.llm.openrouter import get_chat_model
+from agent.llm.thinking import ExtendedModeNotConfigured, get_chat_model_for_role
 from agent.thinking import (
     ReviewReport,
-    TaskSpec,
     ThinkingOutputError,
     review_draft,
 )
@@ -29,7 +28,7 @@ class ThinkingReviewerEvaluator(BaseEvaluator):
 
     def __init__(self, config: AgentConfig | None = None, *, model=None):
         self.config = config or AgentConfig()
-        self.model = model or get_chat_model(self.config)
+        self.model = model or get_chat_model_for_role(self.config, role="reviewer")
 
     def generate(self, n: int = 0, output_path: str | None = None) -> list[dict]:
         """Return a small built-in reviewer eval set."""
@@ -38,7 +37,7 @@ class ThinkingReviewerEvaluator(BaseEvaluator):
                 "id": "major_claim_evidence_alignment",
                 "category": "major_issue_detection",
                 "user_input": "Revise this abstract without adding new study results.",
-                "task_spec": _base_task_spec(),
+                "rewritten_prompt": _base_rewritten_prompt(),
                 "draft": (
                     "This study definitively proves the intervention improves all "
                     "clinical outcomes, although the supplied notes only mention "
@@ -52,11 +51,11 @@ class ThinkingReviewerEvaluator(BaseEvaluator):
                 "id": "academic_integrity_missing_source",
                 "category": "academic_integrity",
                 "user_input": "Polish this paragraph for an academic paper.",
-                "task_spec": _base_task_spec(
-                    forbidden_assumptions=[
-                        "do not invent citations",
-                        "do not invent statistics",
-                    ],
+                "rewritten_prompt": _base_rewritten_prompt(
+                    extra_constraints=[
+                        "Do not invent citations.",
+                        "Do not invent statistics.",
+                    ]
                 ),
                 "draft": (
                     "Prior work shows a 72% improvement in adherence "
@@ -81,17 +80,18 @@ class ThinkingReviewerEvaluator(BaseEvaluator):
 
         for case in cases:
             try:
-                task_spec = TaskSpec.model_validate(case["task_spec"])
                 report = review_draft(
                     self.model,
-                    user_input=case["user_input"],
-                    task_spec=task_spec,
+                    raw_user_input=case["user_input"],
+                    rewritten_prompt=case["rewritten_prompt"],
                     draft=case["draft"],
                     skill_context=case.get("skill_context", ""),
+                    evidence_trace_summary=case.get("evidence_trace_summary", ""),
+                    previous_rebuttal=case.get("previous_rebuttal", ""),
                 )
                 scores = self._score_report(case, report)
                 error = None
-            except (KeyError, ValueError, ThinkingOutputError) as exc:
+            except (KeyError, ValueError, ExtendedModeNotConfigured, ThinkingOutputError) as exc:
                 report = None
                 scores = {
                     "severity_ok": False,
@@ -148,29 +148,18 @@ class ThinkingReviewerEvaluator(BaseEvaluator):
         }
 
 
-def _base_task_spec(**overrides) -> dict:
-    data = {
-        "task": "revise academic prose",
-        "task_type": "academic_revision",
-        "target_output": "revised academic text",
-        "confidence": "high",
-        "decision": "proceed",
-        "known_from_user": ["draft supplied"],
-        "known_from_context": [],
-        "allowed_assumptions": [],
-        "forbidden_assumptions": [
-            "do not invent citations",
-            "do not invent data",
-            "do not invent research findings",
-        ],
-        "missing_info": [],
-        "constraints": ["preserve evidence boundaries"],
-        "success_criteria": [
-            "claims align with supplied evidence",
-            "no fabricated scholarly content",
-        ],
-        "writer_instruction": "Revise without adding facts.",
-        "reviewer_instruction": "Check claim-evidence alignment and citation integrity.",
-    }
-    data.update(overrides)
-    return data
+def _base_rewritten_prompt(*, extra_constraints: list[str] | None = None) -> str:
+    constraints = [
+        "Preserve evidence boundaries.",
+        "Do not invent citations.",
+        "Do not invent data.",
+        "Do not invent research findings.",
+        *(extra_constraints or []),
+    ]
+    rendered = "\n".join(f"- {constraint}" for constraint in constraints)
+    return (
+        "Revise the supplied academic prose for clarity and style while preserving "
+        "the user's evidence boundaries.\n\n"
+        f"Constraints:\n{rendered}\n\n"
+        "Reviewer focus: claim-evidence alignment and citation integrity."
+    )

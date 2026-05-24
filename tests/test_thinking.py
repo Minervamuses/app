@@ -1,40 +1,39 @@
 """Tests for extended thinking workflow helpers."""
 
+import json
+
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from agent.thinking import (
+    REVISER_FORMAT_WARNING,
+    Clarify,
     ReviewFinding,
     ReviewReport,
-    TaskSpec,
+    Rewrite,
     ThinkingOutputError,
-    append_assumption_note,
-    compile_task_spec,
+    append_tool_trace,
+    extract_draft_for_user,
+    parse_reviser_output,
     parse_structured_output,
+    render_route_message,
+    review_draft,
+    rewrite_prompt,
     route_review_report,
-    route_task_spec,
+    summarize_tool_trace,
+    trim_head,
+    trim_tail,
 )
 
 
-def _task_spec(**overrides):
-    data = {
-        "task": "revise abstract",
-        "task_type": "academic_revision",
-        "target_output": "polished abstract",
-        "confidence": "high",
-        "decision": "proceed",
-        "known_from_user": ["draft supplied"],
-        "known_from_context": [],
-        "allowed_assumptions": [],
-        "forbidden_assumptions": ["do not add data"],
-        "missing_info": [],
-        "constraints": ["preserve evidence"],
-        "success_criteria": ["no fabricated citations"],
-        "writer_instruction": "Draft the answer.",
-        "reviewer_instruction": "Check claim-evidence alignment.",
-    }
-    data.update(overrides)
-    return TaskSpec.model_validate(data)
+class _QueuedModel:
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+        self.calls: list[list] = []
+
+    def invoke(self, messages):
+        self.calls.append(messages)
+        return AIMessage(content=self.outputs.pop(0))
 
 
 def _finding(**overrides):
@@ -59,36 +58,102 @@ def _report(*findings, decision="revise"):
     )
 
 
+def _report_json(decision="pass", findings=None, summary="ok"):
+    return json.dumps({
+        "decision": decision,
+        "findings": findings or [],
+        "summary_for_reviser": summary,
+    })
+
+
 def test_parse_structured_output_accepts_json_fence():
     parsed = parse_structured_output(
-        TaskSpec,
-        f"```json\n{_task_spec().model_dump_json()}\n```",
+        ReviewReport,
+        f"```json\n{_report(decision='pass').model_dump_json()}\n```",
     )
 
-    assert parsed.task == "revise abstract"
+    assert parsed.decision == "pass"
 
 
 def test_parse_structured_output_rejects_invalid_json():
     with pytest.raises(ThinkingOutputError, match="invalid JSON"):
-        parse_structured_output(TaskSpec, "not json")
+        parse_structured_output(ReviewReport, "not json")
 
 
 def test_parse_structured_output_rejects_missing_required_fields():
-    with pytest.raises(ThinkingOutputError, match="invalid TaskSpec"):
-        parse_structured_output(TaskSpec, '{"task": "too little"}')
+    with pytest.raises(ThinkingOutputError, match="invalid ReviewReport"):
+        parse_structured_output(ReviewReport, '{"decision": "pass"}')
 
 
 @pytest.mark.parametrize(
-    ("decision", "route"),
+    ("text", "trimmed"),
     [
-        ("proceed", "write"),
-        ("proceed_with_assumptions", "write"),
-        ("need_clarification", "clarify"),
-        ("block", "block"),
+        ("abcdef", "abcdef"),
+        ("0123456789abcdefghijklmnopqrst", "... [truncated]\npqrst"),
     ],
 )
-def test_route_task_spec_maps_all_decisions(decision, route):
-    assert route_task_spec(_task_spec(decision=decision)) == route
+def test_trim_tail_preserves_recent_context(text, trimmed):
+    limit = len(text) + 1 if len(text) <= 6 else len(trimmed)
+
+    assert trim_tail(text, limit) == trimmed
+
+
+def test_trim_head_preserves_skill_header():
+    assert (
+        trim_head("0123456789abcdefghijklmnopqrst", len("0123\n... [truncated]"))
+        == "0123\n... [truncated]"
+    )
+
+
+def test_rewrite_prompt_returns_rewritten_prompt_and_includes_context():
+    model = _QueuedModel(["Rewrite this as a precise task."])
+
+    result = rewrite_prompt(
+        model,
+        skill_text="prompt-master skill",
+        user_input="raw request",
+        visible_context="recent context",
+        skill_context="active skill context",
+    )
+
+    assert isinstance(result, Rewrite)
+    assert result.prompt == "Rewrite this as a precise task."
+    prompt_text = "\n".join(message.content for message in model.calls[0])
+    assert "prompt-master skill" in prompt_text
+    assert "raw request" in prompt_text
+    assert "recent context" in prompt_text
+    assert "active skill context" in prompt_text
+    assert "你不得新增" in prompt_text
+
+
+def test_rewrite_prompt_detects_clarify_sentinel():
+    model = _QueuedModel(["<<CLARIFY>>\n- Which journal?"])
+
+    result = rewrite_prompt(model, skill_text="skill", user_input="revise")
+
+    assert isinstance(result, Clarify)
+    assert result.text == "- Which journal?"
+
+
+def test_review_draft_invokes_model_with_evidence_and_rebuttal():
+    model = _QueuedModel([_report_json("pass")])
+
+    report = review_draft(
+        model,
+        raw_user_input="raw",
+        rewritten_prompt="rewritten",
+        draft="draft",
+        skill_context="skill ctx",
+        evidence_trace_summary="[Writer] tool trace",
+        previous_rebuttal="reasonable objection",
+    )
+
+    assert report.decision == "pass"
+    prompt_text = model.calls[0][-1].content
+    assert "raw" in prompt_text
+    assert "rewritten" in prompt_text
+    assert "[Writer] tool trace" in prompt_text
+    assert "reasonable objection" in prompt_text
 
 
 def test_route_review_report_passes_minor_and_notes_without_rewrite():
@@ -121,27 +186,98 @@ def test_route_review_report_blocks_reviser_for_blocker():
     assert route_review_report(report, attempts=0) == "ask_user"
 
 
-def test_route_review_report_blocker_overrides_pass_decision():
-    report = _report(_finding(severity="blocker"), decision="pass")
+def test_route_review_report_pass_overrides_attempt_cap():
+    report = _report(decision="pass")
 
-    assert route_review_report(report, attempts=0) == "ask_user"
+    assert route_review_report(report, attempts=2) == "pass"
 
 
-def test_append_assumption_note_only_for_assumption_route():
-    spec = _task_spec(
-        decision="proceed_with_assumptions",
-        allowed_assumptions=["use journal-neutral tone"],
+def test_render_route_message_adds_warning_to_draft_routes():
+    rendered = render_route_message(
+        "pass",
+        "Clean draft",
+        _report(decision="pass"),
+        format_warning="warning",
     )
 
-    assert "採用的假設" in append_assumption_note("Answer", spec)
+    assert rendered == "warning\n\nClean draft"
 
 
-def test_compile_task_spec_invokes_model_and_parses_json():
-    class FakeModel:
-        def invoke(self, messages):
-            assert "TaskSpec schema fields" in messages[-1].content
-            return AIMessage(content=_task_spec().model_dump_json())
+def test_summarize_tool_trace_matches_tool_messages_and_truncates_result():
+    trace = summarize_tool_trace(
+        [{"id": "call-1", "name": "read_file", "args": {"path": "x.md"}}],
+        [ToolMessage(content="abcdefghijklmnopqrstuvwxyz", tool_call_id="call-1")],
+        source_label="[Writer]",
+        per_result_chars=len("abc\n... [truncated]"),
+    )
 
-    parsed = compile_task_spec(FakeModel(), user_input="revise this")
+    assert "=== [Writer] ===" in trace
+    assert "read_file" in trace
+    assert '"path": "x.md"' in trace
+    assert "abc\n" in trace
+    assert "... [truncated]" in trace
 
-    assert parsed.decision == "proceed"
+
+def test_append_tool_trace_keeps_recent_evidence_under_cap():
+    combined = append_tool_trace(
+        "older evidence " * 20,
+        [],
+        [],
+        source_label="[Reviser round 1]",
+        total_chars_cap=80,
+    )
+
+    assert combined.startswith("... [older evidence truncated]")
+    assert "[Reviser round 1]" in combined
+
+
+def test_parse_reviser_output_splits_draft_and_rebuttal():
+    parsed = parse_reviser_output(
+        "DRAFT:\nClean answer\n\nREBUTTAL:\nI disagree with finding 1."
+    )
+
+    assert parsed.draft == "Clean answer"
+    assert parsed.rebuttal == "I disagree with finding 1."
+
+
+def test_parse_reviser_output_accepts_draft_only_marker():
+    parsed = parse_reviser_output("DRAFT: Clean answer")
+
+    assert parsed.draft == "Clean answer"
+    assert parsed.rebuttal == ""
+
+
+def test_parse_reviser_output_repairs_missing_markers_once():
+    repair = _QueuedModel(["DRAFT:\nClean answer\n\nREBUTTAL:\n(none)"])
+
+    parsed = parse_reviser_output("Clean answer\nInternal note", repair_model=repair)
+
+    assert parsed.draft == "Clean answer"
+    assert parsed.rebuttal == "(none)"
+    assert len(repair.calls) == 1
+
+
+def test_parse_reviser_output_heuristically_strips_internal_tail():
+    repair = _QueuedModel(["still unmarked"])
+
+    parsed = parse_reviser_output(
+        "Clean answer paragraph with enough content to keep.\n\nREBUTTAL:\n(none)",
+        repair_model=repair,
+    )
+
+    assert parsed.draft == "Clean answer paragraph with enough content to keep."
+    assert "(none)" in parsed.rebuttal
+    assert parsed.format_warning == ""
+
+
+def test_parse_reviser_output_final_fallback_warns_when_unsafe_to_strip():
+    repair = _QueuedModel(["still unmarked"])
+
+    parsed = parse_reviser_output("Clean answer without markers", repair_model=repair)
+
+    assert parsed.draft == "Clean answer without markers"
+    assert parsed.format_warning == REVISER_FORMAT_WARNING
+
+
+def test_extract_draft_for_user_uses_marker_when_present():
+    assert extract_draft_for_user("DRAFT:\nVisible\n\nREBUTTAL:\nHidden") == "Visible"
