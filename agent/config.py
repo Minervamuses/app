@@ -22,6 +22,19 @@ class AgentConfig(RAGConfig):
     judge_llm_model: str = "openai/gpt-5.2"
     filter_llm_model: str = "llama3.1:8b"
 
+    # Extended thinking role models. These intentionally default to empty
+    # strings so /thinking extended cannot silently self-review with llm_model.
+    thinking_reviewer_model: str = ""
+    thinking_reviewer_max_tokens: int = 4096
+    thinking_rewrite_model: str = ""
+    thinking_repair_model: str = ""
+
+    # Extended thinking context caps.
+    thinking_tool_trace_chars: int = 500
+    thinking_tool_trace_total_chars: int = 4000
+    thinking_rewrite_visible_chars: int = 2000
+    thinking_rewrite_skill_chars: int = 4000
+
     # Agent context controls (same-turn bounds)
     agent_max_messages: int = 20
     agent_max_tool_interactions: int = 4
