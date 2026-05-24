@@ -17,10 +17,24 @@ from agent.history import (
     format_tool_counts,
 )
 from agent.history_rag import ChatHistoryStore, get_chat_history_store
+from agent.llm.openrouter import get_chat_model
 from agent.skills import (
     SkillRuntime,
     discover_skills,
     load_skill_runtime,
+)
+from agent.skills.validator import validate_skill_output
+from agent.thinking import (
+    MAX_REVIEW_ATTEMPTS,
+    ThinkingOutputError,
+    append_assumption_note,
+    compile_task_spec,
+    render_review_stop_message,
+    render_task_spec_stop_message,
+    review_draft,
+    revise_draft,
+    route_review_report,
+    route_task_spec,
 )
 from agent.memory import (
     TurnRecord,
@@ -108,6 +122,14 @@ class _ToolRef:
     name: str
 
 
+@dataclass(frozen=True)
+class _GraphTurnResult:
+    answer: str
+    new_messages: list
+    tool_calls: list[dict]
+    trace_events: list[dict]
+
+
 class ChatSession:
     """Multi-turn conversational retrieval session backed by LangGraph."""
 
@@ -145,6 +167,7 @@ class ChatSession:
             history_store=self.history_store,
             skill_runtime_getter=lambda: self.active_skill_runtime,
         )
+        self._thinking_model = None
 
         self.turn_logs: list[dict] = []
         self.last_tool_calls: list[dict] = []
@@ -173,6 +196,11 @@ class ChatSession:
         if self.active_skill_runtime is None:
             return None
         return SystemMessage(content=self.active_skill_runtime.context_block())
+
+    def _active_skill_context_block(self) -> str:
+        if self.active_skill_runtime is None:
+            return ""
+        return self.active_skill_runtime.context_block()
 
     def _build_plan_mode_hint(self) -> SystemMessage | None:
         """Tell the LLM that some visible turns are plan-mode (md only),
@@ -373,6 +401,39 @@ class ChatSession:
         with Path(log_path).open("a", encoding="utf-8") as f:
             f.write(block)
 
+    def _visible_context_text(self) -> str:
+        lines: list[str] = []
+        for turn in self.recent_turns[-self.config.agent_recent_turns_window:]:
+            lines.extend([
+                f"User turn {turn.turn_id}:",
+                turn.user_input,
+                f"Assistant turn {turn.turn_id}:",
+                turn.assistant_output,
+                "",
+            ])
+        return "\n".join(lines).strip()
+
+    def _get_thinking_model(self):
+        if self._thinking_model is None:
+            self._thinking_model = get_chat_model(self.config)
+        return self._thinking_model
+
+    def _task_spec_hint(self, task_spec) -> SystemMessage:
+        return SystemMessage(content=(
+            "[Extended thinking TaskSpec]\n"
+            "Use this TaskSpec as a supplemental constraint. It does not replace "
+            "the raw user input or visible context.\n\n"
+            f"{task_spec.model_dump_json(indent=2)}\n\n"
+            f"Writer instruction:\n{task_spec.writer_instruction}\n\n"
+            "Do not self-review. Produce the best draft answer under these constraints."
+        ))
+
+    def _extended_error_message(self, exc: Exception) -> str:
+        return (
+            "Extended mode 無法解析結構化輸出，已停止以避免不安全改寫。\n"
+            f"- {exc}"
+        )
+
     async def _evict_overflow(self) -> None:
         """Spill turns past the window into the long-term store. Log + keep on failure."""
         window = self.config.agent_recent_turns_window
@@ -409,13 +470,18 @@ class ChatSession:
                 break
             self.recent_turns.pop(0)
 
-    async def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
-        """Process one turn and return the final answer plus tool-call trace.
-
-        Streams graph updates so a progress callback (if provided) can
-        surface tool calls as they happen; payloads are not forwarded.
-        """
-        input_messages = [*self._prompt_history(), HumanMessage(content=user_input)]
+    async def _run_graph_turn(
+        self,
+        user_input: str,
+        *,
+        extra_system_messages: list[SystemMessage] | None = None,
+    ) -> _GraphTurnResult:
+        """Run the existing graph once without recording the completed turn."""
+        input_messages = [
+            *self._prompt_history(),
+            *(extra_system_messages or []),
+            HumanMessage(content=user_input),
+        ]
         messages: list = list(input_messages)
         initial_state = {
             "messages": input_messages,
@@ -445,6 +511,23 @@ class ChatSession:
         answer = messages[-1].content if messages else ""
         answer = answer or ""
 
+        return _GraphTurnResult(
+            answer=str(answer),
+            new_messages=new_messages,
+            tool_calls=tool_calls,
+            trace_events=trace_events,
+        )
+
+    async def _record_turn(
+        self,
+        *,
+        user_input: str,
+        answer: str,
+        new_messages: list,
+        tool_calls: list[dict],
+        trace_events: list[dict],
+    ) -> None:
+        """Persist/log the final answer for one user-visible turn."""
         turn_id = self._turn_counter + 1
         timestamp = datetime.now(timezone.utc).isoformat()
         if self.plan_mode:
@@ -490,7 +573,187 @@ class ChatSession:
         })
         await self._evict_overflow()
 
-        return answer, tool_calls
+    async def _run_normal_turn(self, user_input: str) -> tuple[str, list[dict]]:
+        result = await self._run_graph_turn(user_input)
+        await self._record_turn(
+            user_input=user_input,
+            answer=result.answer,
+            new_messages=result.new_messages,
+            tool_calls=result.tool_calls,
+            trace_events=result.trace_events,
+        )
+        return result.answer, result.tool_calls
+
+    async def _apply_final_skill_validation(
+        self,
+        *,
+        user_input: str,
+        answer: str,
+        new_messages: list,
+        tool_calls: list[dict],
+        trace_events: list[dict],
+    ) -> _GraphTurnResult:
+        if not self.active_skill_runtime or not self.config.skill_validation_enabled:
+            return _GraphTurnResult(answer, new_messages, tool_calls, trace_events)
+
+        violations = validate_skill_output(
+            active_skill=self.active_skill_runtime.name,
+            text=answer,
+        )
+        if not violations:
+            return _GraphTurnResult(answer, new_messages, tool_calls, trace_events)
+
+        validation_hint = SystemMessage(content=(
+            "[Extended thinking final validation errors]\n"
+            + "\n".join(f"- {violation}" for violation in violations)
+            + "\nRevise the supplied draft once to satisfy the active skill policy."
+        ))
+        revision_input = (
+            "Revise the draft below to satisfy the active skill policy while "
+            "preserving the original user request.\n\n"
+            f"Original user request:\n{user_input}\n\n"
+            f"Draft:\n{answer}"
+        )
+        validation_result = await self._run_graph_turn(
+            revision_input,
+            extra_system_messages=[validation_hint],
+        )
+        return _GraphTurnResult(
+            answer=validation_result.answer,
+            new_messages=[*new_messages, *validation_result.new_messages],
+            tool_calls=[*tool_calls, *validation_result.tool_calls],
+            trace_events=[*trace_events, *validation_result.trace_events],
+        )
+
+    async def _run_extended_turn(self, user_input: str) -> tuple[str, list[dict]]:
+        model = self._get_thinking_model()
+        skill_context = self._active_skill_context_block()
+        try:
+            task_spec = compile_task_spec(
+                model,
+                user_input=user_input,
+                visible_context=self._visible_context_text(),
+                skill_context=skill_context,
+            )
+        except ThinkingOutputError as exc:
+            answer = self._extended_error_message(exc)
+            await self._record_turn(
+                user_input=user_input,
+                answer=answer,
+                new_messages=[],
+                tool_calls=[],
+                trace_events=[],
+            )
+            return answer, []
+
+        task_route = route_task_spec(task_spec)
+        if task_route in {"clarify", "block"}:
+            answer = render_task_spec_stop_message(task_spec)
+            await self._record_turn(
+                user_input=user_input,
+                answer=answer,
+                new_messages=[],
+                tool_calls=[],
+                trace_events=[],
+            )
+            return answer, []
+
+        writer_result = await self._run_graph_turn(
+            user_input,
+            extra_system_messages=[self._task_spec_hint(task_spec)],
+        )
+        draft = writer_result.answer
+        current = writer_result
+        attempts = 0
+
+        while True:
+            try:
+                report = review_draft(
+                    model,
+                    user_input=user_input,
+                    task_spec=task_spec,
+                    draft=draft,
+                    skill_context=skill_context,
+                )
+            except ThinkingOutputError as exc:
+                answer = self._extended_error_message(exc)
+                current = _GraphTurnResult(
+                    answer=answer,
+                    new_messages=current.new_messages,
+                    tool_calls=current.tool_calls,
+                    trace_events=current.trace_events,
+                )
+                break
+
+            review_route = route_review_report(report, attempts=attempts)
+            if review_route == "pass":
+                answer = append_assumption_note(draft, task_spec)
+                current = _GraphTurnResult(
+                    answer=answer,
+                    new_messages=current.new_messages,
+                    tool_calls=current.tool_calls,
+                    trace_events=current.trace_events,
+                )
+                break
+            if review_route == "ask_user":
+                answer = render_review_stop_message(report)
+                current = _GraphTurnResult(
+                    answer=answer,
+                    new_messages=current.new_messages,
+                    tool_calls=current.tool_calls,
+                    trace_events=current.trace_events,
+                )
+                break
+            if review_route == "stop":
+                answer = (
+                    draft.rstrip()
+                    + "\n\n仍需確認處：\n"
+                    + (report.summary_for_reviser or "Reviewer 仍指出未完全修正的問題。")
+                )
+                current = _GraphTurnResult(
+                    answer=answer,
+                    new_messages=current.new_messages,
+                    tool_calls=current.tool_calls,
+                    trace_events=current.trace_events,
+                )
+                break
+
+            draft = revise_draft(
+                model,
+                user_input=user_input,
+                task_spec=task_spec,
+                draft=draft,
+                review_report=report,
+            )
+            attempts += 1
+            current = _GraphTurnResult(
+                answer=draft,
+                new_messages=current.new_messages,
+                tool_calls=current.tool_calls,
+                trace_events=current.trace_events,
+            )
+
+        current = await self._apply_final_skill_validation(
+            user_input=user_input,
+            answer=current.answer,
+            new_messages=current.new_messages,
+            tool_calls=current.tool_calls,
+            trace_events=current.trace_events,
+        )
+        await self._record_turn(
+            user_input=user_input,
+            answer=current.answer,
+            new_messages=current.new_messages,
+            tool_calls=current.tool_calls,
+            trace_events=current.trace_events,
+        )
+        return current.answer, current.tool_calls
+
+    async def _run_turn(self, user_input: str) -> tuple[str, list[dict]]:
+        """Process one turn and return the final answer plus tool-call trace."""
+        if self.thinking_mode == "extended":
+            return await self._run_extended_turn(user_input)
+        return await self._run_normal_turn(user_input)
 
     async def turn(self, user_input: str) -> str:
         """Process one conversation turn. Returns the final text response."""
