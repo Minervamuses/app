@@ -1,0 +1,11 @@
+resources: []
+task_modes: []
+
+tool_policy:
+  disallow:
+    - bash
+    - rag_explore
+    - rag_search
+    - rag_get_context
+    - recall_history
+    - read_file
