@@ -59,6 +59,7 @@ class _FakeModeSession:
     def __init__(self, plan_log_path):
         self.config = object()
         self.plan_mode = False
+        self.thinking_mode = "normal"
         self.plan_log_path = None
         self._target_log_path = plan_log_path
 
@@ -70,6 +71,9 @@ class _FakeModeSession:
     async def exit_plan_mode(self):
         self.plan_mode = False
         self.plan_log_path = None
+
+    def set_thinking_mode(self, mode):
+        self.thinking_mode = mode
 
 
 class _FakeSkillSession:
@@ -261,6 +265,84 @@ def test_handle_mode_rejects_extra_args(tmp_path):
         asyncio.run(
             execute_slash_command(
                 parse_slash_command("/mode plan extra"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+
+def test_registry_includes_thinking_command():
+    registry = build_default_registry()
+
+    assert registry.get("thinking") is not None
+
+
+def test_handle_thinking_switches_to_extended(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/thinking extended"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.thinking_mode == "extended"
+    assert result.message == "thinking -> extended"
+
+
+def test_handle_thinking_switches_back_to_normal(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    session.thinking_mode = "extended"
+    registry = build_default_registry()
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/thinking normal"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.thinking_mode == "normal"
+    assert result.message == "thinking -> normal"
+
+
+def test_handle_thinking_without_args_reports_current_mode(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/thinking"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert "thinking -> normal" in result.message
+    assert "available: normal, extended" in result.message
+
+
+def test_handle_thinking_unknown_name_raises(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    with pytest.raises(SlashCommandError, match="unknown thinking mode"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/thinking deep"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+
+def test_handle_thinking_rejects_extra_args(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    with pytest.raises(SlashCommandError, match="usage"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/thinking extended now"),
                 SlashCommandContext(session=session, registry=registry),
             )
         )

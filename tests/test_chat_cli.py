@@ -231,6 +231,7 @@ def test_chat_cli_slash_status_reports_session(monkeypatch, capsys):
                 "recent_turn_count": 2,
                 "recursion_limit": 32,
                 "last_tool_counts": "rag_search x1",
+                "thinking_mode": "extended",
             }
 
         async def flush_recent_turns(self) -> None:
@@ -253,6 +254,7 @@ def test_chat_cli_slash_status_reports_session(monkeypatch, capsys):
     assert "Session status:" in output
     assert "session_id: session-42" in output
     assert "last_tool_calls: rag_search x1" in output
+    assert "thinking_mode: extended" in output
     assert calls == ["flush"]
 
 

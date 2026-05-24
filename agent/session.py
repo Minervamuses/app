@@ -125,6 +125,7 @@ class ChatSession:
         self.config = config
         self.recursion_limit = recursion_limit
         self.plan_mode = False
+        self.thinking_mode = "normal"
         self.plan_log_path: Path | None = None
         self.active_skill_runtime: SkillRuntime | None = None
         self.extra_tools = list(extra_tools or [])
@@ -240,6 +241,13 @@ class ChatSession:
         """Disable plan mode without mutating prompt-visible turns."""
         self.plan_mode = False
         self.plan_log_path = None
+
+    def set_thinking_mode(self, mode: str) -> None:
+        """Set the per-session thinking workflow mode."""
+        normalized = mode.strip().lower()
+        if normalized not in {"normal", "extended"}:
+            raise ValueError(f"unknown thinking mode: {mode}")
+        self.thinking_mode = normalized
 
     def activate_skill(self, name: str, task_mode: str | None = None) -> SkillRuntime:
         """Activate a local skill for subsequent turns."""
@@ -499,6 +507,7 @@ class ChatSession:
             "last_tool_counts": format_tool_counts(self.last_tool_calls) or "none",
             "plan_mode": self.plan_mode,
             "plan_log_path": str(self.plan_log_path) if self.plan_log_path else "",
+            "thinking_mode": self.thinking_mode,
             "active_skill": (
                 self.active_skill_runtime.name
                 if self.active_skill_runtime is not None

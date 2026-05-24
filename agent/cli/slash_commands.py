@@ -143,6 +143,11 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_mode,
             ),
             SlashCommand(
+                name="thinking",
+                description="Switch reasoning workflow depth (normal or extended).",
+                handler=_handle_thinking,
+            ),
+            SlashCommand(
                 name="skill",
                 description="Activate or deactivate a local skill.",
                 handler=_handle_skill,
@@ -214,10 +219,46 @@ async def _handle_status(
         f"last_tool_calls: {status['last_tool_counts']}",
         f"plan_mode: {status.get('plan_mode', False)}",
         f"plan_log_path: {status.get('plan_log_path', '') or 'none'}",
+        f"thinking_mode: {status.get('thinking_mode', 'normal')}",
         f"active_skill: {status.get('active_skill', '') or 'none'}",
         f"task_mode: {status.get('task_mode', '') or 'none'}",
     ]
     return SlashCommandResult(message="\n".join(lines))
+
+
+_THINKING_MODES = ("normal", "extended")
+
+
+async def _handle_thinking(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    if len(parsed.args) > 1:
+        raise SlashCommandError("usage: /thinking [normal|extended]")
+
+    current = getattr(context.session, "thinking_mode", "normal")
+    if not parsed.args:
+        valid = ", ".join(_THINKING_MODES)
+        return SlashCommandResult(
+            message=f"thinking -> {current}\navailable: {valid}"
+        )
+
+    target = parsed.args[0].strip().lower()
+    if target not in _THINKING_MODES:
+        valid = ", ".join(_THINKING_MODES)
+        raise SlashCommandError(
+            f"unknown thinking mode: {target} (available: {valid})"
+        )
+
+    if target == current:
+        return SlashCommandResult(message=f"already in {current} thinking mode")
+
+    setter = getattr(context.session, "set_thinking_mode", None)
+    if setter is not None:
+        setter(target)
+    else:
+        setattr(context.session, "thinking_mode", target)
+    return SlashCommandResult(message=f"thinking -> {target}")
 
 
 @dataclass(frozen=True)
