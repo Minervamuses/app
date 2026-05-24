@@ -5,6 +5,7 @@ import asyncio
 import pytest
 from prompt_toolkit.document import Document
 
+from agent.config import AgentConfig
 from agent.skills import SkillMetadata
 from agent.cli.prompting import SlashCommandCompleter
 from agent.cli.slash_commands import (
@@ -56,8 +57,8 @@ def test_slash_command_completer_ignores_normal_chat_text():
 
 
 class _FakeModeSession:
-    def __init__(self, plan_log_path):
-        self.config = object()
+    def __init__(self, plan_log_path, config=None):
+        self.config = config or AgentConfig()
         self.plan_mode = False
         self.thinking_mode = "normal"
         self.plan_log_path = None
@@ -277,7 +278,14 @@ def test_registry_includes_thinking_command():
 
 
 def test_handle_thinking_switches_to_extended(tmp_path):
-    session = _FakeModeSession(tmp_path / "plan.md")
+    session = _FakeModeSession(
+        tmp_path / "plan.md",
+        config=AgentConfig(
+            thinking_reviewer_model="openai/gpt-5.2",
+            thinking_rewrite_model="anthropic/claude-haiku-5",
+            thinking_repair_model="meta-llama/llama-3.1-8b-instruct",
+        ),
+    )
     registry = build_default_registry()
 
     result = asyncio.run(
@@ -289,6 +297,21 @@ def test_handle_thinking_switches_to_extended(tmp_path):
 
     assert session.thinking_mode == "extended"
     assert result.message == "thinking -> extended"
+
+
+def test_handle_thinking_extended_requires_role_models(tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    with pytest.raises(SlashCommandError, match="thinking_reviewer_model"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/thinking extended"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
+
+    assert session.thinking_mode == "normal"
 
 
 def test_handle_thinking_switches_back_to_normal(tmp_path):

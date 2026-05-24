@@ -8,6 +8,7 @@ from typing import Awaitable, Callable
 
 import yaml
 
+from agent.llm.thinking import ExtendedModeNotConfigured, require_thinking_models
 from agent.paths import find_app_root
 from agent.skills import SkillMetadata, discover_skills, load_skill_manifest
 from rag import ingest_repo, ingest_single, list_diff, prune_orphans
@@ -252,6 +253,12 @@ async def _handle_thinking(
 
     if target == current:
         return SlashCommandResult(message=f"already in {current} thinking mode")
+
+    if target == "extended":
+        try:
+            require_thinking_models(context.session.config)
+        except ExtendedModeNotConfigured as exc:
+            raise SlashCommandError(str(exc)) from exc
 
     setter = getattr(context.session, "set_thinking_mode", None)
     if setter is not None:
