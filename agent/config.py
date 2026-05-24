@@ -24,7 +24,7 @@ class AgentConfig(RAGConfig):
 
     # Extended thinking role models.
     thinking_reviewer_model: str = "anthropic/claude-haiku-4.5"
-    thinking_reviewer_max_tokens: int = 1024
+    thinking_reviewer_max_tokens: int = 4096
     thinking_rewrite_model: str = "openai/gpt-5-mini"
     thinking_repair_model: str = "openai/gpt-5-mini"
 
