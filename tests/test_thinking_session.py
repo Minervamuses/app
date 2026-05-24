@@ -242,7 +242,12 @@ def test_extended_mode_records_configuration_error(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         graph,
-        cfg=AgentConfig(persist_dir=str(tmp_path)),
+        cfg=AgentConfig(
+            persist_dir=str(tmp_path),
+            thinking_reviewer_model="",
+            thinking_rewrite_model="",
+            thinking_repair_model="",
+        ),
     )
     session.set_thinking_mode("extended")
 

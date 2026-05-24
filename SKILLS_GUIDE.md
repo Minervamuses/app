@@ -236,12 +236,13 @@ description: ...
 啟用 `/thinking extended` 前，必須直接在 `agent/config.py` 的 `AgentConfig` 填入三個角色 model 欄位：
 
 ```python
-thinking_reviewer_model: str = "openai/gpt-5.2"
-thinking_rewrite_model: str = "anthropic/claude-haiku-5"
-thinking_repair_model: str = "meta-llama/llama-3.1-8b-instruct"
+thinking_reviewer_model: str = "anthropic/claude-haiku-4.5"
+thinking_reviewer_max_tokens: int = 1024
+thinking_rewrite_model: str = "openai/gpt-5-mini"
+thinking_repair_model: str = "openai/gpt-5-mini"
 ```
 
-這些欄位預設是空字串；任一未填時，`/thinking extended` 會拒絕切換。這是刻意設計，避免 Extended mode 靜默退回 `llm_model` 造成同 model 自審。第一版不從 `.env` 或 CLI 參數讀取這三個欄位；`.env` 只保留 `OPENROUTER_API_KEY` 這類 secret。
+這些欄位直接由 `AgentConfig` 決定；任一被設為空字串時，`/thinking extended` 會拒絕切換，避免 Extended mode 靜默退回 `llm_model` 造成同 model 自審。第一版不從 `.env` 或 CLI 參數讀取這三個欄位；`.env` 只保留 `OPENROUTER_API_KEY` 這類 secret。
 
 ### 漸進式揭露（檔案拆分）
 

@@ -12,23 +12,14 @@ from agent.llm.thinking import (
 )
 
 
-def test_missing_thinking_model_fields_reports_empty_defaults(tmp_path):
+def test_missing_thinking_model_fields_accepts_configured_defaults(tmp_path):
     cfg = AgentConfig(persist_dir=str(tmp_path))
 
-    assert missing_thinking_model_fields(cfg) == [
-        "thinking_reviewer_model",
-        "thinking_rewrite_model",
-        "thinking_repair_model",
-    ]
+    assert missing_thinking_model_fields(cfg) == []
 
 
-def test_require_thinking_models_accepts_all_configured(tmp_path):
-    cfg = AgentConfig(
-        persist_dir=str(tmp_path),
-        thinking_reviewer_model="openai/gpt-5.2",
-        thinking_rewrite_model="anthropic/claude-haiku-5",
-        thinking_repair_model="meta-llama/llama-3.1-8b-instruct",
-    )
+def test_require_thinking_models_accepts_all_configured_defaults(tmp_path):
+    cfg = AgentConfig(persist_dir=str(tmp_path))
 
     require_thinking_models(cfg)
 
@@ -37,6 +28,8 @@ def test_require_thinking_models_raises_with_missing_names(tmp_path):
     cfg = AgentConfig(
         persist_dir=str(tmp_path),
         thinking_reviewer_model="openai/gpt-5.2",
+        thinking_rewrite_model="",
+        thinking_repair_model="",
     )
 
     with pytest.raises(ExtendedModeNotConfigured) as excinfo:

@@ -15,19 +15,18 @@ class AgentConfig(RAGConfig):
     """Runtime config for the LangGraph agent, eval harness, and CLI."""
 
     # Main chat LLM used by the agent's LangGraph loop.
-    llm_model: str = "z-ai/glm-5"
+    llm_model: str = "deepseek/deepseek-chat-v3.1"
 
     # Evaluation LLMs
     gen_llm_model: str = "google/gemini-3.1-pro-preview"
     judge_llm_model: str = "openai/gpt-5.2"
     filter_llm_model: str = "llama3.1:8b"
 
-    # Extended thinking role models. These intentionally default to empty
-    # strings so /thinking extended cannot silently self-review with llm_model.
-    thinking_reviewer_model: str = ""
-    thinking_reviewer_max_tokens: int = 4096
-    thinking_rewrite_model: str = ""
-    thinking_repair_model: str = ""
+    # Extended thinking role models.
+    thinking_reviewer_model: str = "anthropic/claude-haiku-4.5"
+    thinking_reviewer_max_tokens: int = 1024
+    thinking_rewrite_model: str = "openai/gpt-5-mini"
+    thinking_repair_model: str = "openai/gpt-5-mini"
 
     # Extended thinking context caps.
     thinking_tool_trace_chars: int = 500

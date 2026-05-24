@@ -300,7 +300,14 @@ def test_handle_thinking_switches_to_extended(tmp_path):
 
 
 def test_handle_thinking_extended_requires_role_models(tmp_path):
-    session = _FakeModeSession(tmp_path / "plan.md")
+    session = _FakeModeSession(
+        tmp_path / "plan.md",
+        config=AgentConfig(
+            thinking_reviewer_model="",
+            thinking_rewrite_model="",
+            thinking_repair_model="",
+        ),
+    )
     registry = build_default_registry()
 
     with pytest.raises(SlashCommandError, match="thinking_reviewer_model"):
