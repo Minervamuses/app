@@ -200,6 +200,51 @@ capabilities:
 
 **Skills 不會自動進 prompt**：startup 不再 inject metadata block、不再印 banner。模型對「有哪些 skill 可用」是色盲的；被使用者問起時透過 `bash ls skills/` 現查（需要使用者批准）。`/skill` 是唯一啟用入口。
 
+### 內建 Skill：`academic-paper-writing`
+
+`academic-paper-writing` 是目前 repo 裡第一個完整示範用 skill。它不是「幫使用者直接生一篇看起來像論文的文章」，而是把 agent 約束成學術寫作工作流：先讀材料、判斷任務類型、確認 claim 和 evidence，再決定要規劃、草擬、修訂或處理投稿材料。
+
+**使用邊界：**
+
+- 適合：journal article、conference paper、thesis chapter、literature review、abstract、cover letter、response to reviewers，以及需要處理 structure、argumentation、evidence integration、citation hygiene、journal fit 的任務。
+- 不適合：casual essay、marketing copy，或任何要求編造 data、citation、DOI、peer review、authorship、funding、ethics approval、disclosure 的任務。
+- 它會區分領域慣例：empirical STEM、qualitative research、legal scholarship、humanities / theory-heavy paper 不會被硬套同一個 IMRaD 模板。
+
+**核心流程：**
+
+1. **Read before writing**：先讀 draft、notes、outline、data description、reviewer comments、target-journal guidelines，再做大幅改寫或投稿建議。
+2. **先判斷任務，不先寫漂亮句子**：確認現在是 planning、drafting、restructuring、editing、submission support，還是 reviewer-response support。
+3. **先抓核心貢獻**：要求先用一句話釐清 main contribution、claim 或 research question。
+4. **先修高槓桿問題**：優先處理 argument flow、missing context、unsupported claims、weak synthesis，再做 sentence polish。
+5. **最後做 integrity check**：確認沒有引入未被使用者材料支撐的 citation、claim、method detail 或研究事實。
+
+**Reference 分工：**
+
+| Reference | 用途 |
+|---|---|
+| `references/section-playbooks.md` | title、abstract、keywords、IMRaD section、paragraph-level revision；這份是 `pinned: true`，啟用 skill 時預載 |
+| `references/literature-review.md` | literature review、review article、synthesis-heavy introduction；重點是避免寫成 annotated bibliography |
+| `references/reporting-guidelines.md` | CONSORT、STROBE、PRISMA、PRISMA-ScR、SPIRIT、STARD、TRIPOD、CARE、COREQ、SRQR、ARRIVE、TIDieR 等 reporting checklist routing |
+| `references/qualitative-research.md` | interviews、focus groups、ethnography、thematic analysis、grounded theory、coding、reflexivity、trustworthiness |
+| `references/submission-and-integrity.md` | journal fit、submission package、cover letter、reviewer response、authorship、COI、AI-use disclosure、reporting guideline questions |
+
+**Output formats：**
+
+這裡講的是 `SKILL.md` 裡要求 agent 回答時採用的輸出形態，不完全等同 `/skill` picker 裡的 task mode。
+
+| Mode | 產出重點 |
+|---|---|
+| `planning` | one-sentence thesis / contribution、section outline、evidence map、missing inputs |
+| `drafting` | 依使用者提供的 evidence 草擬段落；缺資料時用 `[insert citation]`、`[report sample size]` 之類 placeholder，不自行發明 |
+| `revision` | 先列主要問題，再給 revised version，最後說明結構上改了什麼 |
+| `submission-support` | title options、abstract、keywords、cover letter、reviewer response table、submission checklist |
+
+**Runtime 限制：**
+
+- `manifest.yaml` 宣告 required capabilities：`file.read`、`rag.search`；optional capability：`web.search`，只在 target journal guidelines 或最新 venue information 需要時使用。
+- `tool_policy.disallow: [bash]`，所以這個 skill 啟用後，論文寫作流程不能靠 shell 執行繞過讀檔 / RAG / web search 的受控路徑。
+- skill validator 目前有 academic-specific deterministic check，例如避免輸出沒有 citation marker 支撐的百分比敘述；命中時會要求 agent 改寫一次。
+
 ### Session lifecycle（async）
 
 MCP tools 是純 async `StructuredTool`，所以 `ChatSession` 整條路徑也是 async：
