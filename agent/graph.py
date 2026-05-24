@@ -1,6 +1,6 @@
 """LangGraph agent graph for conversational RAG."""
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
 from agent.config import AgentConfig
@@ -31,6 +31,29 @@ def _skill_runtime_state(runtime) -> dict:
         "validation_attempts": 0,
         "validation_retry_requested": False,
     }
+
+
+def _tool_interaction_count(messages: list) -> int:
+    """Count completed tool interactions in the current graph state."""
+    return sum(1 for message in messages if isinstance(message, ToolMessage))
+
+
+def _tool_budget_note(*, used: int, limit: int, exhausted: bool) -> SystemMessage:
+    if exhausted:
+        content = (
+            "[Tool budget exhausted]\n"
+            f"You have already received {used} tool result(s), and this turn's "
+            f"tool interaction limit is {limit}. Do not call tools again. "
+            "Synthesize the best answer from the available context and evidence. "
+            "If the evidence is insufficient, state what is missing instead of searching more."
+        )
+    else:
+        content = (
+            "[Tool budget]\n"
+            f"You have used {used}/{limit} available tool result(s) in this turn. "
+            "Use another tool only if it is necessary; otherwise synthesize an answer now."
+        )
+    return SystemMessage(content=content)
 
 
 def build_graph(
@@ -99,11 +122,25 @@ def build_graph(
         return bound_model_cache[key]
 
     def agent_node(state: AgentState):
+        messages = state["messages"]
+        tool_count = _tool_interaction_count(messages)
+        tool_limit = max(int(config.agent_max_tool_interactions), 0)
+        tool_budget_exhausted = tool_count >= tool_limit
         prompt_messages = prepare_messages_for_agent(
-            state["messages"],
+            messages,
             max_messages=config.agent_max_messages,
             max_tool_interactions=config.agent_max_tool_interactions,
         )
+        prompt_messages = [
+            *prompt_messages,
+            _tool_budget_note(
+                used=tool_count,
+                limit=tool_limit,
+                exhausted=tool_budget_exhausted,
+            ),
+        ]
+        if tool_budget_exhausted:
+            return {"messages": [model.invoke(prompt_messages)]}
         return {"messages": [_model_for_state(state).invoke(prompt_messages)]}
 
     def _tool_error_to_message(exc: Exception) -> str:
