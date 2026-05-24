@@ -191,30 +191,32 @@ def rewrite_messages(
     """Build prompt-master rewrite messages."""
     wrapper = """
 
-[Internal extended-thinking wrapper]
-You are one step in an internal pipeline. The target tool is a LangGraph
-research agent with these tool families: rag_explore, rag_search,
-rag_get_context, recall_history, read_file, bash, MCP web_search, MCP github,
-and any currently active local skill.
+[內部 extended-thinking wrapper]
 
-Rewrite the user's prompt as natural-language instructions for that agent.
+你是內部 pipeline 的一環。target tool 是一個 LangGraph research agent，
+可用工具：rag_explore、rag_search、rag_get_context、recall_history、
+read_file、bash、MCP web_search、MCP github，以及使用者目前啟用的 active skill。
+
+請把使用者的 prompt 改寫成給該 agent 看的自然語言指令。
 
 硬性禁令：你不得新增以下「原始輸入、visible context 與 active skill context」
 三者都未提供的內容：
-- citation, DOI, page number, quote
+- citation、DOI、page number、quote
 - 數據、樣本數、dataset 名稱、統計結果
 - 研究方法細節、實驗條件、研究發現
 - 對使用者意圖的擴張詮釋
 
-If required facts are missing, do not fill them in. Ask the user instead.
+若必要事實缺失，不要自行補齊，請向使用者詢問。
 
-If you need more information:
-Return first line exactly <<CLARIFY>>, then list at most 3 clarification
-questions.
+若需要使用者補充資訊：
+第一行寫 <<CLARIFY>>，然後列出最多 3 個澄清問題。
 
-If enough information is present:
-Return only the rewritten prompt. Do not add a prefix, explanation, or code
-fence.
+若資訊足夠：
+直接輸出改寫後的 prompt，不要前綴、不要解釋、不要 code fence。
+
+語言策略：改寫後的 prompt 與澄清問題使用與「Original user input」相同的語言。
+如果使用者輸入是中文，輸出使用繁體中文（絕對不要使用簡體），保留技術專有名詞
+（RAG、GPT、DOI、LangGraph、MCP 等）原文，不要翻譯。
 """.strip()
     return [
         SystemMessage(content=f"{skill_text.rstrip()}\n\n{wrapper}"),
@@ -243,7 +245,11 @@ def review_messages(
             "You are an independent reviewer for extended thinking mode. "
             "Review the draft against the raw user input, rewritten prompt, "
             "active skill context, evidence trace, and previous rebuttal. "
-            "Return only valid JSON matching ReviewReport. Do not rewrite the draft."
+            "Return only valid JSON matching ReviewReport. Do not rewrite the draft.\n\n"
+            "語言策略：JSON 內所有自然語言欄位（problem、evidence_from_draft、"
+            "revision_instruction、summary_for_reviser）使用與「Raw user input」"
+            "相同的語言。如果 raw input 是中文，所有自然語言欄位都使用繁體中文"
+            "（絕對不要使用簡體），保留技術專有名詞（RAG、GPT、DOI、JSON 等）原文。"
         )),
         HumanMessage(content=(
             "ReviewReport schema:\n"
@@ -405,7 +411,9 @@ def parse_reviser_output(text: str, *, repair_model=None) -> RevisedDraft:
                         "Split the following text strictly into two sections marked "
                         "DRAFT: and REBUTTAL:. Preserve the user's visible draft content. "
                         "Move internal disagreement or reviewer discussion into REBUTTAL. "
-                        "Return only the two marked sections."
+                        "Return only the two marked sections. "
+                        "Preserve the original content's language verbatim—do not translate. "
+                        "Keep the marker names themselves in English (DRAFT, REBUTTAL)."
                     )),
                     HumanMessage(content=text),
                 ],
