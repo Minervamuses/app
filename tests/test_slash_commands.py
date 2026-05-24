@@ -337,9 +337,16 @@ def test_handle_thinking_switches_back_to_normal(tmp_path):
     assert result.message == "thinking -> normal"
 
 
-def test_handle_thinking_without_args_reports_current_mode(tmp_path):
+def test_handle_thinking_interactive_selection(monkeypatch, tmp_path):
     session = _FakeModeSession(tmp_path / "plan.md")
     registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        assert "Current thinking mode: normal" in args[0]
+        assert "[2] extended" in args[0]
+        return "2"
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
 
     result = asyncio.run(
         execute_slash_command(
@@ -348,8 +355,46 @@ def test_handle_thinking_without_args_reports_current_mode(tmp_path):
         )
     )
 
-    assert "thinking -> normal" in result.message
-    assert "available: normal, extended" in result.message
+    assert session.thinking_mode == "extended"
+    assert result.message == "thinking -> extended"
+
+
+def test_handle_thinking_cancel_on_empty_input(monkeypatch, tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return ""
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/thinking"),
+            SlashCommandContext(session=session, registry=registry),
+        )
+    )
+
+    assert session.thinking_mode == "normal"
+    assert result.message == "cancelled"
+
+
+def test_handle_thinking_invalid_numeric_choice_raises(monkeypatch, tmp_path):
+    session = _FakeModeSession(tmp_path / "plan.md")
+    registry = build_default_registry()
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return "9"
+
+    monkeypatch.setattr("agent.cli.slash_commands.asyncio.to_thread", fake_to_thread)
+
+    with pytest.raises(SlashCommandError, match="invalid choice"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/thinking"),
+                SlashCommandContext(session=session, registry=registry),
+            )
+        )
 
 
 def test_handle_thinking_unknown_name_raises(tmp_path):

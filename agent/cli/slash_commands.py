@@ -228,6 +228,33 @@ async def _handle_status(
 
 
 _THINKING_MODES = ("normal", "extended")
+_THINKING_MODE_DESCRIPTIONS = {
+    "normal": "default direct agent flow",
+    "extended": "prompt rewrite + reviewer/reviser loop",
+}
+
+
+def _render_thinking_prompt(current: str) -> str:
+    lines = [f"Current thinking mode: {current}", "Available thinking modes:"]
+    for idx, mode in enumerate(_THINKING_MODES, start=1):
+        lines.append(
+            f"  [{idx}] {mode}  - {_THINKING_MODE_DESCRIPTIONS[mode]}"
+        )
+    lines.append("Select (number or name; Enter to cancel): ")
+    return "\n".join(lines)
+
+
+def _resolve_thinking_choice(raw: str) -> str | None:
+    """Map raw user input to a thinking mode, or None for cancel."""
+    cleaned = raw.strip().lower()
+    if not cleaned or cleaned in {"q", "cancel"}:
+        return None
+    if cleaned.isdigit():
+        idx = int(cleaned) - 1
+        if 0 <= idx < len(_THINKING_MODES):
+            return _THINKING_MODES[idx]
+        raise SlashCommandError(f"invalid choice: {cleaned}")
+    return cleaned
 
 
 async def _handle_thinking(
@@ -238,13 +265,14 @@ async def _handle_thinking(
         raise SlashCommandError("usage: /thinking [normal|extended]")
 
     current = getattr(context.session, "thinking_mode", "normal")
-    if not parsed.args:
-        valid = ", ".join(_THINKING_MODES)
-        return SlashCommandResult(
-            message=f"thinking -> {current}\navailable: {valid}"
-        )
+    if parsed.args:
+        target = parsed.args[0].strip().lower()
+    else:
+        raw = await asyncio.to_thread(input, _render_thinking_prompt(current))
+        target = _resolve_thinking_choice(raw)
+        if target is None:
+            return SlashCommandResult(message="cancelled")
 
-    target = parsed.args[0].strip().lower()
     if target not in _THINKING_MODES:
         valid = ", ".join(_THINKING_MODES)
         raise SlashCommandError(
