@@ -415,9 +415,9 @@ def _render_skill_prompt(session: object) -> str:
     current = getattr(getattr(session, "active_skill_runtime", None), "name", "")
     current_display = current or "none"
     lines = [f"Current skill: {current_display}", "Available skills:"]
-    lines.append("  [0] none  - deactivate active skill")
+    lines.append("  [0] none")
     for idx, skill in enumerate(_session_skills(session), start=1):
-        lines.append(f"  [{idx}] {skill.name}  - {skill.description}")
+        lines.append(f"  [{idx}] {skill.name}")
     lines.append("Select (number or name; Enter to cancel): ")
     return "\n".join(lines)
 
