@@ -125,6 +125,83 @@ def test_extended_mode_rewrites_prompt_then_uses_existing_graph(monkeypatch, tmp
     assert session.recent_turns[0].assistant_output == "draft answer"
 
 
+def test_extended_mode_shares_tool_availability_across_roles(monkeypatch, tmp_path):
+    graph = _FakeGraph(["draft answer"])
+    session, models = _make_session(
+        monkeypatch,
+        tmp_path,
+        graph,
+        cfg=_configured_agent_config(tmp_path, skill_validation_enabled=False),
+    )
+    session.active_skill_runtime = SimpleNamespace(
+        name="paper",
+        root=tmp_path,
+        instructions="# Paper",
+        pinned_references={},
+        task_mode="revision",
+        allowed_tools=frozenset({"read_file"}),
+        denied_tools=frozenset({"bash"}),
+        tool_policy_active=True,
+        context_block=lambda: "[Active skill]\nname: paper",
+    )
+    session.set_thinking_mode("extended")
+
+    answer = asyncio.run(session.turn("revise this"))
+
+    assert answer == "draft answer"
+    rewrite_prompt_text = "\n".join(str(msg.content) for msg in models["rewrite"].calls[0])
+    review_prompt_text = models["reviewer"].calls[0][-1].content
+    writer_prompt_text = "\n".join(str(msg.content) for msg in graph.calls[0]["messages"])
+    for prompt_text in (rewrite_prompt_text, review_prompt_text, writer_prompt_text):
+        assert "[Tool availability]" in prompt_text
+        assert "active_skill: paper" in prompt_text
+        assert "tool_policy_active: true" in prompt_text
+        assert "available_tools: read_file" in prompt_text
+        assert "denied_tools: bash" in prompt_text
+
+
+def test_tool_availability_hint_is_not_persisted(monkeypatch, tmp_path):
+    graph = _FakeGraph(["draft answer"])
+    session, _models = _make_session(
+        monkeypatch,
+        tmp_path,
+        graph,
+        cfg=_configured_agent_config(tmp_path, skill_validation_enabled=False),
+    )
+    session.active_skill_runtime = SimpleNamespace(
+        name="paper",
+        root=tmp_path,
+        instructions="# Paper",
+        pinned_references={},
+        task_mode="revision",
+        allowed_tools=frozenset({"read_file"}),
+        denied_tools=frozenset({"bash"}),
+        tool_policy_active=True,
+        context_block=lambda: "[Active skill]\nname: paper",
+    )
+    session.set_thinking_mode("extended")
+
+    asyncio.run(session.turn("revise this"))
+
+    assert "[Tool availability]" in "\n".join(
+        str(msg.content) for msg in graph.calls[0]["messages"]
+    )
+    assert len(session.recent_turns) == 1
+    recent_text = (
+        session.recent_turns[0].user_input
+        + "\n"
+        + session.recent_turns[0].assistant_output
+    )
+    assert "[Tool availability]" not in recent_text
+
+    asyncio.run(session.flush_recent_turns())
+
+    assert len(session.history_store.adds) == 1
+    stored = session.history_store.adds[0]
+    stored_text = stored["user_input"] + "\n" + stored["assistant_output"]
+    assert "[Tool availability]" not in stored_text
+
+
 def test_extended_mode_clarification_does_not_call_writer_graph(monkeypatch, tmp_path):
     graph = _FakeGraph(["should not run"])
     models = {
