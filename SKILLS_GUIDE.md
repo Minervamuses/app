@@ -121,6 +121,7 @@ capabilities:
   required:
     - file.read
     - rag.search
+    - history.search
   optional:
     - id: web.search
       use_when: target journal guidelines or current venue information is needed
@@ -140,6 +141,13 @@ tool_policy:
 ```
 
 Pinned resources 會在啟用 skill 時直接放進每回合 context，受 `skill_max_pinned_reference_chars` 與 `skill_max_total_skill_context_chars` 限制。只 pin 每次都必要、且很小的檔案；其他 reference 讓 agent 在 active skill 下按需讀取。
+
+Capability 命名要精確：
+
+- `rag.search` 只授權 indexed KB 工具（知識庫文件、研究筆記、已 ingest 的資料）。
+- `history.search` 只授權 persisted chat history 工具（舊對話、較早 session、被 recent window eviction 的 turn）。
+- 如果 skill 可能需要使用者過去對話脈絡，例如「你自行看我一月上半做了什麼」這類請求，manifest 必須宣告 `history.search`。只宣告 `rag.search` 不會讓 active skill 下的 writer 看到 history retrieval schema。
+- Plan mode logs 不進 Chroma `chat_history`，所以即使宣告 `history.search`，也不能承諾能搜尋 plan-mode-only 的紀錄；需要時應請 agent 讀 `plan_logs/` 檔案或請使用者指出位置。
 
 ## 三、Description 寫作指引
 
@@ -232,6 +240,8 @@ description: ...
 ### Extended Thinking 與 Skills
 
 `/thinking extended` 不會自動啟用任何使用者 skill。它保留目前 active skill 的 context 與 tool policy，另外用 `_prompt-master` helper 把使用者輸入重寫成較清楚的 agent prompt。
+
+Extended mode 的 rewriter、writer、reviewer 都會收到同一份 runtime tool availability block。`SYSTEM_PROMPT` 中的「always available」是 base session 描述；active skill 啟用後，實際工具集合一律以 `tool_policy_active`、`allowed_tools`、`denied_tools` 為準，不要在 skill 內文或測試裡假設 base 工具一定可用。
 
 啟用 `/thinking extended` 前，必須直接在 `agent/config.py` 的 `AgentConfig` 填入三個角色 model 欄位：
 
@@ -434,6 +444,7 @@ Group findings by severity:
 
 4. **視需要撰寫 manifest.yaml**
    - 需要限制 tool 或宣告 capability 時，使用 `capabilities` / `tool_policy.disallow`
+   - 需要使用者過去對話脈絡時，加 `history.search`；需要 indexed KB 時才加 `rag.search`
    - 需要 task mode 時，使用 `task_modes`
    - 需要 reference routing 時，使用 `resources`
    - 不要寫空的 `capabilities: {}`；沒有 policy 就省略 `capabilities` / `tool_policy`
@@ -464,8 +475,10 @@ Group findings by severity:
 - [ ] `description` 用英文撰寫
 - [ ] 若有 `manifest.yaml`，欄位符合本文件列出的 schema，沒有未知 top-level key
 - [ ] required capability 都存在於 `agent/skills/capability_map.yaml`
+- [ ] 需要舊對話脈絡的 skill 已宣告 `history.search`，沒有把 `rag.search` 當成 chat history
 - [ ] `resources[].pinned` 使用真正 bool，不使用 `"yes"` / `"no"` 字串
 - [ ] `references/`、`assets/`、`scripts/` 內的檔案只依賴 skill bundle 內路徑，不假設會 fallback 到 cwd
+- [ ] 文件或 prompt 沒承諾 `recall_history` 能查到 plan mode logs
 - [ ] 內文不含第五節列出的 Claude Code 專屬語法
 - [ ] 內文用祈使句
 - [ ] 內文 ≤ 500 行（超過就拆檔）
