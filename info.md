@@ -46,9 +46,9 @@ START → skill_loader → agent ⇄ tools (PolicyToolNode)
 
 ### 六個工具家族
 
-Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「tool selection policy」自行決定該用哪個。
+下列是 base session 的工具家族。`SYSTEM_PROMPT` 裡的「永遠可用」意思是「沒有 active skill policy 時的基礎集合」；一旦 skill 啟用且 `tool_policy_active=True`，實際 schema binding 與 dispatch 都以 runtime 的 `allowed_tools` / `denied_tools` 為準，writer 會另外收到 ephemeral `[Tool availability]` hint。
 
-**① 本地知識庫（永遠可用）**
+**① 本地知識庫（base session 可用）**
 
 由 `rag.TOOL_SCHEMAS` + `rag.dispatch(...)` 生成 LangChain tools；chat graph 不再維護一份獨立的 RAG tool schema。一般 chat 預設只綁互動檢索需要的三個 tool，`rag_list_chunks` 保留給 eval / audit 類內部流程。
 
@@ -59,15 +59,15 @@ Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「
 | `rag_get_context` | `raw.json` | 用 `pid` 找到同一檔案的所有 chunks，回傳目標 chunk 前後 N 個 |
 | `rag_list_chunks` | `raw.json` | 不做 embedding，直接列舉 chunks；預設不綁進 chat |
 
-**② 對話歷史（永遠可用）**
+**② 對話歷史（base session 可用）**
 
 | Tool | 讀什麼 | 用途 |
 |------|--------|------|
 | `recall_history` | `<rag persist_dir>/chat_history/` ChromaDB | 語義搜尋已成功持久化、不在目前 prompt 裡的舊對話內容；可選 `role` filter |
 
-詳細生命週期見「長期記憶」段。**不是 rag_search 的替代品** — 知識庫文件問題仍走 rag_search。
+詳細生命週期見「長期記憶」段。**不是 rag_search 的替代品** — 知識庫文件問題仍走 rag_search。對 skill author 而言，`rag.search` 和 `history.search` 是兩個不同 capability：前者授權查 indexed KB，後者授權查持久化 chat history。
 
-**③ 本地檔案（永遠可用）**
+**③ 本地檔案（base session 可用）**
 
 | Tool | 用途 |
 |------|------|
@@ -75,7 +75,7 @@ Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「
 
 讀本地草稿、reviewer comments、plan log、active skill bundle 裡的 reference 檔等。**只能讀檔，不能列目錄** — 列目錄要用 `bash`。
 
-**④ Shell（永遠可用，但每次呼叫都要批准）**
+**④ Shell（base session 可用，但每次呼叫都要批准）**
 
 | Tool | 用途 |
 |------|------|
@@ -116,7 +116,7 @@ Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「
 
 1. **功能綁定** — `agent/graph.py` build 一個 list，**按 active skill 動態 filter** 後餵給 `model.bind_tools(...)`（送 schema 給 LLM）。`(active_skill, task_mode, tool_policy_active, allowed, denied)` 為 key 的 LRU cache 避免每 turn rebuild
 2. **Dispatch 把關** — `PolicyToolNode` 在 tool 真正執行前再 check 一次 allow/deny list；防止模型用緩存 schema、或被 prompt injection 誘導 call denied tool
-3. **語意提示** — `agent/session.py:SYSTEM_PROMPT` 列出每個工具家族的描述、選用時機、注意事項
+3. **語意提示** — `agent/session.py:SYSTEM_PROMPT` 列出每個工具家族的描述、選用時機、注意事項；active skill 下再用 ephemeral `[Tool availability]` SystemMessage 覆蓋「always available」的基礎描述
 
 三層缺一不可：第一層讓 LLM 看到精確 schema，第二層 enforce runtime policy（即使第一層被繞過），第三層讓 LLM 知道何時該選哪個。
 
@@ -154,7 +154,7 @@ Agent 啟動時把下列所有 tool 綁到 LLM；LLM 依照 system prompt 的「
 |---|---|---|
 | 對話落地 | ChromaDB `chat_history` | `plan_logs/plan-{session_id}-{ts}.md` |
 | 工具結果 | 只進 prompt context | **完整渲染進 md**（args + ToolMessage content；單個結果超過 `plan_log_max_tool_chars` 截斷只影響 md，不影響 LLM context） |
-| 跨 session 索引 | 可被 `recall_history` 搜到 | **永不入 chroma**（gitignored + rag SKIP_DIRS + frontmatter sentinel 三層防護） |
+| 跨 session 索引 | 可被 `recall_history` 搜到 | **永不入 chroma**，所以 `recall_history` 查不到 plan-mode-only 內容（gitignored + rag SKIP_DIRS + frontmatter sentinel 三層防護） |
 | 切換時機 | `/mode normal` | `/mode plan` |
 
 切 mode 時**不清空 `recent_turns`** — 切換前的 turn 保有原本 persist_target，切換後新 turn 用新 target，eviction 各自走各自的目的地。
@@ -180,7 +180,7 @@ skills/<name>/
 
 1. 使用者 `/skill` → 互動 picker 列出 `skills/<name>/` 下所有 SKILL.md 的 name 與 description（只給使用者選，不寫進 prompt）。`[0] none` 用來 deactivate。若 skill manifest 宣告 `task_modes`，picker 走二段：先選 skill，再選 task mode。`/skill <name> [mode]` 為 one-shot；輸入錯誤會轉成 `SlashCommandError`，不炸掉 chat loop。
 2. `session.activate_skill(name, mode)` 同步：讀 SKILL.md → 解析並 schema validate manifest → 透過 capability broker 把宣告的 capability 對應到實際 tool 名稱（含 MCP family）→ required capability 無法解析就 fail fast → load 所有 `pinned: true` 的 reference 並檢查單檔 / total context 上限 → 組 `SkillRuntime` 寫進 `session.active_skill_runtime`。
-3. 之後每 turn，`_prompt_history()` 在 system prompt 之後插入一條 ephemeral `SystemMessage`（內容是 SkillRuntime.context_block()），帶 `[Active skill]` 標題、SKILL.md 全文、pinned references。Hint 不持久化。
+3. 之後每 turn，`_prompt_history()` 在 system prompt 之後插入 ephemeral `SystemMessage`：一條是 SkillRuntime.context_block()（`[Active skill]`、SKILL.md 全文、pinned references），另一條是 `[Tool availability]`（active skill、task mode、`tool_policy_active`、實際 available / denied / unavailable base tools）。Hint 都不持久化。
 4. graph `skill_loader_node` 在每 turn 開頭把 SkillRuntime 的 `tool_policy_active` / `allowed_tools` / `denied_tools` 拷貝進 state；agent_node 依此 filter tools 重新 bind；PolicyToolNode 在 dispatch 層再 enforce 一次。只有 `tool_policy_active=False` 才代表 no policy；不能再用 allowed / denied 是否同時為空推論。
 5. skill_validator_node 在最終 AIMessage 上跑 deterministic checks（per-skill rule）；違規且未超 retry 上限 → 回 agent 改寫；否則 → END。
 
@@ -192,9 +192,12 @@ skills/<name>/
 capabilities:
   file.read:    { local_tools: [read_file] }
   rag.search:   { local_tools: [rag_search, rag_explore, rag_get_context] }
+  history.search: { local_tools: [recall_history] }
   web.search:   { mcp_families: [web_search] }
   shell.execute: { local_tools: [bash] }
 ```
+
+Skill 如果可能需要使用者過去對話脈絡，manifest 必須宣告 `history.search`；只宣告 `rag.search` 只能查 indexed KB，不會讓 writer 看到 `recall_history` schema。
 
 **禁止繞道**：`agent/skills/runtime.py:SkillRuntime.read_skill_resource()` 強制把 `rel_path` join 到 `skill_root` 然後 `is_relative_to(root)` traversal guard；`read_file` 在 active skill 下對 `references/`、`assets/`、`scripts/` 開頭的 relative path 也只解析到 skill bundle，找不到就報錯，不 fallback 到 cwd。讀一般 cwd 草稿仍使用普通相對路徑或 absolute path；absolute path 會先經過敏感檔名 / path segment denylist。
 
@@ -241,7 +244,7 @@ capabilities:
 
 **Runtime 限制：**
 
-- `manifest.yaml` 宣告 required capabilities：`file.read`、`rag.search`；optional capability：`web.search`，只在 target journal guidelines 或最新 venue information 需要時使用。
+- `manifest.yaml` 宣告 required capabilities：`file.read`、`rag.search`、`history.search`；optional capability：`web.search`，只在 target journal guidelines 或最新 venue information 需要時使用。
 - `tool_policy.disallow: [bash]`，所以這個 skill 啟用後，論文寫作流程不能靠 shell 執行繞過讀檔 / RAG / web search 的受控路徑。
 - skill validator 目前有 academic-specific deterministic check，例如避免輸出沒有 citation marker 支撐的百分比敘述；命中時會要求 agent 改寫一次。
 

@@ -10,6 +10,8 @@ from typing import Any, Literal, TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from agent.skills.runtime import render_tool_availability_block
+
 
 ReviewSeverity = Literal["blocker", "major", "minor", "note"]
 ReviewDecision = Literal["pass", "revise", "block"]
@@ -77,6 +79,32 @@ _CLARIFY_SENTINEL = "<<CLARIFY>>"
 _TRUNCATED = "... [truncated]"
 _OLDER_EVIDENCE_TRUNCATED = "... [older evidence truncated]"
 _T = TypeVar("_T", bound=BaseModel)
+_RETRIEVAL_REVIEW_RULES = """
+Finding routing contract, highest priority:
+- Before writing any finding, choose whether the issue is recoverable by another
+  writer/reviser pass or genuinely needs the user.
+- Use needs_user_input=true only when another writer/reviser pass cannot fix the
+  issue with the currently available tools.
+- If the user asks for earlier conversation content and the relevant
+  history-retrieval tool is listed under available_tools, but the evidence trace
+  has no matching tool call, emit decision=revise with one finding shaped as
+  severity=major and needs_user_input=false. The revision_instruction is for the
+  writer/reviser and must name the available tool and query to try.
+- If the relevant history-retrieval tool was called and the result is empty,
+  do not ask the user to restate all research content. Use severity=minor or
+  severity=note with needs_user_input=false, and allow an honest draft that says
+  the search found insufficient records. A narrow follow-up question is allowed.
+- If the relevant history-retrieval tool appears under denied_tools or
+  unavailable_base_tools, emit severity=blocker with needs_user_input=true and
+  decision=block; the revision_instruction must be user-readable and explain
+  that this is a tool policy/settings problem.
+- If the user truly has not provided necessary information and the available
+  tools cannot recover it, needs_user_input=true is allowed, but the
+  revision_instruction must be a concrete user-facing question.
+- If the draft introduces research results, data, methods, citations, quotes,
+  page numbers, or claims not supported by the input or evidence trace, block
+  or revise it. Never allow fabricated scholarly content.
+""".strip()
 
 
 def parse_structured_output(model_type: type[_T], text: str) -> _T:
@@ -187,17 +215,22 @@ def rewrite_messages(
     user_input: str,
     visible_context: str,
     skill_context: str,
+    tool_availability: str = "",
 ) -> list:
     """Build prompt-master rewrite messages."""
-    wrapper = """
+    availability = tool_availability.strip() or render_tool_availability_block()
+    wrapper = f"""
 
 [內部 extended-thinking wrapper]
 
-你是內部 pipeline 的一環。target tool 是一個 LangGraph research agent，
-可用工具：rag_explore、rag_search、rag_get_context、recall_history、
-read_file、bash、MCP web_search、MCP github，以及使用者目前啟用的 active skill。
+你是內部 pipeline 的一環。target tool 是一個 LangGraph research agent。
+以下工具可用性區塊是該 agent 本 turn 的實際工具狀態，必須視為唯一事實來源：
+
+{availability}
 
 請把使用者的 prompt 改寫成給該 agent 看的自然語言指令。
+若某工具或工具 family 不在 available_tools 內，或出現在 denied_tools /
+unavailable_base_tools 內，不要假設 target agent 可以使用它。
 
 硬性禁令：你不得新增以下「原始輸入、visible context 與 active skill context」
 三者都未提供的內容：
@@ -238,13 +271,15 @@ def review_messages(
     skill_context: str,
     evidence_trace_summary: str,
     previous_rebuttal: str,
+    tool_availability: str = "",
 ) -> list:
     """Build reviewer messages for a structured ReviewReport JSON response."""
+    availability = tool_availability.strip() or render_tool_availability_block()
     return [
         SystemMessage(content=(
             "You are an independent reviewer for extended thinking mode. "
             "Review the draft against the raw user input, rewritten prompt, "
-            "active skill context, evidence trace, and previous rebuttal. "
+            "active skill context, tool availability, evidence trace, and previous rebuttal. "
             "Return only valid JSON matching ReviewReport. Do not rewrite the draft.\n\n"
             "語言策略：JSON 內所有自然語言欄位（problem、evidence_from_draft、"
             "revision_instruction、summary_for_reviser）使用與「Raw user input」"
@@ -269,9 +304,11 @@ def review_messages(
             "  ],\n"
             '  "summary_for_reviser": "concise actionable summary"\n'
             "}\n\n"
+            f"{_RETRIEVAL_REVIEW_RULES}\n\n"
             f"Raw user input:\n{raw_user_input}\n\n"
             f"Rewritten prompt:\n{rewritten_prompt}\n\n"
             f"Active skill context:\n{skill_context or '(none)'}\n\n"
+            f"Tool availability:\n{availability}\n\n"
             f"Evidence trace summary:\n{evidence_trace_summary or '(none)'}\n\n"
             f"Previous rebuttal:\n{previous_rebuttal or '(none)'}\n\n"
             f"Draft:\n{draft}"
@@ -295,6 +332,7 @@ def rewrite_prompt(
     user_input: str,
     visible_context: str = "",
     skill_context: str = "",
+    tool_availability: str = "",
 ) -> RewriteResult:
     """Run prompt-master rewrite and parse clarify vs rewritten prompt."""
     text = invoke_text(
@@ -304,6 +342,7 @@ def rewrite_prompt(
             user_input=user_input,
             visible_context=visible_context,
             skill_context=skill_context,
+            tool_availability=tool_availability,
         ),
     )
     stripped = text.lstrip()
@@ -321,6 +360,7 @@ def review_draft(
     skill_context: str = "",
     evidence_trace_summary: str = "",
     previous_rebuttal: str = "",
+    tool_availability: str = "",
 ) -> ReviewReport:
     """Run the reviewer LLM step and parse a ReviewReport."""
     text = invoke_text(
@@ -332,6 +372,7 @@ def review_draft(
             skill_context=skill_context,
             evidence_trace_summary=evidence_trace_summary,
             previous_rebuttal=previous_rebuttal,
+            tool_availability=tool_availability,
         ),
     )
     return parse_structured_output(ReviewReport, text)

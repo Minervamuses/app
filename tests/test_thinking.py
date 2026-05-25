@@ -1,6 +1,7 @@
 """Tests for extended thinking workflow helpers."""
 
 import json
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
@@ -18,6 +19,7 @@ from agent.thinking import (
     parse_structured_output,
     render_route_message,
     review_draft,
+    rewrite_messages,
     rewrite_prompt,
     route_review_report,
     summarize_tool_trace,
@@ -123,7 +125,54 @@ def test_rewrite_prompt_returns_rewritten_prompt_and_includes_context():
     assert "raw request" in prompt_text
     assert "recent context" in prompt_text
     assert "active skill context" in prompt_text
+    assert "[Tool availability]" in prompt_text
     assert "你不得新增" in prompt_text
+
+
+def test_rewrite_prompt_includes_runtime_tool_availability():
+    model = _QueuedModel(["Rewrite this as a precise task."])
+    tool_block = (
+        "[Tool availability]\n"
+        "active_skill: paper\n"
+        "tool_policy_active: true\n"
+        "available_tools: alpha_search\n"
+        "denied_tools: shell_runner"
+    )
+
+    rewrite_prompt(
+        model,
+        skill_text="prompt-master skill",
+        user_input="raw request",
+        tool_availability=tool_block,
+    )
+
+    prompt_text = "\n".join(message.content for message in model.calls[0])
+    assert tool_block in prompt_text
+    assert "alpha_search" in prompt_text
+    assert "shell_runner" in prompt_text
+
+
+def test_rewrite_messages_do_not_embed_stale_tool_names():
+    rewrite_messages(
+        skill_text="prompt-master skill",
+        user_input="raw request",
+        visible_context="",
+        skill_context="",
+    )
+    source = (Path(__file__).resolve().parents[1] / "agent" / "thinking.py").read_text(
+        encoding="utf-8"
+    )
+
+    for name in (
+        "rag_explore",
+        "rag_search",
+        "recall_history",
+        "read_file",
+        "bash",
+        "web_search",
+        "github",
+    ):
+        assert name not in source
 
 
 def test_rewrite_prompt_detects_clarify_sentinel():
@@ -137,6 +186,11 @@ def test_rewrite_prompt_detects_clarify_sentinel():
 
 def test_review_draft_invokes_model_with_evidence_and_rebuttal():
     model = _QueuedModel([_report_json("pass")])
+    tool_block = (
+        "[Tool availability]\n"
+        "tool_policy_active: true\n"
+        "available_tools: alpha_search"
+    )
 
     report = review_draft(
         model,
@@ -146,14 +200,77 @@ def test_review_draft_invokes_model_with_evidence_and_rebuttal():
         skill_context="skill ctx",
         evidence_trace_summary="[Writer] tool trace",
         previous_rebuttal="reasonable objection",
+        tool_availability=tool_block,
     )
 
     assert report.decision == "pass"
     prompt_text = model.calls[0][-1].content
     assert "raw" in prompt_text
     assert "rewritten" in prompt_text
+    assert tool_block in prompt_text
     assert "[Writer] tool trace" in prompt_text
     assert "reasonable objection" in prompt_text
+
+
+def test_review_prompt_includes_retrieval_failure_routing_contract():
+    model = _QueuedModel([_report_json("pass")])
+
+    review_draft(
+        model,
+        raw_user_input="請看我之前的紀錄",
+        rewritten_prompt="Use prior chat history.",
+        draft="I need your full research background.",
+        evidence_trace_summary="=== [Writer] ===\nTool calls: none",
+        tool_availability=(
+            "[Tool availability]\n"
+            "tool_policy_active: true\n"
+            "available_tools: recall_history\n"
+            "denied_tools: (none)"
+        ),
+    )
+
+    prompt_text = model.calls[0][-1].content
+    assert "Finding routing contract" in prompt_text
+    assert "severity=major" in prompt_text
+    assert "needs_user_input=false" in prompt_text
+    assert "decision=revise" in prompt_text
+    assert "result is empty" in prompt_text
+    assert "tool policy/settings problem" in prompt_text
+    assert "Never allow fabricated scholarly content" in prompt_text
+
+
+def test_history_retrieval_gap_routes_to_revise_not_ask_user():
+    finding = _finding(
+        severity="major",
+        problem="Writer did not call the available history tool before asking the user.",
+        revision_instruction=(
+            "Call recall_history with a January research progress query before asking "
+            "the user for all background again."
+        ),
+        needs_user_input=False,
+    )
+    model = _QueuedModel([
+        _report_json("revise", [finding.model_dump()], "Use history retrieval first.")
+    ])
+
+    report = review_draft(
+        model,
+        raw_user_input="我一月上半做了什麼？你自行看一下紀錄。",
+        rewritten_prompt="Answer from prior chat history.",
+        draft="請提供完整研究背景。",
+        evidence_trace_summary="=== [Writer] ===\nTool calls: none",
+        tool_availability=(
+            "[Tool availability]\n"
+            "tool_policy_active: true\n"
+            "available_tools: recall_history\n"
+            "denied_tools: (none)"
+        ),
+    )
+
+    assert report.decision == "revise"
+    assert report.findings[0].severity == "major"
+    assert report.findings[0].needs_user_input is False
+    assert route_review_report(report, attempts=0) == "revise"
 
 
 def test_route_review_report_passes_minor_and_notes_without_rewrite():

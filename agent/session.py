@@ -28,6 +28,7 @@ from agent.skills import (
     discover_skills,
     load_skill_runtime,
 )
+from agent.skills.runtime import render_tool_availability_block
 from agent.skills.validator import validate_skill_output
 from agent.thinking import (
     Clarify,
@@ -208,6 +209,7 @@ class ChatSession:
             hint
             for hint in (
                 self._build_active_skill_hint(),
+                self._build_tool_availability_hint(),
                 self._build_plan_mode_hint(),
             )
             if hint is not None
@@ -225,6 +227,18 @@ class ChatSession:
         if self.active_skill_runtime is None:
             return ""
         return self.active_skill_runtime.context_block()
+
+    def _tool_availability_block(self) -> str:
+        return render_tool_availability_block(
+            skill_runtime=self.active_skill_runtime,
+            base_tool_names=[tool.name for tool in self._all_tool_refs()],
+            mcp_families=self.mcp_families,
+        )
+
+    def _build_tool_availability_hint(self) -> SystemMessage | None:
+        if self.active_skill_runtime is None:
+            return None
+        return SystemMessage(content=self._tool_availability_block())
 
     def _build_plan_mode_hint(self) -> SystemMessage | None:
         """Tell the LLM that some visible turns are plan-mode (md only),
@@ -702,6 +716,7 @@ class ChatSession:
             return answer, []
 
         skill_context = self._active_skill_context_block()
+        tool_availability = self._tool_availability_block()
         try:
             rewrite_result = rewrite_prompt(
                 rewrite_model,
@@ -715,6 +730,7 @@ class ChatSession:
                     skill_context,
                     self.config.thinking_rewrite_skill_chars,
                 ),
+                tool_availability=tool_availability,
             )
         except Exception as exc:
             answer = self._extended_error_message(exc)
@@ -771,6 +787,7 @@ class ChatSession:
                     skill_context=skill_context,
                     evidence_trace_summary=evidence_trace_summary,
                     previous_rebuttal=rebuttal_history[-1] if rebuttal_history else "",
+                    tool_availability=tool_availability,
                 )
             except ThinkingOutputError as exc:
                 answer = self._extended_error_message(exc)
