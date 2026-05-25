@@ -10,6 +10,8 @@ from typing import Any, Literal, TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field, ValidationError
 
+from agent.skills.runtime import render_tool_availability_block
+
 
 ReviewSeverity = Literal["blocker", "major", "minor", "note"]
 ReviewDecision = Literal["pass", "revise", "block"]
@@ -187,17 +189,22 @@ def rewrite_messages(
     user_input: str,
     visible_context: str,
     skill_context: str,
+    tool_availability: str = "",
 ) -> list:
     """Build prompt-master rewrite messages."""
-    wrapper = """
+    availability = tool_availability.strip() or render_tool_availability_block()
+    wrapper = f"""
 
 [內部 extended-thinking wrapper]
 
-你是內部 pipeline 的一環。target tool 是一個 LangGraph research agent，
-可用工具：rag_explore、rag_search、rag_get_context、recall_history、
-read_file、bash、MCP web_search、MCP github，以及使用者目前啟用的 active skill。
+你是內部 pipeline 的一環。target tool 是一個 LangGraph research agent。
+以下工具可用性區塊是該 agent 本 turn 的實際工具狀態，必須視為唯一事實來源：
+
+{availability}
 
 請把使用者的 prompt 改寫成給該 agent 看的自然語言指令。
+若某工具或工具 family 不在 available_tools 內，或出現在 denied_tools /
+unavailable_base_tools 內，不要假設 target agent 可以使用它。
 
 硬性禁令：你不得新增以下「原始輸入、visible context 與 active skill context」
 三者都未提供的內容：
@@ -295,6 +302,7 @@ def rewrite_prompt(
     user_input: str,
     visible_context: str = "",
     skill_context: str = "",
+    tool_availability: str = "",
 ) -> RewriteResult:
     """Run prompt-master rewrite and parse clarify vs rewritten prompt."""
     text = invoke_text(
@@ -304,6 +312,7 @@ def rewrite_prompt(
             user_input=user_input,
             visible_context=visible_context,
             skill_context=skill_context,
+            tool_availability=tool_availability,
         ),
     )
     stripped = text.lstrip()

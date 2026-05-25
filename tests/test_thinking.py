@@ -1,6 +1,7 @@
 """Tests for extended thinking workflow helpers."""
 
 import json
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
@@ -18,6 +19,7 @@ from agent.thinking import (
     parse_structured_output,
     render_route_message,
     review_draft,
+    rewrite_messages,
     rewrite_prompt,
     route_review_report,
     summarize_tool_trace,
@@ -123,7 +125,54 @@ def test_rewrite_prompt_returns_rewritten_prompt_and_includes_context():
     assert "raw request" in prompt_text
     assert "recent context" in prompt_text
     assert "active skill context" in prompt_text
+    assert "[Tool availability]" in prompt_text
     assert "你不得新增" in prompt_text
+
+
+def test_rewrite_prompt_includes_runtime_tool_availability():
+    model = _QueuedModel(["Rewrite this as a precise task."])
+    tool_block = (
+        "[Tool availability]\n"
+        "active_skill: paper\n"
+        "tool_policy_active: true\n"
+        "available_tools: alpha_search\n"
+        "denied_tools: shell_runner"
+    )
+
+    rewrite_prompt(
+        model,
+        skill_text="prompt-master skill",
+        user_input="raw request",
+        tool_availability=tool_block,
+    )
+
+    prompt_text = "\n".join(message.content for message in model.calls[0])
+    assert tool_block in prompt_text
+    assert "alpha_search" in prompt_text
+    assert "shell_runner" in prompt_text
+
+
+def test_rewrite_messages_do_not_embed_stale_tool_names():
+    rewrite_messages(
+        skill_text="prompt-master skill",
+        user_input="raw request",
+        visible_context="",
+        skill_context="",
+    )
+    source = (Path(__file__).resolve().parents[1] / "agent" / "thinking.py").read_text(
+        encoding="utf-8"
+    )
+
+    for name in (
+        "rag_explore",
+        "rag_search",
+        "recall_history",
+        "read_file",
+        "bash",
+        "web_search",
+        "github",
+    ):
+        assert name not in source
 
 
 def test_rewrite_prompt_detects_clarify_sentinel():
