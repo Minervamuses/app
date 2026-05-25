@@ -245,13 +245,15 @@ def review_messages(
     skill_context: str,
     evidence_trace_summary: str,
     previous_rebuttal: str,
+    tool_availability: str = "",
 ) -> list:
     """Build reviewer messages for a structured ReviewReport JSON response."""
+    availability = tool_availability.strip() or render_tool_availability_block()
     return [
         SystemMessage(content=(
             "You are an independent reviewer for extended thinking mode. "
             "Review the draft against the raw user input, rewritten prompt, "
-            "active skill context, evidence trace, and previous rebuttal. "
+            "active skill context, tool availability, evidence trace, and previous rebuttal. "
             "Return only valid JSON matching ReviewReport. Do not rewrite the draft.\n\n"
             "語言策略：JSON 內所有自然語言欄位（problem、evidence_from_draft、"
             "revision_instruction、summary_for_reviser）使用與「Raw user input」"
@@ -279,6 +281,7 @@ def review_messages(
             f"Raw user input:\n{raw_user_input}\n\n"
             f"Rewritten prompt:\n{rewritten_prompt}\n\n"
             f"Active skill context:\n{skill_context or '(none)'}\n\n"
+            f"Tool availability:\n{availability}\n\n"
             f"Evidence trace summary:\n{evidence_trace_summary or '(none)'}\n\n"
             f"Previous rebuttal:\n{previous_rebuttal or '(none)'}\n\n"
             f"Draft:\n{draft}"
@@ -330,6 +333,7 @@ def review_draft(
     skill_context: str = "",
     evidence_trace_summary: str = "",
     previous_rebuttal: str = "",
+    tool_availability: str = "",
 ) -> ReviewReport:
     """Run the reviewer LLM step and parse a ReviewReport."""
     text = invoke_text(
@@ -341,6 +345,7 @@ def review_draft(
             skill_context=skill_context,
             evidence_trace_summary=evidence_trace_summary,
             previous_rebuttal=previous_rebuttal,
+            tool_availability=tool_availability,
         ),
     )
     return parse_structured_output(ReviewReport, text)

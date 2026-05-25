@@ -186,6 +186,11 @@ def test_rewrite_prompt_detects_clarify_sentinel():
 
 def test_review_draft_invokes_model_with_evidence_and_rebuttal():
     model = _QueuedModel([_report_json("pass")])
+    tool_block = (
+        "[Tool availability]\n"
+        "tool_policy_active: true\n"
+        "available_tools: alpha_search"
+    )
 
     report = review_draft(
         model,
@@ -195,12 +200,14 @@ def test_review_draft_invokes_model_with_evidence_and_rebuttal():
         skill_context="skill ctx",
         evidence_trace_summary="[Writer] tool trace",
         previous_rebuttal="reasonable objection",
+        tool_availability=tool_block,
     )
 
     assert report.decision == "pass"
     prompt_text = model.calls[0][-1].content
     assert "raw" in prompt_text
     assert "rewritten" in prompt_text
+    assert tool_block in prompt_text
     assert "[Writer] tool trace" in prompt_text
     assert "reasonable objection" in prompt_text
 
