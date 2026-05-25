@@ -212,6 +212,67 @@ def test_review_draft_invokes_model_with_evidence_and_rebuttal():
     assert "reasonable objection" in prompt_text
 
 
+def test_review_prompt_includes_retrieval_failure_routing_contract():
+    model = _QueuedModel([_report_json("pass")])
+
+    review_draft(
+        model,
+        raw_user_input="請看我之前的紀錄",
+        rewritten_prompt="Use prior chat history.",
+        draft="I need your full research background.",
+        evidence_trace_summary="=== [Writer] ===\nTool calls: none",
+        tool_availability=(
+            "[Tool availability]\n"
+            "tool_policy_active: true\n"
+            "available_tools: recall_history\n"
+            "denied_tools: (none)"
+        ),
+    )
+
+    prompt_text = model.calls[0][-1].content
+    assert "Finding routing contract" in prompt_text
+    assert "severity=major" in prompt_text
+    assert "needs_user_input=false" in prompt_text
+    assert "decision=revise" in prompt_text
+    assert "result is empty" in prompt_text
+    assert "tool policy/settings problem" in prompt_text
+    assert "Never allow fabricated scholarly content" in prompt_text
+
+
+def test_history_retrieval_gap_routes_to_revise_not_ask_user():
+    finding = _finding(
+        severity="major",
+        problem="Writer did not call the available history tool before asking the user.",
+        revision_instruction=(
+            "Call recall_history with a January research progress query before asking "
+            "the user for all background again."
+        ),
+        needs_user_input=False,
+    )
+    model = _QueuedModel([
+        _report_json("revise", [finding.model_dump()], "Use history retrieval first.")
+    ])
+
+    report = review_draft(
+        model,
+        raw_user_input="我一月上半做了什麼？你自行看一下紀錄。",
+        rewritten_prompt="Answer from prior chat history.",
+        draft="請提供完整研究背景。",
+        evidence_trace_summary="=== [Writer] ===\nTool calls: none",
+        tool_availability=(
+            "[Tool availability]\n"
+            "tool_policy_active: true\n"
+            "available_tools: recall_history\n"
+            "denied_tools: (none)"
+        ),
+    )
+
+    assert report.decision == "revise"
+    assert report.findings[0].severity == "major"
+    assert report.findings[0].needs_user_input is False
+    assert route_review_report(report, attempts=0) == "revise"
+
+
 def test_route_review_report_passes_minor_and_notes_without_rewrite():
     report = _report(
         _finding(severity="minor"),

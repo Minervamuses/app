@@ -79,6 +79,32 @@ _CLARIFY_SENTINEL = "<<CLARIFY>>"
 _TRUNCATED = "... [truncated]"
 _OLDER_EVIDENCE_TRUNCATED = "... [older evidence truncated]"
 _T = TypeVar("_T", bound=BaseModel)
+_RETRIEVAL_REVIEW_RULES = """
+Finding routing contract, highest priority:
+- Before writing any finding, choose whether the issue is recoverable by another
+  writer/reviser pass or genuinely needs the user.
+- Use needs_user_input=true only when another writer/reviser pass cannot fix the
+  issue with the currently available tools.
+- If the user asks for earlier conversation content and the relevant
+  history-retrieval tool is listed under available_tools, but the evidence trace
+  has no matching tool call, emit decision=revise with one finding shaped as
+  severity=major and needs_user_input=false. The revision_instruction is for the
+  writer/reviser and must name the available tool and query to try.
+- If the relevant history-retrieval tool was called and the result is empty,
+  do not ask the user to restate all research content. Use severity=minor or
+  severity=note with needs_user_input=false, and allow an honest draft that says
+  the search found insufficient records. A narrow follow-up question is allowed.
+- If the relevant history-retrieval tool appears under denied_tools or
+  unavailable_base_tools, emit severity=blocker with needs_user_input=true and
+  decision=block; the revision_instruction must be user-readable and explain
+  that this is a tool policy/settings problem.
+- If the user truly has not provided necessary information and the available
+  tools cannot recover it, needs_user_input=true is allowed, but the
+  revision_instruction must be a concrete user-facing question.
+- If the draft introduces research results, data, methods, citations, quotes,
+  page numbers, or claims not supported by the input or evidence trace, block
+  or revise it. Never allow fabricated scholarly content.
+""".strip()
 
 
 def parse_structured_output(model_type: type[_T], text: str) -> _T:
@@ -278,6 +304,7 @@ def review_messages(
             "  ],\n"
             '  "summary_for_reviser": "concise actionable summary"\n'
             "}\n\n"
+            f"{_RETRIEVAL_REVIEW_RULES}\n\n"
             f"Raw user input:\n{raw_user_input}\n\n"
             f"Rewritten prompt:\n{rewritten_prompt}\n\n"
             f"Active skill context:\n{skill_context or '(none)'}\n\n"
