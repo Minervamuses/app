@@ -1,10 +1,12 @@
 """Tests for active skill runtime loading."""
 
+from types import SimpleNamespace
+
 import pytest
 from langchain_core.tools import tool
 
 from agent.config import AgentConfig
-from agent.skills.runtime import load_skill_runtime
+from agent.skills.runtime import load_skill_runtime, render_tool_availability_block
 
 
 @tool("read_file")
@@ -310,3 +312,71 @@ def test_load_skill_runtime_rejects_unknown_task_mode(tmp_path):
                 "capabilities": {"file.read": {"local_tools": ["read_file"]}}
             },
         )
+
+
+def test_render_tool_availability_block_for_active_skill():
+    runtime = SimpleNamespace(
+        name="paper",
+        task_mode="revision",
+        allowed_tools=frozenset({"read_file", "rag_search"}),
+        denied_tools=frozenset({"bash"}),
+        tool_policy_active=True,
+    )
+
+    block = render_tool_availability_block(
+        skill_runtime=runtime,
+        base_tool_names=["rag_search", "read_file", "bash", "github_search"],
+        mcp_families={"github_search": "github"},
+    )
+
+    assert "active_skill: paper" in block
+    assert "task_mode: revision" in block
+    assert "tool_policy_active: true" in block
+    assert "available_tools: rag_search, read_file" in block
+    assert "denied_tools: bash" in block
+    assert "unavailable_base_tools: bash, github_search" in block
+    assert 'Active skill policy overrides the base "always available" wording' in block
+
+
+def test_render_tool_availability_block_without_active_skill_collapses_mcp_families():
+    block = render_tool_availability_block(
+        base_tool_names=[
+            "rag_search",
+            "web_search_one",
+            "web_search_two",
+            "github_issue",
+        ],
+        mcp_families={
+            "web_search_one": "web_search",
+            "web_search_two": "web_search",
+            "github_issue": "github",
+        },
+    )
+
+    assert "active_skill: (none)" in block
+    assert "tool_policy_active: false" in block
+    assert "available_tools: rag_search, MCP family: web_search, MCP family: github" in block
+    assert "web_search_two" not in block
+    assert "denied_tools: (none)" in block
+
+
+def test_render_tool_availability_block_for_disallow_only_policy():
+    runtime = SimpleNamespace(
+        name="read-only",
+        task_mode=None,
+        allowed_tools=frozenset(),
+        denied_tools=frozenset({"bash"}),
+        tool_policy_active=True,
+    )
+
+    block = render_tool_availability_block(
+        skill_runtime=runtime,
+        base_tool_names=["read_file", "bash"],
+    )
+
+    assert "active_skill: read-only" in block
+    assert "task_mode: (none)" in block
+    assert "tool_policy_active: true" in block
+    assert "available_tools: read_file" in block
+    assert "denied_tools: bash" in block
+    assert "unavailable_base_tools: bash" in block

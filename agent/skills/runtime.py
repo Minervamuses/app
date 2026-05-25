@@ -18,6 +18,9 @@ from agent.skills.manifest_schema import validate_skill_manifest
 from agent.skills.metadata import SkillMetadata, discover_skills
 
 
+_NONE = "(none)"
+
+
 @dataclass(frozen=True)
 class SkillRuntime:
     """Loaded runtime context for one active skill."""
@@ -71,6 +74,104 @@ class SkillRuntime:
                     content,
                 ])
         return "\n".join(lines)
+
+
+def render_tool_availability_block(
+    *,
+    skill_runtime: SkillRuntime | None = None,
+    base_tool_names: Sequence[str] | None = None,
+    mcp_families: Mapping[str, str] | None = None,
+) -> str:
+    """Render prompt-visible tool availability from runtime state.
+
+    The active graph remains the source of truth for actual tool binding. This
+    helper renders the same state for prompts so rewriter, writer, and reviewer
+    do not carry their own stale tool lists.
+    """
+    base_names = _dedupe_strings(base_tool_names or ())
+    denied_names = set(getattr(skill_runtime, "denied_tools", frozenset()) or ())
+    allowed_names = set(getattr(skill_runtime, "allowed_tools", frozenset()) or ())
+    policy_active = bool(
+        getattr(skill_runtime, "tool_policy_active", False)
+        if skill_runtime is not None
+        else False
+    )
+
+    if policy_active:
+        if allowed_names:
+            available_names = [
+                name for name in base_names if name in allowed_names and name not in denied_names
+            ]
+            available_names.extend(
+                name
+                for name in sorted(allowed_names - denied_names)
+                if name not in set(available_names)
+            )
+        elif denied_names:
+            available_names = [name for name in base_names if name not in denied_names]
+        else:
+            available_names = []
+    else:
+        available_names = list(base_names)
+
+    unavailable_base_names = [
+        name
+        for name in base_names
+        if name not in set(available_names) and (policy_active or name in denied_names)
+    ]
+
+    active_skill = getattr(skill_runtime, "name", None) if skill_runtime else None
+    task_mode = getattr(skill_runtime, "task_mode", None) if skill_runtime else None
+
+    lines = [
+        "[Tool availability]",
+        f"active_skill: {active_skill or _NONE}",
+        f"task_mode: {task_mode or _NONE}",
+        f"tool_policy_active: {str(policy_active).lower()}",
+        f"available_tools: {_format_tool_names(available_names, mcp_families if not policy_active else None)}",
+        f"denied_tools: {_format_tool_names(sorted(denied_names), None)}",
+        f"unavailable_base_tools: {_format_tool_names(unavailable_base_names, mcp_families if not policy_active else None)}",
+    ]
+    if policy_active:
+        lines.append(
+            'note: Active skill policy overrides the base "always available" wording.'
+        )
+    else:
+        lines.append("note: No active skill policy; use graph-bound base tools.")
+    return "\n".join(lines)
+
+
+def _dedupe_strings(items: Sequence[str]) -> list[str]:
+    return [item for item in dict.fromkeys(items) if isinstance(item, str) and item]
+
+
+def _format_tool_names(
+    names: Sequence[str],
+    mcp_families: Mapping[str, str] | None,
+) -> str:
+    rendered = _tool_names_with_families(names, mcp_families)
+    return ", ".join(rendered) if rendered else _NONE
+
+
+def _tool_names_with_families(
+    names: Sequence[str],
+    mcp_families: Mapping[str, str] | None,
+) -> list[str]:
+    if not mcp_families:
+        return list(names)
+
+    rendered: list[str] = []
+    seen_families: set[str] = set()
+    for name in names:
+        family = mcp_families.get(name)
+        if family:
+            if family in seen_families:
+                continue
+            rendered.append(f"MCP family: {family}")
+            seen_families.add(family)
+        else:
+            rendered.append(name)
+    return rendered
 
 
 def load_skill_runtime(
