@@ -16,6 +16,13 @@ from agent.skills.runtime import render_tool_availability_block
 ReviewSeverity = Literal["blocker", "major", "minor", "note"]
 ReviewDecision = Literal["pass", "revise", "block"]
 ReviewRoute = Literal["pass", "revise", "ask_user", "stop"]
+ReviewFailureMode = Literal[
+    "retrieval_not_attempted",
+    "retrieval_empty",
+    "tool_unavailable",
+    "user_input_missing",
+    "fabrication_risk",
+]
 
 MAX_REVIEW_ATTEMPTS = 2
 REVISER_FORMAT_WARNING = (
@@ -52,6 +59,7 @@ class ReviewFinding(BaseModel):
     evidence_from_draft: str
     revision_instruction: str
     needs_user_input: bool
+    failure_mode: ReviewFailureMode | None = None
 
 
 class ReviewReport(BaseModel):
@@ -79,10 +87,27 @@ _CLARIFY_SENTINEL = "<<CLARIFY>>"
 _TRUNCATED = "... [truncated]"
 _OLDER_EVIDENCE_TRUNCATED = "... [older evidence truncated]"
 _T = TypeVar("_T", bound=BaseModel)
+_RECOVERABLE_FAILURE_MODES = frozenset({
+    "retrieval_not_attempted",
+    "retrieval_empty",
+})
+_USER_BLOCKING_FAILURE_MODES = frozenset({
+    "tool_unavailable",
+    "user_input_missing",
+})
+_INTERNAL_REVISION_RE = re.compile(
+    r"\b(?:reviser|writer|reviewer|finding|revision_instruction|"
+    r"summary_for_reviser)\b|(?:reviser|writer|reviewer)\s*(?:應|should|must)|"
+    r"\bdraft\s+(?:should|must)\b|內部|審稿意見",
+    re.IGNORECASE,
+)
 _RETRIEVAL_REVIEW_RULES = """
 Finding routing contract, highest priority:
 - Before writing any finding, choose whether the issue is recoverable by another
   writer/reviser pass or genuinely needs the user.
+- Set failure_mode on each finding when one applies:
+  retrieval_not_attempted, retrieval_empty, tool_unavailable,
+  user_input_missing, or fabrication_risk.
 - Use needs_user_input=true only when another writer/reviser pass cannot fix the
   issue with the currently available tools.
 - If the user asks for earlier conversation content and the relevant
@@ -160,16 +185,44 @@ def route_review_report(
     max_attempts: int = MAX_REVIEW_ATTEMPTS,
 ) -> ReviewRoute:
     """Route review findings with blocker/user-input checks before revision."""
-    if any(finding.needs_user_input for finding in report.findings):
+    recoverable_findings = [
+        finding
+        for finding in report.findings
+        if finding.failure_mode in _RECOVERABLE_FAILURE_MODES
+    ]
+    blocking_findings = [
+        finding
+        for finding in report.findings
+        if finding.failure_mode in _USER_BLOCKING_FAILURE_MODES
+    ]
+
+    if blocking_findings:
         return "ask_user"
+    if any(
+        finding.needs_user_input
+        for finding in report.findings
+        if finding.failure_mode not in _RECOVERABLE_FAILURE_MODES
+    ):
+        return "ask_user"
+    if report.decision == "block" and recoverable_findings:
+        if attempts >= max_attempts:
+            return "stop"
+        return "revise"
     if report.decision == "block" or any(
-        finding.severity == "blocker" for finding in report.findings
+        finding.severity == "blocker"
+        and finding.failure_mode not in _RECOVERABLE_FAILURE_MODES
+        for finding in report.findings
     ):
         return "ask_user"
     if report.decision == "pass":
         return "pass"
     if attempts >= max_attempts:
         return "stop"
+    if any(
+        finding.failure_mode == "retrieval_not_attempted"
+        for finding in report.findings
+    ):
+        return "revise"
     if any(finding.severity == "major" for finding in report.findings):
         return "revise"
     return "pass"
@@ -185,8 +238,30 @@ def render_review_stop_message(report: ReviewReport) -> str:
     if not findings:
         return "目前仍有無法安全自動修正的問題，需要使用者確認。"
     lines = ["目前仍有無法安全自動修正的問題，需要使用者確認："]
-    lines.extend(f"- {finding.revision_instruction}" for finding in findings)
+    lines.extend(f"- {_user_facing_review_instruction(finding)}" for finding in findings)
     return "\n".join(lines)
+
+
+def _user_facing_review_instruction(finding: ReviewFinding) -> str:
+    instruction = (finding.revision_instruction or "").strip()
+    if instruction and not _looks_internal_review_instruction(instruction):
+        return instruction
+
+    if finding.failure_mode == "tool_unavailable":
+        return (
+            "目前需要的工具被 active skill policy 或工具設定排除；請切換 skill、"
+            "調整工具設定，或提供可由目前工具讀取的資料位置。"
+        )
+    if finding.failure_mode == "fabrication_risk":
+        return (
+            "目前草稿包含缺乏 evidence 支撐的研究內容；請提供來源，"
+            "或允許我移除那些 unsupported claims。"
+        )
+    return "需要更多資訊才能安全完成這個任務；請補充缺少的資料或材料位置。"
+
+
+def _looks_internal_review_instruction(text: str) -> bool:
+    return bool(_INTERNAL_REVISION_RE.search(text))
 
 
 def render_route_message(
@@ -299,7 +374,9 @@ def review_messages(
             '      "problem": "what is wrong",\n'
             '      "evidence_from_draft": "quote or paraphrase from the draft",\n'
             '      "revision_instruction": "specific fix or user question",\n'
-            '      "needs_user_input": true\n'
+            '      "needs_user_input": true,\n'
+            '      "failure_mode": "retrieval_not_attempted|retrieval_empty|'
+            'tool_unavailable|user_input_missing|fabrication_risk|null"\n'
             "    }\n"
             "  ],\n"
             '  "summary_for_reviser": "concise actionable summary"\n'

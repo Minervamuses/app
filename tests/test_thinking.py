@@ -17,6 +17,7 @@ from agent.thinking import (
     extract_draft_for_user,
     parse_reviser_output,
     parse_structured_output,
+    render_review_stop_message,
     render_route_message,
     review_draft,
     rewrite_messages,
@@ -75,6 +76,30 @@ def test_parse_structured_output_accepts_json_fence():
     )
 
     assert parsed.decision == "pass"
+
+
+def test_review_finding_failure_mode_is_optional_and_parsed():
+    parsed = parse_structured_output(
+        ReviewReport,
+        json.dumps({
+            "decision": "revise",
+            "findings": [
+                {
+                    "severity": "major",
+                    "dimension": "instruction following",
+                    "location": "whole draft",
+                    "problem": "retrieval was skipped",
+                    "evidence_from_draft": "asks user to restate context",
+                    "revision_instruction": "Use the available history tool first.",
+                    "needs_user_input": True,
+                    "failure_mode": "retrieval_not_attempted",
+                }
+            ],
+            "summary_for_reviser": "retrieve first",
+        }),
+    )
+
+    assert parsed.findings[0].failure_mode == "retrieval_not_attempted"
 
 
 def test_parse_structured_output_rejects_invalid_json():
@@ -234,6 +259,8 @@ def test_review_prompt_includes_retrieval_failure_routing_contract():
     assert "severity=major" in prompt_text
     assert "needs_user_input=false" in prompt_text
     assert "decision=revise" in prompt_text
+    assert "failure_mode" in prompt_text
+    assert "retrieval_not_attempted" in prompt_text
     assert "result is empty" in prompt_text
     assert "tool policy/settings problem" in prompt_text
     assert "Never allow fabricated scholarly content" in prompt_text
@@ -271,6 +298,79 @@ def test_history_retrieval_gap_routes_to_revise_not_ask_user():
     assert report.findings[0].severity == "major"
     assert report.findings[0].needs_user_input is False
     assert route_review_report(report, attempts=0) == "revise"
+
+
+def test_retrieval_failure_mode_overrides_bad_user_input_flag():
+    report = _report(
+        _finding(
+            severity="major",
+            needs_user_input=True,
+            failure_mode="retrieval_not_attempted",
+        ),
+        decision="block",
+    )
+
+    assert route_review_report(report, attempts=0) == "revise"
+
+
+def test_retrieval_empty_failure_mode_does_not_ask_user():
+    report = _report(
+        _finding(
+            severity="minor",
+            needs_user_input=True,
+            failure_mode="retrieval_empty",
+        ),
+        decision="block",
+    )
+
+    assert route_review_report(report, attempts=0) == "revise"
+
+
+def test_tool_unavailable_failure_mode_still_asks_user():
+    report = _report(
+        _finding(
+            severity="major",
+            needs_user_input=False,
+            failure_mode="tool_unavailable",
+        ),
+        decision="revise",
+    )
+
+    assert route_review_report(report, attempts=0) == "ask_user"
+
+
+def test_review_stop_message_sanitizes_internal_reviser_instruction():
+    report = _report(
+        _finding(
+            severity="blocker",
+            needs_user_input=True,
+            revision_instruction=(
+                "reviser 應回到 academic-paper-writing 技能的 Intake checklist"
+            ),
+        ),
+        decision="block",
+    )
+
+    rendered = render_review_stop_message(report)
+
+    assert "reviser" not in rendered
+    assert "Intake checklist" not in rendered
+    assert "需要更多資訊" in rendered
+
+
+def test_review_stop_message_preserves_user_readable_question():
+    report = _report(
+        _finding(
+            severity="blocker",
+            needs_user_input=True,
+            revision_instruction="請提供研究資料所在的檔案或資料夾名稱。",
+        ),
+        decision="block",
+    )
+
+    rendered = render_review_stop_message(report)
+
+    assert "請提供研究資料所在的檔案或資料夾名稱。" in rendered
 
 
 def test_route_review_report_passes_minor_and_notes_without_rewrite():
