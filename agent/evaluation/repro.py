@@ -146,10 +146,10 @@ def chroma_collection_fingerprint(collection: Any) -> str:
 def chroma_collection_records(collection: Any) -> list[dict]:
     """Return canonical Chroma collection records sorted by id."""
     data = collection.get(include=["documents", "metadatas", "embeddings"])
-    ids = data.get("ids") or []
-    documents = data.get("documents") or []
-    metadatas = data.get("metadatas") or []
-    embeddings = data.get("embeddings") or []
+    ids = _get_collection_field(data, "ids")
+    documents = _get_collection_field(data, "documents")
+    metadatas = _get_collection_field(data, "metadatas")
+    embeddings = _get_collection_field(data, "embeddings")
 
     records = []
     for idx, item_id in enumerate(ids):
@@ -226,6 +226,11 @@ def _git(repo: Path, *args: str) -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return completed.stdout.strip()
+
+
+def _get_collection_field(data: dict, key: str) -> Any:
+    value = data.get(key)
+    return [] if value is None else value
 
 
 def _default_collection_name() -> str:

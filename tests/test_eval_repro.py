@@ -30,6 +30,21 @@ class FakeCollection:
         }
 
 
+class AmbiguousSequence(list):
+    def __bool__(self):
+        raise ValueError("ambiguous truth value")
+
+    def tolist(self):
+        return list(self)
+
+
+class FakeNumpyLikeCollection(FakeCollection):
+    def get(self, include):
+        data = super().get(include)
+        data["embeddings"] = AmbiguousSequence(data["embeddings"])
+        return data
+
+
 def _rows():
     return [
         {
@@ -70,6 +85,10 @@ def test_chroma_collection_fingerprint_changes_when_content_changes():
     changed_rows[0] = {**changed_rows[0], "document": "changed"}
 
     assert chroma_collection_fingerprint(FakeCollection(changed_rows)) != original
+
+
+def test_chroma_collection_fingerprint_accepts_numpy_like_embeddings():
+    assert chroma_collection_fingerprint(FakeNumpyLikeCollection(_rows()))
 
 
 def test_ensure_store_fingerprint_raises_on_mismatch():
