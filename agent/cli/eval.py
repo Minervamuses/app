@@ -2,6 +2,7 @@
 
 Usage:
     python -m agent.cli.eval --suite behavior
+    python -m agent.cli.eval --claim c1 --split dev --allow-skips
     python -m agent.cli.eval --suite e2e --generate 15
     python -m agent.cli.eval --suite thinking
     python -m agent.cli.eval --all --generate 5
@@ -21,11 +22,15 @@ from dotenv import load_dotenv
 from agent.config import AgentConfig
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
+from agent.evaluation.claims.c1_routing import C1RoutingEvaluator
+from agent.evaluation.datasets import dataset_file_path, dataset_hash, load_claim_dataset
 from agent.evaluation.endtoend import EndToEndEvaluator
+from agent.evaluation.ledger import append_result
 from agent.evaluation.thinking import ThinkingReviewerEvaluator
 from agent.mcp import load_mcp_tools
 
 SUITE_NAMES = ("behavior", "e2e", "thinking")
+CLAIM_NAMES = ("c1", "c2", "c3", "c4")
 _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
@@ -91,6 +96,55 @@ def _run_suite(
     return result
 
 
+def _output_root(output_dir: str | None) -> Path | None:
+    if output_dir is None:
+        return None
+    path = Path(output_dir)
+    return path.parent if path.name == "eval" else path
+
+
+def _run_claim(
+    claim: str,
+    config: AgentConfig,
+    split: str,
+    output_dir: str | None,
+    extra_tools: list | None,
+    allow_skips: bool,
+) -> EvalResult:
+    """Run a single new claim evaluator and append to the run ledger."""
+    if claim != "c1":
+        raise NotImplementedError(f"Claim '{claim}' is not implemented yet")
+
+    cases = load_claim_dataset(claim, split)
+    print(f"[{claim}] Loaded {len(cases)} {split} cases")
+
+    evaluator = C1RoutingEvaluator(
+        config,
+        extra_tools=extra_tools,
+        allow_skips=allow_skips,
+    )
+    print(f"[{claim}] Evaluating...")
+    result = evaluator.evaluate(cases)
+
+    root = _output_root(output_dir)
+    if root is not None:
+        dataset_path = dataset_file_path(claim, split)
+        row = append_result(
+            claim,
+            result,
+            root=root,
+            include_details=(split != "test" or allow_skips),
+            extra_metadata={
+                "split": split,
+                "dataset_id": f"{claim}/{split}",
+                "dataset_hash": dataset_hash(dataset_path),
+            },
+        )
+        print(f"[{claim}] Ledger row → eval/runs/{claim}.jsonl ({row['run_id']})")
+
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run agent evaluation suites: behavior and end-to-end."
@@ -98,6 +152,19 @@ def main():
     parser.add_argument(
         "--suite", choices=SUITE_NAMES,
         help="Which evaluation suite to run.",
+    )
+    parser.add_argument(
+        "--claim", choices=CLAIM_NAMES,
+        help="Which new claim evaluator to run. Currently only c1 is implemented.",
+    )
+    parser.add_argument(
+        "--split", choices=("dev", "test"), default="dev",
+        help="Dataset split for --claim (default: dev).",
+    )
+    parser.add_argument(
+        "--allow-skips", action="store_true",
+        help="Allow claim cases whose required tools are unavailable. "
+             "Official runs should omit this flag so skips fail fast.",
     )
     parser.add_argument(
         "--all", action="store_true",
@@ -122,8 +189,8 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.suite and not args.all:
-        parser.error("Specify --suite or --all")
+    if not args.suite and not args.claim and not args.all:
+        parser.error("Specify --suite, --claim, or --all")
 
     config = AgentConfig()
     extra_tools = []
@@ -132,6 +199,24 @@ def main():
     else:
         extra_tools = asyncio.run(load_mcp_tools())
         print(f"[eval] Loaded {len(extra_tools)} MCP tool(s)")
+
+    if args.claim:
+        print(f"\n{'=' * 50}")
+        print(f"  Running claim: {args.claim}/{args.split}")
+        print(f"{'=' * 50}")
+        result = _run_claim(
+            claim=args.claim,
+            config=config,
+            split=args.split,
+            output_dir=args.output,
+            extra_tools=extra_tools,
+            allow_skips=args.allow_skips,
+        )
+        print(f"\n{'=' * 50}")
+        print("  Summary")
+        print(f"{'=' * 50}\n")
+        print(result.summary())
+        return
 
     suites = list(SUITE_NAMES) if args.all else [args.suite]
     results: list[EvalResult] = []

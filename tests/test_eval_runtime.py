@@ -118,3 +118,41 @@ def test_eval_cli_runs_thinking_suite(monkeypatch, tmp_path):
 
     assert result.name == "ThinkingReviewer"
     assert result.metadata == {"cases": 1}
+
+
+def test_eval_cli_runs_c1_claim_and_appends_ledger(monkeypatch, tmp_path):
+    seen: dict = {}
+
+    class FakeC1RoutingEvaluator:
+        def __init__(self, _config, *, extra_tools=None, allow_skips=False):
+            seen["extra_tools"] = extra_tools
+            seen["allow_skips"] = allow_skips
+
+        def evaluate(self, cases):
+            return EvalResult(
+                name="C1Routing",
+                total=len(cases),
+                scores={"routing_accuracy": 1.0},
+                details=[{"id": "case-1", "passed": True}],
+                metadata={"claim": "c1"},
+            )
+
+    monkeypatch.setattr(eval_cli, "C1RoutingEvaluator", FakeC1RoutingEvaluator)
+
+    result = eval_cli._run_claim(
+        claim="c1",
+        config=AgentConfig(persist_dir=str(tmp_path)),
+        split="dev",
+        output_dir=str(tmp_path / "eval"),
+        extra_tools=[fake_web_fetch],
+        allow_skips=True,
+    )
+
+    assert result.name == "C1Routing"
+    assert seen == {"extra_tools": [fake_web_fetch], "allow_skips": True}
+
+    ledger_path = tmp_path / "eval" / "runs" / "c1.jsonl"
+    payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["claim"] == "c1"
+    assert payload["metadata"]["dataset_id"] == "c1/dev"
+    assert payload["metadata"]["claim"] == "c1"
