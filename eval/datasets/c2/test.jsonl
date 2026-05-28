@@ -1,0 +1,1 @@
+{"id":"c2-score-container-columns-frozen","claim":"c2","split":"test","inputs":{"query":"ScoreContainer natural column order mutatedCount sequence diffScore","k":5},"gold":{"relevant":[{"pid":"PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/ScoreContainer.java","chunk_id":0}],"k":5},"provenance":{"source":"manual:../rag/store snapshot","labeler":"gary","date":"2026-05-28"}}

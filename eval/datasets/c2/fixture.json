@@ -1,0 +1,8 @@
+{
+  "content_hash": "b3a02898790ad955d17951f822fa0815ef7c07748cf3a355ecb2e8273ca09998",
+  "collection": "knowledge",
+  "embed_model": "bge-m3",
+  "rag_git_sha": "2b08e1ddfe01ed701d4d3af525e25ba5e2a00fc1",
+  "source": "../rag/store snapshot",
+  "date": "2026-05-28"
+}
