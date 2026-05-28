@@ -2,6 +2,7 @@
 
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
+from agent.evaluation.metrics.tool_routing import score_tool_expectations
 
 
 def test_behavior_generate_has_two_cases_per_tool_plus_no_tool(tmp_path):
@@ -43,6 +44,22 @@ def test_score_tool_expectations_accepts_first_tool_options():
         "forbidden_ok": True,
         "tool_family": True,
     }
+
+
+def test_module_level_score_tool_expectations_matches_legacy_method():
+    evaluator = BehaviorEvaluator()
+    case = {
+        "expected_first_tool": "rag_search",
+        "expected_tools_include": ["rag_search"],
+        "expected_tools_forbidden": ["recall_history"],
+        "expected_tool_family": "rag",
+    }
+    actual_tools = ["rag_search"]
+    actual_args = [{"query": "scoring"}]
+
+    assert score_tool_expectations(case, actual_tools, actual_args) == (
+        evaluator._score_tool_expectations(case, actual_tools, actual_args)
+    )
 
 
 def test_score_tool_expectations_rejects_forbidden_tools():
