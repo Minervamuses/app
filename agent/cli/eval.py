@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from agent.config import AgentConfig
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
-from agent.evaluation.claims.c1_routing import C1RoutingEvaluator
+from agent.evaluation.claims import C1RoutingEvaluator, C2RetrievalEvaluator
 from agent.evaluation.datasets import dataset_file_path, dataset_hash, load_claim_dataset
 from agent.evaluation.endtoend import EndToEndEvaluator
 from agent.evaluation.ledger import append_result
@@ -112,17 +112,19 @@ def _run_claim(
     allow_skips: bool,
 ) -> EvalResult:
     """Run a single new claim evaluator and append to the run ledger."""
-    if claim != "c1":
+    if claim == "c1":
+        evaluator = C1RoutingEvaluator(
+            config,
+            extra_tools=extra_tools,
+            allow_skips=allow_skips,
+        )
+    elif claim == "c2":
+        evaluator = C2RetrievalEvaluator(config)
+    else:
         raise NotImplementedError(f"Claim '{claim}' is not implemented yet")
 
     cases = load_claim_dataset(claim, split)
     print(f"[{claim}] Loaded {len(cases)} {split} cases")
-
-    evaluator = C1RoutingEvaluator(
-        config,
-        extra_tools=extra_tools,
-        allow_skips=allow_skips,
-    )
     print(f"[{claim}] Evaluating...")
     result = evaluator.evaluate(cases)
 

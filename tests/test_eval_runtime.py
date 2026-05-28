@@ -156,3 +156,34 @@ def test_eval_cli_runs_c1_claim_and_appends_ledger(monkeypatch, tmp_path):
     assert payload["claim"] == "c1"
     assert payload["metadata"]["dataset_id"] == "c1/dev"
     assert payload["metadata"]["claim"] == "c1"
+
+
+def test_eval_cli_runs_c2_claim(monkeypatch, tmp_path):
+    class FakeC2RetrievalEvaluator:
+        def __init__(self, _config):
+            pass
+
+        def evaluate(self, cases):
+            return EvalResult(
+                name="C2Retrieval",
+                total=len(cases),
+                scores={"recall@5": 1.0},
+                details=[],
+                metadata={"claim": "c2"},
+            )
+
+    monkeypatch.setattr(eval_cli, "C2RetrievalEvaluator", FakeC2RetrievalEvaluator)
+
+    result = eval_cli._run_claim(
+        claim="c2",
+        config=AgentConfig(persist_dir=str(tmp_path)),
+        split="dev",
+        output_dir=str(tmp_path / "eval"),
+        extra_tools=[],
+        allow_skips=False,
+    )
+
+    assert result.name == "C2Retrieval"
+    ledger_path = tmp_path / "eval" / "runs" / "c2.jsonl"
+    payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["metadata"]["dataset_id"] == "c2/dev"
