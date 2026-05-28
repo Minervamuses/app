@@ -15,15 +15,21 @@ from agent.evaluation.claims.c3a_validator import (
     C3ValidatorEvaluator,
     score_validator_predictions,
 )
+from agent.evaluation.claims.c3b_reviewer import (
+    C3ReviewerEvaluator,
+    score_review_report,
+)
 
 __all__ = [
     "C1RoutingEvaluator",
     "C2RetrievalEvaluator",
+    "C3ReviewerEvaluator",
     "C3ValidatorEvaluator",
     "MissingRequiredToolsError",
     "c1_case_to_behavior_case",
     "load_c2_fixture",
     "score_c2_predictions",
     "score_c1_trace",
+    "score_review_report",
     "score_validator_predictions",
 ]
