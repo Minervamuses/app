@@ -237,3 +237,37 @@ def test_eval_cli_runs_c3_claim_as_three_sub_evaluators(monkeypatch, tmp_path):
     payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
     assert payload["metadata"]["dataset_id"] == "c3/dev"
     assert payload["metadata"]["claim"] == "c3"
+
+
+def test_eval_cli_runs_c4_claim(monkeypatch, tmp_path):
+    seen: dict = {}
+
+    class FakeC4ChecklistEvaluator:
+        def __init__(self, _config, *, extra_tools=None):
+            seen["extra_tools"] = extra_tools
+
+        def evaluate(self, cases):
+            return EvalResult(
+                name="C4Checklist",
+                total=len(cases),
+                scores={"task_success_rate": 1.0},
+                details=[],
+                metadata={"claim": "c4"},
+            )
+
+    monkeypatch.setattr(eval_cli, "C4ChecklistEvaluator", FakeC4ChecklistEvaluator)
+
+    result = eval_cli._run_claim(
+        claim="c4",
+        config=AgentConfig(persist_dir=str(tmp_path)),
+        split="dev",
+        output_dir=str(tmp_path / "eval"),
+        extra_tools=[fake_web_fetch],
+        allow_skips=False,
+    )
+
+    assert result.name == "C4Checklist"
+    assert seen["extra_tools"] == [fake_web_fetch]
+    ledger_path = tmp_path / "eval" / "runs" / "c4.jsonl"
+    payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["metadata"]["dataset_id"] == "c4/dev"

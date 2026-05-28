@@ -28,6 +28,7 @@ from agent.evaluation.claims import (
     C3ReviewerEvaluator,
     C3SessionEvaluator,
     C3ValidatorEvaluator,
+    C4ChecklistEvaluator,
 )
 from agent.evaluation.datasets import dataset_file_path, dataset_hash, load_claim_dataset
 from agent.evaluation.endtoend import EndToEndEvaluator
@@ -135,6 +136,12 @@ def _run_claim(
         result = evaluator.evaluate(cases)
     elif claim == "c2":
         evaluator = C2RetrievalEvaluator(config)
+        cases = load_claim_dataset(claim, split)
+        print(f"[{claim}] Loaded {len(cases)} {split} cases")
+        print(f"[{claim}] Evaluating...")
+        result = evaluator.evaluate(cases)
+    elif claim == "c4":
+        evaluator = C4ChecklistEvaluator(config, extra_tools=extra_tools)
         cases = load_claim_dataset(claim, split)
         print(f"[{claim}] Loaded {len(cases)} {split} cases")
         print(f"[{claim}] Evaluating...")
