@@ -549,6 +549,68 @@ def test_handle_skill_unknown_name_raises(tmp_path):
         )
 
 
+def test_registry_includes_eval_command():
+    registry = build_default_registry()
+
+    assert registry.get("eval") is not None
+
+
+def test_handle_eval_runs_claim(monkeypatch, tmp_path):
+    from agent.evaluation.base import EvalResult
+
+    seen = {}
+
+    class FakeSession:
+        config = AgentConfig(persist_dir=str(tmp_path))
+        extra_tools = ["tool"]
+
+    def fake_run_claim(**kwargs):
+        seen.update(kwargs)
+        return EvalResult(
+            name="C1Routing",
+            total=1,
+            scores={"routing_accuracy": 1.0},
+            details=[],
+            metadata={},
+        )
+
+    monkeypatch.setattr("agent.cli.eval._run_claim", fake_run_claim)
+
+    result = asyncio.run(
+        execute_slash_command(
+            parse_slash_command("/eval c1 dev --allow-skips"),
+            SlashCommandContext(
+                session=FakeSession(),
+                registry=build_default_registry(),
+            ),
+        )
+    )
+
+    assert seen["claim"] == "c1"
+    assert seen["split"] == "dev"
+    assert seen["output_dir"] == "eval"
+    assert seen["extra_tools"] == ["tool"]
+    assert seen["allow_skips"] is True
+    assert "C1Routing" in result.message
+    assert "routing_accuracy: 100.00%" in result.message
+
+
+def test_handle_eval_rejects_bad_args(tmp_path):
+    class FakeSession:
+        config = AgentConfig(persist_dir=str(tmp_path))
+
+    with pytest.raises(SlashCommandError, match="usage"):
+        asyncio.run(
+            execute_slash_command(
+                parse_slash_command("/eval c9"),
+                SlashCommandContext(
+                    session=FakeSession(),
+                    registry=build_default_registry(),
+                ),
+            )
+        )
+
+
 def test_handle_ingest_translates_value_error(monkeypatch, tmp_path):
     class FakeSession:
         config = object()

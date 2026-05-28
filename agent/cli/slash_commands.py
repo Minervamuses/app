@@ -154,6 +154,11 @@ def build_default_registry() -> SlashCommandRegistry:
                 handler=_handle_skill,
             ),
             SlashCommand(
+                name="eval",
+                description="Run a deterministic eval claim (c1, c2, c3, or c4).",
+                handler=_handle_eval,
+            ),
+            SlashCommand(
                 name="init",
                 description="Ingest the parent repo (excluding this app project).",
                 handler=_handle_init,
@@ -533,6 +538,41 @@ async def _handle_skill(
         raise _skill_command_error(exc) from exc
     suffix = f" {runtime.task_mode}" if runtime.task_mode else ""
     return SlashCommandResult(message=f"skill -> {runtime.name}{suffix}")
+
+
+async def _handle_eval(
+    context: SlashCommandContext,
+    parsed: ParsedSlashCommand,
+) -> SlashCommandResult:
+    args = list(parsed.args)
+    allow_skips = False
+    if "--allow-skips" in args:
+        allow_skips = True
+        args = [arg for arg in args if arg != "--allow-skips"]
+
+    if not args or len(args) > 2:
+        raise SlashCommandError("usage: /eval <c1|c2|c3|c4> [dev|test] [--allow-skips]")
+
+    claim = args[0].lower()
+    if claim not in {"c1", "c2", "c3", "c4"}:
+        raise SlashCommandError("usage: /eval <c1|c2|c3|c4> [dev|test] [--allow-skips]")
+
+    split = args[1].lower() if len(args) == 2 else "dev"
+    if split not in {"dev", "test"}:
+        raise SlashCommandError("eval split must be dev or test")
+
+    from agent.cli.eval import _run_claim
+
+    result = await asyncio.to_thread(
+        _run_claim,
+        claim=claim,
+        config=context.session.config,
+        split=split,
+        output_dir="eval",
+        extra_tools=list(getattr(context.session, "extra_tools", []) or []),
+        allow_skips=allow_skips,
+    )
+    return SlashCommandResult(message=result.summary())
 
 
 async def _handle_clear(
