@@ -13,6 +13,12 @@ from agent.evaluation.metrics.tool_routing import (
     missing_required_tools,
     score_tool_expectations,
 )
+from agent.evaluation.metrics.ranking import (
+    mrr,
+    ndcg_at_k,
+    recall_at_k,
+    score_ranked_retrieval,
+)
 
 __all__ = [
     "ALL_BEHAVIOR_TOOL_NAMES",
@@ -25,5 +31,9 @@ __all__ = [
     "WEB_FORBIDDEN",
     "WEB_TOOL_NAMES",
     "missing_required_tools",
+    "mrr",
+    "ndcg_at_k",
+    "recall_at_k",
+    "score_ranked_retrieval",
     "score_tool_expectations",
 ]
