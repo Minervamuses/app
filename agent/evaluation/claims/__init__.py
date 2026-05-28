@@ -19,11 +19,13 @@ from agent.evaluation.claims.c3b_reviewer import (
     C3ReviewerEvaluator,
     score_review_report,
 )
+from agent.evaluation.claims.c3c_session import C3SessionEvaluator
 
 __all__ = [
     "C1RoutingEvaluator",
     "C2RetrievalEvaluator",
     "C3ReviewerEvaluator",
+    "C3SessionEvaluator",
     "C3ValidatorEvaluator",
     "MissingRequiredToolsError",
     "c1_case_to_behavior_case",
