@@ -20,6 +20,7 @@ from agent.evaluation.claims.c3b_reviewer import (
     score_review_report,
 )
 from agent.evaluation.claims.c3c_session import C3SessionEvaluator
+from agent.evaluation.claims.c4_endtoend import C4ChecklistEvaluator, score_c4_checklist
 
 __all__ = [
     "C1RoutingEvaluator",
@@ -27,11 +28,13 @@ __all__ = [
     "C3ReviewerEvaluator",
     "C3SessionEvaluator",
     "C3ValidatorEvaluator",
+    "C4ChecklistEvaluator",
     "MissingRequiredToolsError",
     "c1_case_to_behavior_case",
     "load_c2_fixture",
     "score_c2_predictions",
     "score_c1_trace",
     "score_review_report",
+    "score_c4_checklist",
     "score_validator_predictions",
 ]
