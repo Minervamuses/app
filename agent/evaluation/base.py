@@ -6,11 +6,18 @@ from dataclasses import dataclass, field
 
 from agent.adapters.langchain.rag_tools import DEFAULT_RAG_TOOL_NAMES
 from agent.history_rag.tool import TOOL_NAME as HISTORY_TOOL_NAME
+from agent.tools.bash import TOOL_NAME as BASH_TOOL_NAME
+from agent.tools.read_file import TOOL_NAME as READ_FILE_TOOL_NAME
 
 
 def tool_inventory(extra_tools: list | None = None) -> list[str]:
     """Return the tool names available to an evaluation session."""
-    names = [*DEFAULT_RAG_TOOL_NAMES, HISTORY_TOOL_NAME]
+    names = [
+        *DEFAULT_RAG_TOOL_NAMES,
+        HISTORY_TOOL_NAME,
+        READ_FILE_TOOL_NAME,
+        BASH_TOOL_NAME,
+    ]
     names.extend(getattr(tool, "name", str(tool)) for tool in (extra_tools or []))
     return names
 

@@ -2,7 +2,7 @@
 
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
-from agent.evaluation.metrics.tool_routing import score_tool_expectations
+from agent.evaluation.metrics.tool_routing import RAG_FORBIDDEN, score_tool_expectations
 
 
 def test_behavior_generate_has_two_cases_per_tool_plus_no_tool(tmp_path):
@@ -19,6 +19,17 @@ def test_behavior_generate_has_two_cases_per_tool_plus_no_tool(tmp_path):
     assert categories.count("full-web-search") == 2
     assert categories.count("get-single-web-page-content") == 2
     assert categories.count("no_tool") == 2
+
+
+def test_behavior_forbidden_universe_includes_local_tools():
+    evaluator = BehaviorEvaluator()
+    cases = evaluator.generate()
+    no_tool_case = next(case for case in cases if case["id"] == "no_tool_greeting")
+
+    assert "read_file" in RAG_FORBIDDEN
+    assert "bash" in RAG_FORBIDDEN
+    assert "read_file" in no_tool_case["expected_tools_forbidden"]
+    assert "bash" in no_tool_case["expected_tools_forbidden"]
 
 
 def test_score_tool_expectations_accepts_first_tool_options():

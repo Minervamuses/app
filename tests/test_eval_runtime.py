@@ -22,6 +22,8 @@ def test_tool_inventory_includes_base_and_extra_tools():
         "rag_search",
         "rag_get_context",
         "recall_history",
+        "read_file",
+        "bash",
         "web_fetch",
     ]
 
@@ -37,6 +39,8 @@ def test_behavior_evaluator_records_available_tools(tmp_path):
         "rag_search",
         "rag_get_context",
         "recall_history",
+        "read_file",
+        "bash",
         "web_fetch",
     ]
 
