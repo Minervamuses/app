@@ -15,7 +15,8 @@ class AgentConfig(RAGConfig):
     """Runtime config for the LangGraph agent, eval harness, and CLI."""
 
     # Main chat LLM used by the agent's LangGraph loop.
-    llm_model: str = "deepseek/deepseek-chat-v3.1"
+    llm_model: str = "deepseek/deepseek-v4-pro"
+    llm_max_tokens: int = 4096
 
     # Evaluation LLMs
     gen_llm_model: str = "google/gemini-3.1-pro-preview"

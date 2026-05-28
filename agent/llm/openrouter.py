@@ -30,7 +30,7 @@ def get_chat_model(config: AgentConfig | None = None) -> ChatOpenAI:
         api_key=api_key,
         model=config.llm_model,
         temperature=0.3,
-        max_tokens=1024,
+        max_tokens=config.llm_max_tokens,
         max_retries=10,
     )
 
