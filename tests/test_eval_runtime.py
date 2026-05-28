@@ -187,3 +187,53 @@ def test_eval_cli_runs_c2_claim(monkeypatch, tmp_path):
     ledger_path = tmp_path / "eval" / "runs" / "c2.jsonl"
     payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
     assert payload["metadata"]["dataset_id"] == "c2/dev"
+
+
+def test_eval_cli_runs_c3_claim_as_three_sub_evaluators(monkeypatch, tmp_path):
+    class FakeSubEvaluator:
+        name = "Base"
+
+        def __init__(self, _config):
+            pass
+
+        def evaluate(self, cases):
+            return EvalResult(
+                name=self.name,
+                total=len(cases),
+                scores={"metric": float(len(cases))},
+                details=[],
+                metadata={},
+            )
+
+    class FakeValidator(FakeSubEvaluator):
+        name = "C3Validator"
+
+    class FakeReviewer(FakeSubEvaluator):
+        name = "C3Reviewer"
+
+    class FakeSession(FakeSubEvaluator):
+        name = "C3Session"
+
+    monkeypatch.setattr(eval_cli, "C3ValidatorEvaluator", FakeValidator)
+    monkeypatch.setattr(eval_cli, "C3ReviewerEvaluator", FakeReviewer)
+    monkeypatch.setattr(eval_cli, "C3SessionEvaluator", FakeSession)
+
+    result = eval_cli._run_claim(
+        claim="c3",
+        config=AgentConfig(persist_dir=str(tmp_path)),
+        split="dev",
+        output_dir=str(tmp_path / "eval"),
+        extra_tools=[],
+        allow_skips=False,
+    )
+
+    assert result.name == "C3"
+    assert result.scores == {
+        "validator.metric": 3.0,
+        "reviewer.metric": 3.0,
+        "session.metric": 2.0,
+    }
+    ledger_path = tmp_path / "eval" / "runs" / "c3.jsonl"
+    payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["metadata"]["dataset_id"] == "c3/dev"
+    assert payload["metadata"]["claim"] == "c3"

@@ -22,7 +22,13 @@ from dotenv import load_dotenv
 from agent.config import AgentConfig
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
-from agent.evaluation.claims import C1RoutingEvaluator, C2RetrievalEvaluator
+from agent.evaluation.claims import (
+    C1RoutingEvaluator,
+    C2RetrievalEvaluator,
+    C3ReviewerEvaluator,
+    C3SessionEvaluator,
+    C3ValidatorEvaluator,
+)
 from agent.evaluation.datasets import dataset_file_path, dataset_hash, load_claim_dataset
 from agent.evaluation.endtoend import EndToEndEvaluator
 from agent.evaluation.ledger import append_result
@@ -112,21 +118,29 @@ def _run_claim(
     allow_skips: bool,
 ) -> EvalResult:
     """Run a single new claim evaluator and append to the run ledger."""
-    if claim == "c1":
+    if claim == "c3":
+        cases = load_claim_dataset(claim, split)
+        print(f"[{claim}] Loaded {len(cases)} {split} cases")
+        print(f"[{claim}] Evaluating C3a/C3b/C3c...")
+        result = _run_c3_claim(config, cases)
+    elif claim == "c1":
         evaluator = C1RoutingEvaluator(
             config,
             extra_tools=extra_tools,
             allow_skips=allow_skips,
         )
+        cases = load_claim_dataset(claim, split)
+        print(f"[{claim}] Loaded {len(cases)} {split} cases")
+        print(f"[{claim}] Evaluating...")
+        result = evaluator.evaluate(cases)
     elif claim == "c2":
         evaluator = C2RetrievalEvaluator(config)
+        cases = load_claim_dataset(claim, split)
+        print(f"[{claim}] Loaded {len(cases)} {split} cases")
+        print(f"[{claim}] Evaluating...")
+        result = evaluator.evaluate(cases)
     else:
         raise NotImplementedError(f"Claim '{claim}' is not implemented yet")
-
-    cases = load_claim_dataset(claim, split)
-    print(f"[{claim}] Loaded {len(cases)} {split} cases")
-    print(f"[{claim}] Evaluating...")
-    result = evaluator.evaluate(cases)
 
     root = _output_root(output_dir)
     if root is not None:
@@ -145,6 +159,50 @@ def _run_claim(
         print(f"[{claim}] Ledger row → eval/runs/{claim}.jsonl ({row['run_id']})")
 
     return result
+
+
+def _run_c3_claim(config: AgentConfig, cases: list) -> EvalResult:
+    """Run the three independent C3 sub-evaluators and prefix their metrics."""
+    sub_evaluators = [
+        ("validator", C3ValidatorEvaluator(config)),
+        ("reviewer", C3ReviewerEvaluator(config)),
+        ("session", C3SessionEvaluator(config)),
+    ]
+    sub_results = []
+    scores = {}
+    details = []
+    for prefix, evaluator in sub_evaluators:
+        result = evaluator.evaluate([
+            case for case in cases
+            if case.raw.get("task") == result_task_name(prefix)
+        ])
+        sub_results.append(result)
+        scores.update({
+            f"{prefix}.{metric}": value
+            for metric, value in result.scores.items()
+        })
+        details.append({
+            "subclaim": prefix,
+            "name": result.name,
+            "total": result.total,
+            "scores": result.scores,
+            "details": result.details,
+        })
+    return EvalResult(
+        name="C3",
+        total=sum(result.total for result in sub_results),
+        scores=scores,
+        details=details,
+        metadata={"claim": "c3", "subclaims": [result.name for result in sub_results]},
+    )
+
+
+def result_task_name(prefix: str) -> str:
+    return {
+        "validator": "validator",
+        "reviewer": "reviewer",
+        "session": "session",
+    }[prefix]
 
 
 def main():
