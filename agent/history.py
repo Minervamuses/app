@@ -52,99 +52,19 @@ def prepare_messages_for_agent(
     max_messages: int,
     max_tool_interactions: int,
 ) -> list[BaseMessage]:
-    """Prepare a bounded prompt for the next agent step.
+    """Return the current prompt messages unchanged.
 
-    Rules:
-    - Never trim non-tool conversation history supplied by ChatSession; until a
-      turn is successfully evicted into history_rag, it must remain visible.
-    - Keep only the most recent ``max_tool_interactions`` tool interactions
-      inside the current turn.
-    - Add a compact truncation note when earlier tool activity was removed.
-    - ``max_messages`` is kept as a compatibility knob for callers, but this
-      function no longer enforces it by dropping unevicted conversation turns.
+    This used to keep only the most recent ``max_tool_interactions`` tool
+    results within a turn. That hid the agent's own earlier tool results once a
+    turn exceeded the window, so it could not tell it had already searched and
+    kept re-searching (a model-agnostic runaway). The per-turn tool budget
+    (``agent_max_tool_interactions``, enforced in ``graph.agent_node`` and
+    ``_cap_tool_calls``) now bounds how many tool calls a turn can make, so the
+    count is already small and a separate visible window is unnecessary — the
+    agent must see every tool result it produced this turn.
+
+    ``max_messages`` / ``max_tool_interactions`` are retained for call-site
+    compatibility but no longer drop messages.
     """
-    tool_call_names: dict[str, str] = {}
-    tool_call_groups: list[set[str]] = []
-    total_tool_interactions = 0
-    recent_tool_call_ids: list[str] = []
-
-    for message in messages:
-        if isinstance(message, AIMessage) and message.tool_calls:
-            group: set[str] = set()
-            for tool_call in message.tool_calls:
-                if isinstance(tool_call, dict):
-                    tool_id = tool_call.get("id")
-                    tool_name = tool_call.get("name", "unknown")
-                else:
-                    tool_id = getattr(tool_call, "id", None)
-                    tool_name = getattr(tool_call, "name", "unknown")
-                if tool_id:
-                    tool_call_names[tool_id] = tool_name
-                    group.add(tool_id)
-            if group:
-                tool_call_groups.append(group)
-        elif isinstance(message, ToolMessage):
-            total_tool_interactions += 1
-
-    if max_tool_interactions > 0:
-        for message in reversed(messages):
-            if not isinstance(message, ToolMessage):
-                continue
-            tool_call_id = getattr(message, "tool_call_id", None)
-            if not tool_call_id:
-                continue
-            recent_tool_call_ids.append(tool_call_id)
-            if len(recent_tool_call_ids) >= max_tool_interactions:
-                break
-
-    recent_ids = set(recent_tool_call_ids)
-    kept_ids: set[str] = set()
-    for group in tool_call_groups:
-        if group & recent_ids:
-            # Keep the full assistant tool-call group to preserve the chat
-            # protocol: every kept assistant tool call should have its tool
-            # response in the prompt.
-            kept_ids.update(group)
-
-    pruned_messages: list[BaseMessage] = []
-    dropped_counts: Counter[str] = Counter()
-
-    for message in messages:
-        if isinstance(message, ToolMessage):
-            tool_call_id = getattr(message, "tool_call_id", None)
-            if tool_call_id in kept_ids:
-                pruned_messages.append(message)
-            else:
-                dropped_counts[tool_call_names.get(tool_call_id, "unknown")] += 1
-            continue
-
-        if isinstance(message, AIMessage) and message.tool_calls:
-            tool_ids = set()
-            for tool_call in message.tool_calls:
-                if isinstance(tool_call, dict):
-                    tool_ids.add(tool_call.get("id"))
-                else:
-                    tool_ids.add(getattr(tool_call, "id", None))
-            if tool_ids & kept_ids:
-                pruned_messages.append(message)
-            continue
-
-        pruned_messages.append(message)
-
-    if total_tool_interactions > max_tool_interactions and dropped_counts:
-        dropped_summary = ", ".join(
-            f"{name} x{dropped_counts[name]}"
-            for name in sorted(dropped_counts)
-        )
-        note = SystemMessage(
-            content=(
-                "Context note: earlier tool results were truncated to keep this turn bounded. "
-                f"Already-used tools outside the current window: {dropped_summary}. "
-                "Prefer synthesizing an answer instead of repeating similar calls."
-            )
-        )
-        system_prompt = [msg for msg in pruned_messages if isinstance(msg, SystemMessage)]
-        non_system = [msg for msg in pruned_messages if not isinstance(msg, SystemMessage)]
-        pruned_messages = system_prompt + [note] + non_system
-
-    return pruned_messages
+    del max_messages, max_tool_interactions
+    return list(messages)

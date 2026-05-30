@@ -3,7 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 
 from agent.config import AgentConfig
@@ -276,3 +276,57 @@ def test_agent_node_forces_answer_after_tool_budget(monkeypatch, tmp_path):
         "Tool budget exhausted" in message.content
         for message in model.raw_calls[0]
     )
+
+
+def test_agent_node_caps_parallel_tool_calls_to_budget(monkeypatch, tmp_path):
+    """A round emitting more parallel calls than the remaining budget is trimmed
+    so the per-turn tool count cannot overshoot the limit."""
+
+    class OvershootModel:
+        def __init__(self):
+            self.bound_calls: list[list] = []
+            self.raw_calls: list[list] = []
+
+        def bind_tools(self, _tools):
+            model = self
+
+            class Bound:
+                def invoke(self, messages):
+                    model.bound_calls.append(messages)
+                    return AIMessage(
+                        content="",
+                        tool_calls=[
+                            {"name": "rag_search", "args": {"query": "a"}, "id": "call-1"},
+                            {"name": "rag_search", "args": {"query": "b"}, "id": "call-2"},
+                            {"name": "rag_search", "args": {"query": "c"}, "id": "call-3"},
+                        ],
+                    )
+
+            return Bound()
+
+        def invoke(self, messages):
+            self.raw_calls.append(messages)
+            return AIMessage(content="final answer")
+
+    model = OvershootModel()
+    monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: model)
+    monkeypatch.setattr(
+        "agent.graph.create_rag_tools",
+        lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
+    )
+    monkeypatch.setattr(
+        "agent.graph.create_history_tool",
+        lambda _cfg, store=None: _recall_history,
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), agent_max_tool_interactions=1)
+    graph = build_graph(cfg)
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="hi")]},
+        config={"recursion_limit": 8},
+    )
+
+    tool_messages = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+    # model emitted 3 parallel calls but budget was 1 -> capped to a single call
+    assert len(tool_messages) == 1
+    assert result["messages"][-1].content == "final answer"

@@ -38,6 +38,29 @@ def _tool_interaction_count(messages: list) -> int:
     return sum(1 for message in messages if isinstance(message, ToolMessage))
 
 
+def _cap_tool_calls(message: AIMessage, remaining: int) -> AIMessage:
+    """Trim parallel tool calls so one round cannot overshoot the budget.
+
+    The tool budget is checked once before each round, so a round that emits
+    several parallel tool calls could push the per-turn tool count past the
+    limit. Keep only the first ``remaining`` calls; the rest are dropped from
+    the message (never committed to history) so the chat protocol stays valid.
+    """
+    tool_calls = getattr(message, "tool_calls", None)
+    if not tool_calls or remaining < 0 or len(tool_calls) <= remaining:
+        return message
+    return AIMessage(
+        content=message.content,
+        additional_kwargs={
+            key: value
+            for key, value in message.additional_kwargs.items()
+            if key != "tool_calls"
+        },
+        response_metadata=message.response_metadata,
+        tool_calls=tool_calls[:remaining],
+    )
+
+
 def _tool_budget_note(*, used: int, limit: int, exhausted: bool) -> SystemMessage:
     if exhausted:
         content = (
@@ -141,7 +164,8 @@ def build_graph(
         ]
         if tool_budget_exhausted:
             return {"messages": [model.invoke(prompt_messages)]}
-        return {"messages": [_model_for_state(state).invoke(prompt_messages)]}
+        response = _model_for_state(state).invoke(prompt_messages)
+        return {"messages": [_cap_tool_calls(response, tool_limit - tool_count)]}
 
     def _tool_error_to_message(exc: Exception) -> str:
         return f"Tool error: {type(exc).__name__}: {exc}"

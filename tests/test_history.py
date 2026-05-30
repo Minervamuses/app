@@ -31,7 +31,9 @@ def test_prepare_messages_preserves_recent_turns_over_max_messages():
     assert contents[-1] == "current"
 
 
-def test_prepare_messages_prunes_tool_traffic_not_conversation_history():
+def test_prepare_messages_keeps_all_within_turn_tool_results():
+    """No within-turn tool result is pruned: the per-turn tool budget bounds the
+    count, so the agent must see every result it produced (no amnesia)."""
     messages = [
         SystemMessage(content="SYS"),
         HumanMessage(content="q1"),
@@ -53,11 +55,11 @@ def test_prepare_messages_prunes_tool_traffic_not_conversation_history():
     assert "q1" in contents
     assert "a1" in contents
     assert "current" in contents
-    assert "old result" not in contents
+    # both early and late tool results stay visible now
+    assert "old result" in contents
     assert "new result" in contents
-    assert any(
-        isinstance(msg, SystemMessage)
-        and "earlier tool results were truncated" in msg.content
+    assert not any(
+        isinstance(msg, SystemMessage) and "truncated" in msg.content
         for msg in prepared
     )
 
