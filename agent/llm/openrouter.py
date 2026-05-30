@@ -29,7 +29,9 @@ def get_chat_model(config: AgentConfig | None = None) -> ChatOpenAI:
         base_url="https://openrouter.ai/api/v1",
         api_key=api_key,
         model=config.llm_model,
-        temperature=0.3,
+        # Reasoning models (e.g. deepseek-v4-pro) reject or ignore temperature;
+        # uncomment if switching back to a non-reasoning chat model.
+        # temperature=0.3,
         max_tokens=config.llm_max_tokens,
         max_retries=10,
     )
