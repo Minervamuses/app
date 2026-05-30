@@ -125,7 +125,7 @@ class C1RoutingEvaluator(BaseEvaluator):
                 details.append(_skipped_detail(case, missing))
                 continue
 
-            tool_calls, error = self._run_trace(case)
+            tool_calls, error, step_log = self._run_trace(case)
             actual_tools = [tc["name"] for tc in tool_calls]
             actual_args = [tc["args"] for tc in tool_calls]
             scores = score_c1_trace(raw_case, actual_tools, actual_args)
@@ -142,9 +142,17 @@ class C1RoutingEvaluator(BaseEvaluator):
                 "category": case.get("category"),
                 "question": _first_message(case),
                 "actual_tools": actual_tools,
+                # Phase-0 instrumentation: keep args + per-step trace so we can
+                # tell (a) parallel-call overshoot from (b) uncounted tool
+                # messages, and read the actual queries/results behind a runaway.
+                "actual_args": actual_args,
                 "actual_count": len(actual_tools),
+                "max_emitted_per_step": max(
+                    (entry.get("n_emitted", 0) for entry in step_log), default=0
+                ),
                 "scores": scores,
                 "passed": case_passed,
+                "step_log": step_log,
             }
             if error:
                 case_detail["error"] = error
@@ -171,11 +179,30 @@ class C1RoutingEvaluator(BaseEvaluator):
             },
         )
 
-    def _run_trace(self, case: dict) -> tuple[list[dict], str | None]:
+    def _run_trace(self, case: dict) -> tuple[list[dict], str | None, list[dict]]:
         messages = list(case.get("messages") or [case["question"]])
         setup_history = case.get("setup_history")
         if self.turn_runner is not None:
-            return self.turn_runner(messages, setup_history), None
+            return self.turn_runner(messages, setup_history), None, []
+
+        step_log: list[dict] = []
+
+        def _progress(node_name, new_msgs):
+            """Record per-graph-step activity for Phase-0 runaway diagnosis."""
+            for msg in new_msgs:
+                entry: dict = {"node": node_name, "msg_type": type(msg).__name__}
+                emitted = getattr(msg, "tool_calls", None)
+                if emitted:
+                    entry["emitted_tool_calls"] = [
+                        call.get("name") if isinstance(call, dict)
+                        else getattr(call, "name", None)
+                        for call in emitted
+                    ]
+                    entry["n_emitted"] = len(emitted)
+                if type(msg).__name__ == "ToolMessage":
+                    entry["tool_name"] = getattr(msg, "name", None)
+                    entry["result_preview"] = str(getattr(msg, "content", ""))[:300]
+                step_log.append(entry)
 
         session = ChatSession(
             self.config,
@@ -186,6 +213,7 @@ class C1RoutingEvaluator(BaseEvaluator):
                 if setup_history
                 else self.history_store
             ),
+            progress_cb=_progress,
         )
         tool_calls: list[dict] = []
         try:
@@ -193,10 +221,10 @@ class C1RoutingEvaluator(BaseEvaluator):
                 _answer, turn_calls = asyncio.run(session.turn_with_trace(message))
                 tool_calls.extend(turn_calls)
         except GraphRecursionError:
-            return [], "GraphRecursionError"
+            return [], "GraphRecursionError", step_log
         except Exception as exc:
-            return [], f"{type(exc).__name__}: {exc}"
-        return tool_calls, None
+            return [], f"{type(exc).__name__}: {exc}", step_log
+        return tool_calls, None, step_log
 
 
 def score_c1_trace(
