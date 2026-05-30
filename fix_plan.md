@@ -1,7 +1,8 @@
 # Fix Plan — Agent 工具呼叫爆走(tool-call runaway)
 
 日期:2026-05-30
-狀態:規劃中(尚未動手改 code)
+狀態:Phase 0(instrument)已完成並跑出證據;優先序已依證據重排(見下)。
+偵錯全紀錄:`note/20260530/tool_call_runaway_debug.md`
 
 ## 背景:這個問題是怎麼浮出來的
 
@@ -37,43 +38,72 @@
 
 > **真正的 call 次數上限(實際 15-16)和「看得到的歷史視窗」(4)嚴重不對齊。Layer 2 把超出視窗的早期結果藏起來製造失憶迴圈;預算(瑕疵 B)又沒及時掐斷。兩者疊加 → 跨模型爆走。**
 
+## Phase 0 證據(2026-05-30 跑 run `...095849Z`)— root cause 重新定性
+
+instrument 後跑一次,三個決定性證據:
+
+1. **預算為何沒咬住 = (a) parallel 溢出**:`max_emitted_per_step = 2`(一個 AIMessage 塞 2 個 tool_call,衝破回合前的預算檢查)。不是計數未登錄(否則會撞 recursion_limit=32,但停在 9)。
+2. **失憶確實存在**:embedding case 的 query 第 5≈第 2、第 6 又 explore,且 step_log 顯示第 5 筆=第 3 筆、第 8 筆=第 2 筆是重複的同一個結果 → 看不到自己拿過 → 重發。
+3. **(關鍵)檢索回的全是垃圾,因為答案不在語料庫**:embedding case 七次檢索回 `JmolWidgetset cache.html`、`3dmol.d.ts`、`poetry.toml`、`SaveToLink.java` 等,**零個相關**。原因:`rag.cli.ingest` 自動跳過 this workspace,而「embedding 模組」(bge-m3/OllamaEmbedder)正住在被排除的 workspace → **目標內容不在索引裡,檢索注定回垃圾**。
+
+**重新定性(主因換人):**
+
+| 層 | 角色 | |
+|---|---|---|
+| **語料缺口 / 不可答查詢** | **主因** | 目標內容被 ingest 排除在索引外,沒有滿意結果可收手 |
+| **agent 無「放棄紀律」** | 次因 | prompt 沒教「搜幾次都是垃圾就下結論:KB 沒有」,它不認輸一直重搜 |
+| **Context 失憶(Layer 2)** | 共犯 | 看不到自己拿過的垃圾 → 重發;修了能讓它更快放棄 |
+| **預算溢出(瑕疵 B,(a) parallel)** | 放大器 | 把「找不到」放大成 9-16 次 |
+
+> 原本以為「對齊 cap/window」是核心。證據顯示它只是**止血**——就算記憶完美,答案不在語料裡,模型還是會卡。真正高槓桿的是**放棄紀律**和**修評測題**。
+
 ## 修復原則(使用者拍板)
 
 **讓「真正的 call 次數硬上限」== 「prompt 裡看得到的 tool 結果數量」。**
 只要兩者對齊,就**永遠不會裁掉一個還被允許繼續使用的結果** → 失憶從根消失。
+(此原則仍要做,定位為「止血」;主軸見下方重排後的計畫。)
 
-## 修復計畫(分階段)
+## 修復計畫(分階段,優先序已依 Phase 0 證據重排)
 
-### Phase 0 — 先 instrument,用證據決定(不盲修)
-- 在 eval 的 failed case details 存下每次 tool call 的 **args + 截斷 results**,以及每個 AIMessage 的 **tool_calls 數量**。
-- 跑一次 c1 embedding case,釘死:
-  - 瑕疵 B 是 (a) 溢出 還是 (b) 計數未登錄?
-  - 觸發層是「檢索品質差」還是「Layer 2 失憶造成的假性沒找到」?
-- 驗收:能明確指出 15-16 次是怎麼累積出來的。
+### Phase 0 — instrument 找根因 ✅ 已完成
+- 在 `c1_routing.py` 用 `progress_cb` 記錄 emitted tool_calls 數 + tool 結果預覽,detail 加 `actual_args`/`max_emitted_per_step`/`step_log`(不改計分,commit `72ff55f`)。
+- 結論:見上方「Phase 0 證據」。(a) parallel 溢出已確認;主因是語料缺口 + 無放棄紀律,失憶為共犯。
 
-### Phase 1 — 對齊上限與視窗(核心修復)
-- 讓預算成為**真正的硬上限 N**:
-  - 修瑕疵 B:把 parallel tool_calls 也納入扣額(發之前先看剩餘額度),或修正計數,確保實際執行數 ≤ N。
-  - 決定 scope:per-turn(現況)是否足夠,或需要 per-conversation/per-case 上限。
-- 讓 Layer 2 視窗 == N(同一個 config 值),確保到上限前**所有 tool 結果都看得到**。
-- 驗收:單 turn 內實際 call 數 ≤ N,且 prompt 裡看得到全部 N 筆;c1 embedding case 不再出現 15-16。
+### Phase 1 — 放棄紀律(新核心,最高槓桿)
+- 給 agent 明確規則:**連續 N 次檢索都不相關 / 命中空 → 停止搜尋,結論「KB 裡沒有此內容」並照實回答**,而不是換句話重搜。
+- 落點:system prompt 加明確 give-up 指示;或在 graph 層偵測「連續低品質/重複命中」後注入強制收斂訊息。
+- 驗收:對「答案不在語料庫」的查詢(如 embedding case),agent 在少數幾次搜尋後收手並誠實說「找不到」,不再 9-16 次。
 
-### Phase 2 — 決定 N 的平衡點(實驗,非拍腦袋)
-- N 太小 → turn 做不完、答案被截斷;N 太大 → 成本/爆走風險。
-- 用 c1/c4 在不同 N 下跑,看 routing/完成度 vs call 數,挑平衡點。
+### Phase 2 — 修評測題(新核心)
+- c1 embedding case 的 gold 期望 `rag_get_context`,但目標內容不在索引裡 → 近乎不可通過。
+- 兩條路擇一:(i) 改寫成語料裡真有的主題;(ii) 重新分類成「優雅放棄」測試,gold 改為「少數搜尋後得出 KB 沒有」。
+- 驗收:該 case 的 gold 與「這份語料實際可達成的正確行為」一致。
+
+### Phase 3 — 對齊上限與視窗(止血,非核心)
+- 讓預算成為**真正的硬上限 N**:修 (a) 溢出 —— 把 parallel tool_calls 納入扣額(發之前先看剩餘額度),確保實際執行數 ≤ N;決定 scope(per-turn vs per-conversation)。
+- 讓 Layer 2 視窗 == N,確保到上限前**所有 tool 結果都看得到**(失憶從根消失,放棄判斷也更準)。
+- 驗收:單 turn 內實際 call 數 ≤ N,且 prompt 看得到全部 N 筆。
+
+### Phase 4 — 決定 N 的平衡點(實驗,非拍腦袋)
+- N 太小 → turn 做不完;N 太大 → 成本/爆走風險。用 c1/c4 在不同 N 下跑,挑平衡點。
 - 驗收:N 有數據支撐,不再是「賭一個 4」。
 
-### Phase 3 — 防呆(可選,但建議)
+### Phase 5 — 防呆
 - chat model 設 `timeout`(避免靜默掛 ~10 分鐘)。
 - eval loop 加進度輸出(讓「靜默」和「當掉」可區分)。
-- eval 場景 bash 自動 deny(中和執行、保留違規計分;見 evaluator 既有 forbidden 設計)。
+- eval 場景 bash 自動 deny(中和執行、保留違規計分)。
 
 ## 待決問題(需使用者/實驗回答)
 
-1. 硬上限 scope:per-turn 還是 per-conversation?
-2. N 的初始值與調法(Phase 2 實驗設計)。
-3. 超過上限時的行為:目前是「改用不綁工具的模型強制 synthesize」,是否保留?還是給更明確的「列出缺什麼」指示?
-4. 觸發層若證實是檢索品質差(非失憶),要不要連帶處理(這會繞回 c2/rag)。
+1. **放棄紀律的觸發條件**(Phase 1):「不相關」怎麼判定?連續幾次空命中/低品質就收手?要靠 prompt 規則還是 graph 層偵測?
+2. **評測題處置**(Phase 2):embedding case 改寫成語料裡真有的主題,還是改成「優雅放棄」測試?
+3. 硬上限 scope(Phase 3):per-turn 還是 per-conversation?
+4. N 的初始值與調法(Phase 4 實驗設計)。
+5. 超過上限時的行為:保留「改用不綁工具的模型強制 synthesize」,還是給更明確的「列出缺什麼」指示?
+
+### 已解(Phase 0)
+- ~~觸發層是檢索品質差還是失憶~~ → **主因是語料缺口**(目標內容被 ingest 排除在索引外),失憶為共犯。
+- ~~預算沒咬住是 (a) 還是 (b)~~ → **(a) parallel 溢出**。
 
 ## 受影響檔案(預估)
 - `agent/graph.py`(agent_node 預算邏輯)
