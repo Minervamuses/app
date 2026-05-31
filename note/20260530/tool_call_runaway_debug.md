@@ -61,11 +61,26 @@ embedding case 9 次 call 的 query:第 5 次「embedding module」幾乎是第 
 - **缺 request timeout**:主 chat model 沒設 timeout,stalled 請求會靜默掛約 10 分鐘。
 - **eval 無進度輸出**:跑單 case 時 console 全靜默,無法區分「在等模型」和「當掉」。
 
+## 追加紀錄(2026-05-31):預算外洩尾巴
+
+`63a09de` 修掉 parallel 溢出並保留同一 turn 內全部 tool results 後,`c1-20260531T112333Z-a8f56f8e` 仍顯示 embedding case 兩個 turn 共 10 次工具:Turn 1 停在 4,Turn 2 跑到 6。
+
+這次一開始的猜測是「第二個 turn 帶了 prompt_history,導致 `_tool_interaction_count` 沒對齊」。後續 instrument 推翻此猜測:
+
+- 實際模型重跑顯示:agent 在 `tool_count_in_prompt=4` 時已走 exhausted/raw path,所以計數有對齊。
+- deterministic mock 顯示:即使用 unbound/raw model,raw response 仍可能帶 parsed `tool_calls`;舊的 exhausted 分支沒有清掉這些 `tool_calls`,`route_after_agent` 因此繼續送到 tools。修前可重現 `raw_counts [4, 6, 8, 10]` 並撞 recursion limit。
+- 修法是一行:exhausted 分支改成 `_cap_tool_calls(model.invoke(prompt_messages), 0)`。修後同一 mock 只剩 `raw_counts [4]`,tool result 數停在 4。
+
+結論:預算 bug 的完整構成是 **parallel 溢出 + exhausted raw response 洩漏**;不是 `_tool_interaction_count` 計數未登錄。per-turn 工具上限現在已是機械硬上限。embedding case 若兩個 user turn 都跑滿,總量會是 `2 × 4 = 8`,這是 per-turn scope 的結果,不是 runaway。
+
 ## 這次改了什麼 / 接下來
 
 - 已做:Phase 0 instrumentation(`c1_routing.py`,commit `72ff55f`)。
-- 待改寫 fix_plan:優先序要調整——
+- 已做:per-turn 預算硬上限對齊:
+  - parallel `tool_calls` 依剩餘額度裁切。
+  - exhausted/raw response 的 `tool_calls` 裁成 0。
+  - 同一 turn 內全部 tool results 保留在 prompt,不再製造視窗內失憶。
+- 接下來:
   - 新增高槓桿項:**「放棄紀律」**(連續 N 次檢索不相關 → 結論 KB 沒有,停)、**修評測題**。
-  - 原本的「對齊 cap/window」降為**止血**(止住次數,但單獨解不掉「答案不在語料裡」)。
-  - 失憶修法變輔助(讓它放棄更快)。
+  - 原本的「對齊 cap/window」已完成為**止血**(止住次數,但單獨解不掉「答案不在語料裡」)。
   - 防呆:chat model 加 timeout、eval 加進度輸出、eval bash 自動 deny。

@@ -163,7 +163,7 @@ def build_graph(
             ),
         ]
         if tool_budget_exhausted:
-            return {"messages": [model.invoke(prompt_messages)]}
+            return {"messages": [_cap_tool_calls(model.invoke(prompt_messages), 0)]}
         response = _model_for_state(state).invoke(prompt_messages)
         return {"messages": [_cap_tool_calls(response, tool_limit - tool_count)]}
 

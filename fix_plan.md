@@ -1,7 +1,7 @@
 # Fix Plan — Agent 工具呼叫爆走(tool-call runaway)
 
 日期:2026-05-30
-狀態:Phase 0(instrument)已完成並跑出證據;優先序已依證據重排(見下)。
+狀態:Phase 0(instrument)已完成並跑出證據;Phase 3 的 per-turn 硬上限已收斂完成(2026-05-31 追加證據見下)。
 偵錯全紀錄:`note/20260530/tool_call_runaway_debug.md`
 
 ## 背景:這個問題是怎麼浮出來的
@@ -57,6 +57,16 @@ instrument 後跑一次,三個決定性證據:
 
 > 原本以為「對齊 cap/window」是核心。證據顯示它只是**止血**——就算記憶完美,答案不在語料裡,模型還是會卡。真正高槓桿的是**放棄紀律**和**修評測題**。
 
+## Phase 3 追加證據(2026-05-31)— 預算外洩尾巴已釘死
+
+在 `63a09de` 之後,parallel `tool_calls` 已用 `_cap_tool_calls(response, remaining)` 擋住,但 `c1-20260531T112333Z-a8f56f8e` 仍顯示 embedding case 兩個 turn 共 10 次工具:Turn 1 停在 4,Turn 2 跑到 6。初步懷疑過「多輪 prompt_history 讓 `_tool_interaction_count` 沒對齊」,但後續 instrument 證據推翻此假設:
+
+1. 實際模型重跑時,agent 在 `tool_count_in_prompt=4` 已走 exhausted/raw path,證明 `_tool_interaction_count` 有對齊。
+2. deterministic mock 證明真正尾巴是:**exhausted 分支呼叫 unbound/raw model 後,若 raw response 仍帶 parsed `tool_calls`,舊程式沒有清掉,`route_after_agent` 會繼續送進 tools**。修前可重現 `raw_counts [4, 6, 8, 10]` 直到 recursion limit。
+3. 修法:`agent_node` 的 exhausted 分支也套 `_cap_tool_calls(model.invoke(...), 0)`。修後同一 mock 只留下 `raw_counts [4]`,實際執行 tool result 數停在 4。
+
+結論:預算 bug 的完整構成是 (a) parallel 溢出 + (c) exhausted raw response 洩漏;不是 `_tool_interaction_count` 計數未登錄。現在 per-turn 上限已是機械硬上限。多輪 case 的總量仍是 `turn_count × agent_max_tool_interactions`,這是 scope 決策(per-turn vs per-conversation),不是 runaway bug。
+
 ## 修復原則(使用者拍板)
 
 **讓「真正的 call 次數硬上限」== 「prompt 裡看得到的 tool 結果數量」。**
@@ -79,9 +89,11 @@ instrument 後跑一次,三個決定性證據:
 - 兩條路擇一:(i) 改寫成語料裡真有的主題;(ii) 重新分類成「優雅放棄」測試,gold 改為「少數搜尋後得出 KB 沒有」。
 - 驗收:該 case 的 gold 與「這份語料實際可達成的正確行為」一致。
 
-### Phase 3 — 對齊上限與視窗(止血,非核心)
-- 讓預算成為**真正的硬上限 N**:修 (a) 溢出 —— 把 parallel tool_calls 納入扣額(發之前先看剩餘額度),確保實際執行數 ≤ N;決定 scope(per-turn vs per-conversation)。
-- 讓 Layer 2 視窗 == N,確保到上限前**所有 tool 結果都看得到**(失憶從根消失,放棄判斷也更準)。
+### Phase 3 — 對齊上限與視窗(止血,非核心) ✅ per-turn 已完成
+- 已完成:parallel tool_calls 納入剩餘額度,確保一個 AIMessage 不能衝破 per-turn 預算。
+- 已完成:exhausted/raw response 的 `tool_calls` 也清為 0,確保模型即使吐出 tool-call 形狀輸出也不會被執行。
+- 已完成:同一 turn 內不再裁掉 tool results,確保到上限前**所有 tool 結果都看得到**(失憶從根消失,放棄判斷也更準)。
+- 保留決策:runtime scope 目前是 per-turn;若 evaluator 要限制 multi-turn case 總量,應明確設計 per-conversation budget 或改評測 rubric。
 - 驗收:單 turn 內實際 call 數 ≤ N,且 prompt 看得到全部 N 筆。
 
 ### Phase 4 — 決定 N 的平衡點(實驗,非拍腦袋)
@@ -97,13 +109,13 @@ instrument 後跑一次,三個決定性證據:
 
 1. **放棄紀律的觸發條件**(Phase 1):「不相關」怎麼判定?連續幾次空命中/低品質就收手?要靠 prompt 規則還是 graph 層偵測?
 2. **評測題處置**(Phase 2):embedding case 改寫成語料裡真有的主題,還是改成「優雅放棄」測試?
-3. 硬上限 scope(Phase 3):per-turn 還是 per-conversation?
+3. 硬上限 scope(Phase 3):runtime 先維持 per-turn;若 c1/c4 需要整個 multi-turn case 總量限制,另設計 per-conversation 評測/配置。
 4. N 的初始值與調法(Phase 4 實驗設計)。
 5. 超過上限時的行為:保留「改用不綁工具的模型強制 synthesize」,還是給更明確的「列出缺什麼」指示?
 
 ### 已解(Phase 0)
 - ~~觸發層是檢索品質差還是失憶~~ → **主因是語料缺口**(目標內容被 ingest 排除在索引外),失憶為共犯。
-- ~~預算沒咬住是 (a) 還是 (b)~~ → **(a) parallel 溢出**。
+- ~~預算沒咬住是 (a) 還是 (b)~~ → **(a) parallel 溢出 + exhausted raw response 洩漏**;不是計數未登錄。
 
 ## 受影響檔案(預估)
 - `agent/graph.py`(agent_node 預算邏輯)
