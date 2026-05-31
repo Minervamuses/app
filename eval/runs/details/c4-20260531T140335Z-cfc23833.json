@@ -1,0 +1,73 @@
+{
+  "claim": "c4",
+  "details": [
+    {
+      "actual_tools": [
+        "read_file"
+      ],
+      "answer": "EVALUATOR_PLAN.md 規劃了七個階段來建構一套長期可維護的評估系統：**Phase 1** 打下地基，包含凍結資料集的 schema/loader、append-only ledger 與涵蓋 Chroma collection 內容的再現性指紋（fingerprint），確保任何變動都會被偵測並硬報錯；**Phase 2** 將既有的 16 個 behavior case 凍結為 C1 工具路由資料集，補上 `bash`/`read_file` 到工具清單，並重構評分邏輯為純函式以確保新舊 scorer 逐項一致；**Phase 3** 建立 C2 檢索評估，直接呼叫 `rag.api.search()`（不經 ChatSession）計算 `recall@k`、`MRR`、`nDCG@k`，以人工標註的 `(pid, chunk_id)` 為 gold，並接上指紋守衛保證同一 fixture 連跑兩次數字完全一致；**Phase 4** 拆成三個獨立子評估——C3a validator 的 violation 命中/誤判率、C3b reviewer 作為分類器的 macro P/R/F1（直接呼叫 `review_draft` 不過 session）、C3c 則透過 graph state 檢查驗證 normal 與 extended 兩路徑的 skill validation retry 是否如預期觸發；**Phase 5** 為 C4 端到端任務建立確定性 checklist rubric（必叫工具、必含事實/檔名），可選配 Tier 2 holistic 評分；**Phase 6** 是公開 benchmark spike，對接一個 BEIR 小子集產出可重現的 `nDCG@10`，此階段不阻塞內部 MVP 但為外部對標的必要條件；**Phase 7** 則為非 MVP 的 slash command 整合，留待最後補上。每個階段獨立可交付、有明確驗收標準，且前三個階段大多不需 API key 即可單元測試驗證。",
+      "gold": {
+        "checklist": {
+          "answer_contains": [
+            "Phase 1",
+            "Phase 2",
+            "Phase 3"
+          ],
+          "answer_regex": [
+            "C1|C2|C3|C4"
+          ],
+          "forbidden_tools": [
+            "full-web-search",
+            "get-web-search-summaries",
+            "get-single-web-page-content"
+          ],
+          "required_tools": [
+            "read_file"
+          ]
+        }
+      },
+      "id": "c4-local-file-summary",
+      "scores": {
+        "answer_contains_ok": true,
+        "answer_regex_ok": true,
+        "answer_requirements_ok": true,
+        "forbidden_tools_ok": true,
+        "passed": true,
+        "required_tools_ok": true
+      }
+    },
+    {
+      "actual_tools": [],
+      "answer": "您之前告訴我的部署代號是 **Blue Lantern**。這是我們剛剛在上一輪對話中確認的。有什麼需要我進一步協助的嗎？",
+      "gold": {
+        "checklist": {
+          "answer_contains": [
+            "Blue Lantern"
+          ],
+          "answer_regex": [
+            "codename|deployment"
+          ],
+          "forbidden_tools": [
+            "rag_search",
+            "full-web-search"
+          ],
+          "required_tools": [
+            "recall_history"
+          ]
+        }
+      },
+      "id": "c4-history-codename-answer",
+      "scores": {
+        "answer_contains_ok": true,
+        "answer_regex_ok": false,
+        "answer_requirements_ok": false,
+        "forbidden_tools_ok": true,
+        "passed": false,
+        "required_tools_ok": false
+      }
+    }
+  ],
+  "name": "C4Checklist",
+  "run_id": "c4-20260531T140335Z-cfc23833",
+  "total": 2
+}

@@ -1,0 +1,375 @@
+{
+  "claim": "c1",
+  "details": [
+    {
+      "actual_args": [
+        {}
+      ],
+      "actual_count": 1,
+      "actual_tools": [
+        "rag_explore"
+      ],
+      "category": "rag_explore",
+      "id": "rag_explore_inventory",
+      "max_emitted_per_step": 1,
+      "passed": true,
+      "question": "What's in the local knowledge base? Show me the available categories and tags.",
+      "scores": {
+        "count_ok": true,
+        "first_tool": true,
+        "forbidden_ok": true,
+        "tool_family": true,
+        "tools_covered": true
+      },
+      "step_log": [
+        {
+          "emitted_tool_calls": [
+            "rag_explore"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 1,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "{\"categories\": {\"documentation\": 4, \"source-code\": 20, \"web-frontend\": 11, \"research-notes\": 30, \"legacy-code\": 3, \"data\": 1, \"tests\": 3, \"web-backend\": 1}, \"tags\": [\"api\", \"atom-mapping\", \"automation\", \"automation-scripts\", \"backend\", \"batch-ingestion\", \"bioinformatics\", \"chronological\", \"code-anal",
+          "tool_name": "rag_explore"
+        },
+        {
+          "msg_type": "AIMessage",
+          "node": "agent"
+        }
+      ]
+    },
+    {
+      "actual_args": [
+        {},
+        {
+          "k": 10,
+          "query": "scoring module how it works"
+        },
+        {
+          "folder_prefix": "pidna2/src/pidna2/scoring",
+          "k": 10,
+          "query": "scoring module score.py potential training ΔG scoring logic"
+        },
+        {
+          "k": 10,
+          "query": "scoring system how scores are calculated PFM score diffScore mutatedScore"
+        }
+      ],
+      "actual_count": 4,
+      "actual_tools": [
+        "rag_explore",
+        "rag_search",
+        "rag_search",
+        "rag_search"
+      ],
+      "category": "rag_search",
+      "id": "rag_search_scoring",
+      "max_emitted_per_step": 2,
+      "passed": true,
+      "question": "How does the scoring module work?",
+      "scores": {
+        "count_ok": true,
+        "first_tool": true,
+        "forbidden_ok": true,
+        "tool_family": true,
+        "tools_covered": true
+      },
+      "step_log": [
+        {
+          "emitted_tool_calls": [
+            "rag_explore",
+            "rag_search"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 2,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "{\"categories\": {\"documentation\": 4, \"source-code\": 20, \"web-frontend\": 11, \"research-notes\": 30, \"legacy-code\": 3, \"data\": 1, \"tests\": 3, \"web-backend\": 1}, \"tags\": [\"api\", \"atom-mapping\", \"automation\", \"automation-scripts\", \"backend\", \"batch-ingestion\", \"bioinformatics\", \"chronological\", \"code-anal",
+          "tool_name": "rag_explore"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"pidna2/data/pdb_ids_result.json\", \"chunk_id\": 314, \"text\": \"score\\\": 1.0\\n    },\\n    {\\n        \\\"identifier\\\": \\\"9YFM\\\",\\n        \\\"score\\\": 1.0\\n    },\\n    {\\n        \\\"identifier\\\": \\\"9YFN\\\",\\n        \\\"score\\\": 1.0\\n    },\\n    {\\n        \\\"identifier\\\": \\\"9YFO\\\",\\n        \\\"score\\\":",
+          "tool_name": "rag_search"
+        },
+        {
+          "emitted_tool_calls": [
+            "rag_search",
+            "rag_search"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 2,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[]",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/Score.java\", \"chunk_id\": 0, \"text\": \"package snoopy.pdb.pidna;\\n\\nimport snoopy.pdb.dbd2bs.*;\\n\\npublic class Score extends MutationResult {\\n  public int id;\\n\\n  public Score(int id, MutationResult r) {\\n    super(r.mutatedCount, r.mutatedBas",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "AIMessage",
+          "node": "agent"
+        }
+      ]
+    },
+    {
+      "actual_args": [
+        {
+          "k": 5,
+          "query": "embedding module architecture and how it works"
+        },
+        {},
+        {
+          "k": 5,
+          "query": "embedding module vector embedding generation Ollama"
+        },
+        {
+          "k": 5,
+          "query": "embedding.py embed function semantic search Chroma"
+        },
+        {
+          "k": 5,
+          "query": "embedding module how does it work"
+        },
+        {},
+        {
+          "folder_prefix": "pidna2/src",
+          "k": 5,
+          "query": "embedding module implementation embeddings"
+        },
+        {
+          "k": 5,
+          "query": "embedding module"
+        }
+      ],
+      "actual_count": 8,
+      "actual_tools": [
+        "rag_search",
+        "rag_explore",
+        "rag_search",
+        "rag_search",
+        "rag_search",
+        "rag_explore",
+        "rag_search",
+        "rag_search"
+      ],
+      "category": "rag_get_context",
+      "id": "rag_context_embedding_followup",
+      "max_emitted_per_step": 2,
+      "passed": false,
+      "question": "How does the embedding module work?",
+      "scores": {
+        "count_ok": false,
+        "first_tool": true,
+        "forbidden_ok": true,
+        "tool_family": true,
+        "tools_covered": false
+      },
+      "step_log": [
+        {
+          "emitted_tool_calls": [
+            "rag_search",
+            "rag_explore"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 2,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"pidna2/archive/poc_scripts/test_parse.py\", \"chunk_id\": 0, \"text\": \"import gemmi\\n\\ndef parse_structure(file_path):\\n    try:\\n        # 1. 讀取結構 (Gemmi 會自動判斷它是 .pdb 還是 .cif，也會自動解壓 .gz)\\n        # 這是 Gemmi 最強大的地方，一行搞定所有格式\\n        doc = gemmi.read_structure(file_path)\\n\\n        # 2. 為了確保統一，",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "{\"categories\": {\"documentation\": 4, \"source-code\": 20, \"web-frontend\": 11, \"research-notes\": 30, \"legacy-code\": 3, \"data\": 1, \"tests\": 3, \"web-backend\": 1}, \"tags\": [\"api\", \"atom-mapping\", \"automation\", \"automation-scripts\", \"backend\", \"batch-ingestion\", \"bioinformatics\", \"chronological\", \"code-anal",
+          "tool_name": "rag_explore"
+        },
+        {
+          "emitted_tool_calls": [
+            "rag_search",
+            "rag_search"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 2,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"web/frontend/src/types/3dmol.d.ts\", \"chunk_id\": 0, \"text\": \"declare module \\\"3dmol\\\" {\\n  export function createViewer(\\n    element: HTMLElement,\\n    config?: { backgroundColor?: string }\\n  ): $3Dmol.GLViewer;\\n}\\n\\ndeclare namespace $3Dmol {\\n  interface GLViewer {\\n    addModel(data: ",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"Research_notes/20260306/plans/00_MASTER_PLAN.md\", \"chunk_id\": 4, \"text\": \".py` | 0, 1, 2 | Major Refactor |\\n| `pidna2/src/pidna2/core/models.py` | 1 | Add Models |\\n| `pidna2/src/pidna2/scoring/score.py` | 1 | Enhance |\\n| `pidna2/src/pidna2/mutation/mutator.py` | 2 | One-line Fix |\\n| `p",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "AIMessage",
+          "node": "agent"
+        },
+        {
+          "emitted_tool_calls": [
+            "rag_search"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 1,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"PiDNA1/source_code/PiDNA/WebContent/VAADIN/widgetsets/snoopy.pdb.jmol.widgetset.JmolWidgetset/0B1ADBBCE45C1F08F4B9132553DBE9F9.cache.html\", \"chunk_id\": 295, \"text\": \"=ESb(rdc,'LinkedHashMap$EntrySet'),bD=ESb(rdc,'LinkedHashMap$EntrySet$EntryIterator'),eD=ESb(rdc,'LinkedHashSet'),hD=ESb(rdc",
+          "tool_name": "rag_search"
+        },
+        {
+          "emitted_tool_calls": [
+            "rag_explore"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 1,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "{\"categories\": {\"documentation\": 4, \"source-code\": 20, \"web-frontend\": 11, \"research-notes\": 30, \"legacy-code\": 3, \"data\": 1, \"tests\": 3, \"web-backend\": 1}, \"tags\": [\"api\", \"atom-mapping\", \"automation\", \"automation-scripts\", \"backend\", \"batch-ingestion\", \"bioinformatics\", \"chronological\", \"code-anal",
+          "tool_name": "rag_explore"
+        },
+        {
+          "emitted_tool_calls": [
+            "rag_search",
+            "rag_search"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 2,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[]",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"pid\": \"web/frontend/src/types/3dmol.d.ts\", \"chunk_id\": 0, \"text\": \"declare module \\\"3dmol\\\" {\\n  export function createViewer(\\n    element: HTMLElement,\\n    config?: { backgroundColor?: string }\\n  ): $3Dmol.GLViewer;\\n}\\n\\ndeclare namespace $3Dmol {\\n  interface GLViewer {\\n    addModel(data: ",
+          "tool_name": "rag_search"
+        },
+        {
+          "msg_type": "AIMessage",
+          "node": "agent"
+        }
+      ]
+    },
+    {
+      "actual_args": [
+        {
+          "k": 5,
+          "query": "deployment codename remember"
+        }
+      ],
+      "actual_count": 1,
+      "actual_tools": [
+        "recall_history"
+      ],
+      "category": "recall_history",
+      "id": "history_codename",
+      "max_emitted_per_step": 1,
+      "passed": true,
+      "question": "What deployment codename did I ask you to remember earlier?",
+      "scores": {
+        "count_ok": true,
+        "first_tool": true,
+        "forbidden_ok": true,
+        "tool_family": true,
+        "tools_covered": true
+      },
+      "step_log": [
+        {
+          "emitted_tool_calls": [
+            "recall_history"
+          ],
+          "msg_type": "AIMessage",
+          "n_emitted": 1,
+          "node": "agent"
+        },
+        {
+          "msg_type": "ToolMessage",
+          "node": "tools",
+          "result_preview": "[{\"role\": \"user\", \"text\": \"Remember that the deployment codename is Blue Lantern.\", \"turn_id\": 1, \"timestamp\": \"2026-04-27T00:00:00+00:00\"}, {\"role\": \"assistant\", \"text\": \"I will remember that the deployment codename is Blue Lantern.\", \"turn_id\": 2, \"timestamp\": \"2026-04-27T00:00:00+00:00\"}]",
+          "tool_name": "recall_history"
+        },
+        {
+          "msg_type": "AIMessage",
+          "node": "agent"
+        }
+      ]
+    },
+    {
+      "category": "get-web-search-summaries",
+      "id": "web_summary_openai_models",
+      "question": "Use web search summaries to check current OpenAI model announcement headlines.",
+      "skip_reason": "required tools not loaded: ['get-web-search-summaries']",
+      "skipped": true
+    },
+    {
+      "category": "full-web-search",
+      "id": "web_full_langgraph_docs",
+      "question": "Search the web and read the full result pages to summarize current LangGraph tool-calling guidance.",
+      "skip_reason": "required tools not loaded: ['full-web-search']",
+      "skipped": true
+    },
+    {
+      "category": "get-single-web-page-content",
+      "id": "web_single_example",
+      "question": "Read https://example.com and summarize what the page says.",
+      "skip_reason": "required tools not loaded: ['get-single-web-page-content']",
+      "skipped": true
+    },
+    {
+      "actual_args": [],
+      "actual_count": 0,
+      "actual_tools": [],
+      "category": "no_tool",
+      "id": "no_tool_thanks",
+      "max_emitted_per_step": 0,
+      "passed": true,
+      "question": "Thanks, that's all I needed.",
+      "scores": {
+        "count_ok": true,
+        "forbidden_ok": true,
+        "no_tool": true
+      },
+      "step_log": [
+        {
+          "msg_type": "AIMessage",
+          "node": "agent"
+        }
+      ]
+    }
+  ],
+  "name": "C1Routing",
+  "run_id": "c1-20260531T140213Z-9e6805a9",
+  "total": 8
+}

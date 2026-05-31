@@ -1,0 +1,272 @@
+{
+  "claim": "c3",
+  "details": [
+    {
+      "details": [
+        {
+          "active_skill": "academic-paper-writing",
+          "gold": [
+            "Quantitative claims with percentages need a supplied source, citation marker, or explicit placeholder."
+          ],
+          "id": "c3a-academic-uncited-percent",
+          "prediction": [
+            "Quantitative claims with percentages need a supplied source, citation marker, or explicit placeholder."
+          ],
+          "scores": {
+            "exact_match": true,
+            "false_negative": false,
+            "false_positive": false,
+            "true_negative": false,
+            "true_positive": true
+          }
+        },
+        {
+          "active_skill": "academic-paper-writing",
+          "gold": [],
+          "id": "c3a-academic-cited-percent",
+          "prediction": [],
+          "scores": {
+            "exact_match": true,
+            "false_negative": false,
+            "false_positive": false,
+            "true_negative": true,
+            "true_positive": false
+          }
+        },
+        {
+          "active_skill": "other-skill",
+          "gold": [],
+          "id": "c3a-unregistered-skill",
+          "prediction": [],
+          "scores": {
+            "exact_match": true,
+            "false_negative": false,
+            "false_positive": false,
+            "true_negative": true,
+            "true_positive": false
+          }
+        }
+      ],
+      "name": "C3Validator",
+      "scores": {
+        "exact_match": 1.0,
+        "false_positive_rate": 0.0,
+        "violation_f1": 1.0,
+        "violation_precision": 1.0,
+        "violation_recall": 1.0
+      },
+      "subclaim": "validator",
+      "total": 3
+    },
+    {
+      "details": [
+        {
+          "error": null,
+          "gold": {
+            "decision": "revise",
+            "failure_mode": "retrieval_not_attempted",
+            "min_severity": "major",
+            "needs_user_input": false,
+            "route": "revise"
+          },
+          "id": "c3b-retrieval-not-attempted",
+          "prediction": {
+            "decision": "revise",
+            "failure_modes": [
+              "retrieval_not_attempted"
+            ],
+            "max_severity": "major",
+            "needs_user_input": false,
+            "route": "revise"
+          },
+          "report": {
+            "decision": "revise",
+            "findings": [
+              {
+                "dimension": "instruction following",
+                "evidence_from_draft": "The deployment codename was Blue Lantern.",
+                "failure_mode": "retrieval_not_attempted",
+                "location": "entire draft",
+                "needs_user_input": false,
+                "problem": "Draft provides a specific answer without attempting to retrieve conversation history. The user explicitly asked to remember a deployment codename from earlier conversation, but no retrieval tool was called despite recall_history being available.",
+                "revision_instruction": "Use the recall_history tool to search for earlier messages where the user mentioned a deployment codename. Query examples: 'deployment codename', 'codename to remember', or 'remember codename'. Do not fabricate an answer; if retrieval returns no matching history, draft an honest response stating the search found no prior mention of this codename.",
+                "severity": "major"
+              }
+            ],
+            "summary_for_reviser": "The draft asserts a specific deployment codename without evidence from conversation history. Attempt recall_history retrieval first. If the search succeeds, verify the answer against the retrieved content. If retrieval is empty, acknowledge this honestly rather than providing an unsupported answer."
+          },
+          "scores": {
+            "decision_ok": true,
+            "failure_modes_ok": true,
+            "needs_user_input_ok": true,
+            "route_ok": true,
+            "severity_ok": true
+          }
+        },
+        {
+          "error": null,
+          "gold": {
+            "decision": "block",
+            "failure_mode": "tool_unavailable",
+            "min_severity": "blocker",
+            "needs_user_input": true,
+            "route": "ask_user"
+          },
+          "id": "c3b-tool-unavailable",
+          "prediction": {
+            "decision": "block",
+            "failure_modes": [
+              "tool_unavailable"
+            ],
+            "max_severity": "blocker",
+            "needs_user_input": true,
+            "route": "ask_user"
+          },
+          "report": {
+            "decision": "block",
+            "findings": [
+              {
+                "dimension": "instruction following",
+                "evidence_from_draft": "「I cannot access the older codename.」",
+                "failure_mode": "tool_unavailable",
+                "location": "entire response",
+                "needs_user_input": true,
+                "problem": "使用者要求回憶先前對話中的部署代號，但 recall_history 工具已被禁用（denied_tools 列表中），導致無法檢索所需的對話歷史。草稿正確地反映了這個限制，但根本問題是工具政策阻止了此查詢的完成。",
+                "revision_instruction": "此問題無法透過改寫或重試解決。recall_history 工具已被禁用，無法存取對話歷史。請檢查您的工具設定或權限。如果您需要回憶先前的部署代號，請直接在此訊息中重新提供該資訊。",
+                "severity": "blocker"
+              }
+            ],
+            "summary_for_reviser": "使用者要求存取先前對話內容中的部署代號，但 recall_history 工具已被禁用。這是工具政策/設定問題，無法透過改寫解決。需要使用者提供該資訊或調整工具權限。"
+          },
+          "scores": {
+            "decision_ok": true,
+            "failure_modes_ok": true,
+            "needs_user_input_ok": true,
+            "route_ok": true,
+            "severity_ok": true
+          }
+        },
+        {
+          "error": null,
+          "gold": {
+            "decision": "pass",
+            "failure_modes": [],
+            "min_severity": null,
+            "needs_user_input": false,
+            "route": "pass"
+          },
+          "id": "c3b-clean-draft-pass",
+          "prediction": {
+            "decision": "block",
+            "failure_modes": [
+              "user_input_missing"
+            ],
+            "max_severity": "blocker",
+            "needs_user_input": true,
+            "route": "ask_user"
+          },
+          "report": {
+            "decision": "block",
+            "findings": [
+              {
+                "dimension": "instruction following",
+                "evidence_from_draft": "The method is described more clearly while preserving the supplied facts.",
+                "failure_mode": "user_input_missing",
+                "location": "entire draft",
+                "needs_user_input": true,
+                "problem": "No sentence was provided for polishing. The draft appears to be a meta-description of an action rather than a polished sentence.",
+                "revision_instruction": "Please provide the original sentence you want polished. The current draft does not contain a sentence to edit—it describes what polishing would do rather than showing the polished result.",
+                "severity": "blocker"
+              }
+            ],
+            "summary_for_reviser": "The user requested polishing of a sentence, but no source sentence was included in the input or draft. A concrete sentence must be supplied before any polishing work can proceed."
+          },
+          "scores": {
+            "decision_ok": false,
+            "failure_modes_ok": false,
+            "needs_user_input_ok": false,
+            "route_ok": false,
+            "severity_ok": true
+          }
+        }
+      ],
+      "name": "C3Reviewer",
+      "scores": {
+        "decision_macro_f1": 0.5555555555555555,
+        "decision_macro_precision": 0.5,
+        "decision_macro_recall": 0.6666666666666666,
+        "failure_mode_macro_f1": 0.6666666666666666,
+        "failure_mode_macro_precision": 0.6666666666666666,
+        "failure_mode_macro_recall": 0.6666666666666666,
+        "needs_user_input_macro_f1": 0.6666666666666666,
+        "needs_user_input_macro_precision": 0.5,
+        "needs_user_input_macro_recall": 1.0,
+        "parse_success_rate": 1.0,
+        "route_macro_f1": 0.5555555555555555,
+        "route_macro_precision": 0.5,
+        "route_macro_recall": 0.6666666666666666,
+        "severity_macro_f1": 1.0,
+        "severity_macro_precision": 1.0,
+        "severity_macro_recall": 1.0
+      },
+      "subclaim": "reviewer",
+      "total": 3
+    },
+    {
+      "details": [
+        {
+          "gold": {
+            "final_violations_empty": true,
+            "retry_expected": true,
+            "validation_attempts": 1
+          },
+          "id": "c3c-normal-validator-retry",
+          "path": "normal",
+          "prediction": {
+            "final_answer": "The intervention improved retention by 42% [source].",
+            "final_violations_empty": true,
+            "model_invoke_count": 2,
+            "retry_observed": true,
+            "validation_attempts": 1
+          },
+          "scores": {
+            "final_clean_ok": true,
+            "passed": true,
+            "retry_ok": true
+          }
+        },
+        {
+          "gold": {
+            "final_violations_empty": true,
+            "retry_expected": true,
+            "validation_attempts": 1
+          },
+          "id": "c3c-extended-final-validation-retry",
+          "path": "extended",
+          "prediction": {
+            "final_answer": "The intervention improved retention by 42% [source].",
+            "final_violations_empty": true,
+            "model_invoke_count": 1,
+            "retry_observed": true,
+            "validation_attempts": 1
+          },
+          "scores": {
+            "final_clean_ok": true,
+            "passed": true,
+            "retry_ok": true
+          }
+        }
+      ],
+      "name": "C3Session",
+      "scores": {
+        "final_clean_accuracy": 1.0,
+        "retry_accuracy": 1.0
+      },
+      "subclaim": "session",
+      "total": 2
+    }
+  ],
+  "name": "C3",
+  "run_id": "c3-20260531T140246Z-318ca93c",
+  "total": 8
+}
