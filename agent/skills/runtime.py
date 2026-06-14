@@ -16,6 +16,7 @@ from agent.skills.broker import (
 )
 from agent.skills.manifest_schema import validate_skill_manifest
 from agent.skills.metadata import SkillMetadata, discover_skills
+from agent.tools import inventory as tool_inventory
 
 
 _NONE = "(none)"
@@ -87,8 +88,14 @@ def render_tool_availability_block(
     The active graph remains the source of truth for actual tool binding. This
     helper renders the same state for prompts so rewriter, writer, and reviewer
     do not carry their own stale tool lists.
+
+    ``base_tool_names=None`` falls back to the shared base tool inventory so a
+    caller that omits the list still renders the real base tools. A caller that
+    passes ``[]`` explicitly keeps the empty-list semantics.
     """
-    base_names = _dedupe_strings(base_tool_names or ())
+    if base_tool_names is None:
+        base_tool_names = tool_inventory.base_tool_names()
+    base_names = _dedupe_strings(base_tool_names)
     denied_names = set(getattr(skill_runtime, "denied_tools", frozenset()) or ())
     allowed_names = set(getattr(skill_runtime, "allowed_tools", frozenset()) or ())
     policy_active = bool(

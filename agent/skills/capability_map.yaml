@@ -1,3 +1,13 @@
+# Capability -> tool mapping for skill-scoped tool policy.
+#
+# rag.search and history.search are deliberately separate capabilities and
+# must not be merged:
+#   - rag.search  -> rag_explore / rag_search / rag_get_context. Searches the
+#     indexed knowledge base (repos, notes, papers) in the RAG Chroma store.
+#   - history.search -> recall_history. Searches persisted prior CHAT turns
+#     (older parts of this session and previous CLI sessions) in the separate
+#     chat-history store. A skill that needs to inspect earlier conversation
+#     (e.g. academic-paper-writing) must request history.search, not rag.search.
 capabilities:
   file.read:
     local_tools:

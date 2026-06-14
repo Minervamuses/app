@@ -177,6 +177,41 @@ def test_rewrite_prompt_includes_runtime_tool_availability():
     assert "shell_runner" in prompt_text
 
 
+def test_rewrite_messages_fallback_renders_base_tool_availability():
+    from agent.tools.inventory import base_tool_names
+
+    messages = rewrite_messages(
+        skill_text="prompt-master skill",
+        user_input="raw request",
+        visible_context="",
+        skill_context="",
+    )
+    prompt_text = "\n".join(str(message.content) for message in messages)
+
+    assert "[Tool availability]" in prompt_text
+    for name in base_tool_names():
+        assert name in prompt_text
+
+
+def test_review_messages_fallback_renders_base_tool_availability():
+    from agent.thinking import review_messages
+    from agent.tools.inventory import base_tool_names
+
+    messages = review_messages(
+        raw_user_input="raw",
+        rewritten_prompt="rewritten",
+        draft="draft",
+        skill_context="",
+        evidence_trace_summary="",
+        previous_rebuttal="",
+    )
+    prompt_text = "\n".join(str(message.content) for message in messages)
+
+    assert "[Tool availability]" in prompt_text
+    for name in base_tool_names():
+        assert name in prompt_text
+
+
 def test_rewrite_messages_do_not_embed_stale_tool_names():
     rewrite_messages(
         skill_text="prompt-master skill",

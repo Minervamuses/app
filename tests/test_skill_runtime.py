@@ -380,3 +380,21 @@ def test_render_tool_availability_block_for_disallow_only_policy():
     assert "available_tools: read_file" in block
     assert "denied_tools: bash" in block
     assert "unavailable_base_tools: bash" in block
+
+
+def test_render_tool_availability_block_defaults_to_base_inventory():
+    from agent.tools.inventory import base_tool_names
+
+    block = render_tool_availability_block()
+
+    assert "active_skill: (none)" in block
+    assert "tool_policy_active: false" in block
+    for name in base_tool_names():
+        assert name in block
+
+
+def test_render_tool_availability_block_keeps_empty_list_semantics():
+    block = render_tool_availability_block(base_tool_names=[])
+
+    assert "available_tools: (none)" in block
+    assert "unavailable_base_tools: (none)" in block
