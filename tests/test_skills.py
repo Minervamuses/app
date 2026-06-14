@@ -34,6 +34,53 @@ description: Use when the user wants to draft a paper
     assert skills[0].path == skill_file.resolve()
 
 
+def test_discover_skills_reads_yaml_block_scalar_description(tmp_path):
+    skills_dir = tmp_path / "skills"
+    target = skills_dir / "sample-skill"
+    target.mkdir(parents=True)
+    skill_file = target / "SKILL.md"
+    skill_file.write_text(
+        """---
+name: sample-skill
+description: >
+  Use when the user wants to draft a paper
+  abstract or revise a manuscript introduction.
+---
+
+# Sample
+""",
+        encoding="utf-8",
+    )
+
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+    skills = discover_skills(cfg)
+
+    assert len(skills) == 1
+    assert skills[0].description == (
+        "Use when the user wants to draft a paper abstract or revise a manuscript introduction."
+    )
+
+
+def test_discover_skills_skips_malformed_yaml_frontmatter(tmp_path):
+    skills_dir = tmp_path / "skills"
+    target = skills_dir / "bad-skill"
+    target.mkdir(parents=True)
+    (target / "SKILL.md").write_text(
+        """---
+name: bad-skill
+description: [unterminated
+---
+
+# Bad
+""",
+        encoding="utf-8",
+    )
+
+    cfg = AgentConfig(persist_dir=str(tmp_path), skills_dir=str(skills_dir))
+
+    assert discover_skills(cfg) == []
+
+
 def test_chat_session_discovers_skills_without_injecting_into_system_prompt(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     skills_dir = tmp_path / "skills"

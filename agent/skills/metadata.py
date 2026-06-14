@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Mapping
+
+import yaml
 
 from agent.config import AgentConfig
 
@@ -60,8 +63,8 @@ def _read_skill_metadata(skill_file: Path) -> SkillMetadata | None:
     if frontmatter is None:
         return None
 
-    name = frontmatter.get("name", skill_file.parent.name).strip()
-    description = frontmatter.get("description", "").strip()
+    name = _metadata_text(frontmatter, "name", skill_file.parent.name).strip()
+    description = _metadata_text(frontmatter, "description", "").strip()
     if not name or not description:
         return None
 
@@ -72,12 +75,8 @@ def _read_skill_metadata(skill_file: Path) -> SkillMetadata | None:
     )
 
 
-def _parse_frontmatter(text: str) -> dict[str, str] | None:
-    """Parse a minimal YAML frontmatter block.
-
-    This intentionally supports only the subset we rely on here:
-    top-level scalar keys plus indented continuation lines.
-    """
+def _parse_frontmatter(text: str) -> Mapping[str, Any] | None:
+    """Parse a YAML frontmatter block."""
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return None
@@ -90,42 +89,17 @@ def _parse_frontmatter(text: str) -> dict[str, str] | None:
     if end_idx is None:
         return None
 
-    data: dict[str, str] = {}
-    current_key: str | None = None
-    current_parts: list[str] = []
-
-    def _flush() -> None:
-        nonlocal current_key, current_parts
-        if current_key is None:
-            return
-        value = " ".join(part for part in current_parts if part).strip()
-        data[current_key] = _strip_wrapping_quotes(value)
-        current_key = None
-        current_parts = []
-
-    for raw_line in lines[1:end_idx]:
-        if not raw_line.strip():
-            continue
-
-        if raw_line[:1].isspace():
-            if current_key is not None:
-                current_parts.append(raw_line.strip())
-            continue
-
-        if ":" not in raw_line:
-            continue
-
-        _flush()
-        key, raw_value = raw_line.split(":", 1)
-        current_key = key.strip()
-        value = raw_value.strip()
-        current_parts = [] if value in {">", "|"} else [value]
-
-    _flush()
+    raw_frontmatter = "\n".join(lines[1:end_idx])
+    data = yaml.safe_load(raw_frontmatter)
+    if not isinstance(data, Mapping):
+        return None
     return data
 
 
-def _strip_wrapping_quotes(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        return value[1:-1]
-    return value
+def _metadata_text(
+    frontmatter: Mapping[str, Any],
+    key: str,
+    default: str,
+) -> str:
+    value = frontmatter.get(key, default)
+    return value if isinstance(value, str) else ""

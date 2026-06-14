@@ -1,6 +1,6 @@
 # Skill frontmatter parser should use PyYAML
 
-status: open
+status: done
 source:
   - to_be_solved/archive/deep-research-report.md
 
@@ -17,10 +17,10 @@ The archived complexity report identifies `_parse_frontmatter()` in `agent/skill
 Skill frontmatter is extracted as a block and parsed with `yaml.safe_load()`, keeping the existing metadata contract intact.
 
 ## Acceptance Criteria
-- [ ] `_parse_frontmatter()` uses `yaml.safe_load()` or is replaced by an equivalent PyYAML-backed helper.
-- [ ] Missing or malformed frontmatter behavior remains deliberate and tested.
-- [ ] Multiline YAML values are handled by the YAML parser rather than ad hoc string concatenation.
-- [ ] Skill discovery tests still pass.
+- [x] `_parse_frontmatter()` uses `yaml.safe_load()` or is replaced by an equivalent PyYAML-backed helper.
+- [x] Missing or malformed frontmatter behavior remains deliberate and tested.
+- [x] Multiline YAML values are handled by the YAML parser rather than ad hoc string concatenation.
+- [x] Skill discovery tests still pass.
 
 ## Notes
 Do not add a new dependency for this unless PyYAML proves insufficient.
