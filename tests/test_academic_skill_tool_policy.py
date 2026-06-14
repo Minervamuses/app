@@ -132,15 +132,15 @@ def test_academic_skill_writer_binding_includes_recall_history_schema(
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
-    monkeypatch.setattr("agent.graph.create_read_file_tool", lambda _cfg: _read_file)
-    monkeypatch.setattr("agent.graph.create_bash_tool", lambda _cfg: _bash)
+    monkeypatch.setattr("agent.tools.inventory.create_read_file_tool", lambda _cfg: _read_file)
+    monkeypatch.setattr("agent.tools.inventory.create_bash_tool", lambda _cfg: _bash)
 
     graph = build_graph(_cfg(tmp_path), skill_runtime_getter=lambda: runtime)
     graph.invoke({

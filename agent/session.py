@@ -30,6 +30,7 @@ from agent.skills import (
 )
 from agent.skills.runtime import render_tool_availability_block
 from agent.skills.validator import validate_skill_output
+from agent.tools import inventory as tool_inventory
 from agent.thinking import (
     Clarify,
     ThinkingOutputError,
@@ -52,41 +53,12 @@ from agent.paths import find_app_root
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a research assistant with access to six tool families.
+# The base tool inventory, its selection policy, and the base workflow are
+# owned by agent.tools.inventory (single source of truth). Only the optional
+# MCP families, skill activation, and language policy live here.
+SYSTEM_PROMPT = f"""You are a research assistant with access to several tool families.
 
-Local knowledge base tools (always available):
-
-1. **rag_explore** — Discover what's in the indexed knowledge base: categories, tags, date ranges, folder summaries.
-   Use this first when you're unsure what the knowledge base contains.
-
-2. **rag_search** — Semantic search with optional filters (folder_prefix, category, file_type, date range).
-   Use specific queries. You can search multiple times with different queries or filters.
-
-3. **rag_get_context** — Expand a search result by retrieving surrounding chunks from the same file.
-   Use when a result looks relevant but you need more context.
-
-Conversation history tool (always available):
-
-4. **recall_history** — Search persisted prior chat turns from this user, including older parts of the current session and previous CLI sessions. Each user prompt and each assistant response is stored as a separate entry; results carry role, turn_id, and timestamp.
-   Use when the user references earlier chat content that you cannot see in the current prompt.
-   Do NOT call this for content already visible in the current conversation.
-   Do NOT use this as a substitute for rag_search on general knowledge questions.
-
-Local file-reading tool (always available):
-
-5. **read_file** — Read a local UTF-8 text file from an absolute or cwd-relative path.
-   Use this for local drafts, notes, reviewer comments, journal guidelines, and other local text files.
-
-Shell tool (always available, but every call is gated):
-
-6. **bash** — Execute a shell command. EVERY CALL PROMPTS THE USER FOR APPROVAL before
-   execution; the user reads the `description` you supply to decide whether to allow it.
-   Use only when no narrower tool fits — for example, listing or finding files when the
-   path is unknown (`ls`, `find`), quick disk inspection (`wc`, `du`, `head`), or one-off
-   pipelines the user explicitly asked for. Prefer `read_file` / `rag_search` when they
-   apply. Always include a one-sentence `description` explaining your intent — vague
-   descriptions will be rejected by the user. If a call returns `approved: false`, do
-   not retry the same command; ask the user for a more specific path or alternative.
+{tool_inventory.render_base_tool_prompt()}
 
 Web Search MCP tools (available only when configured):
 - Use for current external information, general web discovery, or topics unlikely to exist in the local KB.
@@ -94,15 +66,6 @@ Web Search MCP tools (available only when configured):
 GitHub MCP tools (available only when configured):
 - Use for remote GitHub state: repository content not in the local KB, pull requests, issues, Actions runs, code search across GitHub.
 - Do NOT use GitHub MCP as a substitute for local git shell operations (clone, pull, rebase, commit). Those belong to the user's terminal, not to you.
-
-Tool selection policy:
-- Questions about the indexed project or research notes → prefer `rag_explore` / `rag_search` / `rag_get_context`.
-- Questions about earlier chat history that is no longer visible → prefer `recall_history`.
-- Questions about local files → prefer `read_file`.
-- Filesystem enumeration or shell ops the user explicitly asked for → use `bash` (always with a clear description).
-- Questions needing live external information → prefer Web Search MCP.
-- Questions about remote GitHub repos, PRs, issues, or Actions → prefer GitHub MCP.
-- If a tool family is not listed in the bound tools for this session, treat it as unavailable and fall back to what you have.
 
 Local skills (user-activated):
 - Skill bundles live under `skills/<name>/`. The user activates one via the `/skill` slash command; you cannot self-activate.
@@ -112,15 +75,7 @@ Local skills (user-activated):
 Language policy:
 - Respond in the same language the user is writing in.
 - When the user writes in Chinese, ALWAYS use Traditional Chinese (繁體中文). Never produce Simplified Chinese characters even if the user's input contains some.
-- For other languages, match the user's input language without conversion.
-
-Workflow:
-- If the question is vague or you don't know the structure of the knowledge base, start with rag_explore.
-- Use rag_search with appropriate filters based on what you learned from rag_explore.
-- Use rag_get_context if you need to see more around a promising result.
-- Use read_file when the answer depends on a local file.
-- After 1-3 rag_search calls, synthesize your answer. Don't keep searching for perfection.
-- Do NOT make up information. Only answer based on tool results or your conversation with the user."""
+- For other languages, match the user's input language without conversion."""
 
 DEFAULT_RECURSION_LIMIT = 32
 
@@ -332,19 +287,10 @@ class ChatSession:
         self.active_skill_runtime = None
 
     def _all_tool_refs(self) -> list[_ToolRef]:
-        local_tool_names = [
-            "rag_explore",
-            "rag_search",
-            "rag_get_context",
-            "recall_history",
-            "read_file",
-            "bash",
+        return [
+            _ToolRef(name)
+            for name in tool_inventory.base_tool_names(extra_tools=self.extra_tools)
         ]
-        extra_tool_names = [
-            getattr(tool, "name", str(tool))
-            for tool in self.extra_tools
-        ]
-        return [_ToolRef(name) for name in dict.fromkeys([*local_tool_names, *extra_tool_names])]
 
     def _active_skill_state(self) -> dict:
         runtime = self.active_skill_runtime

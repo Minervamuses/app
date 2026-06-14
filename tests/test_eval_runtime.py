@@ -28,6 +28,13 @@ def test_tool_inventory_includes_base_and_extra_tools():
     ]
 
 
+def test_tool_inventory_is_sourced_from_base_inventory():
+    from agent.tools.inventory import base_tool_names
+
+    assert tool_inventory() == base_tool_names()
+    assert tool_inventory([fake_web_fetch]) == base_tool_names([fake_web_fetch])
+
+
 def test_behavior_evaluator_records_available_tools(tmp_path):
     evaluator = BehaviorEvaluator(
         AgentConfig(persist_dir=str(tmp_path)),

@@ -45,11 +45,11 @@ def _recall_history(query: str) -> str:
 def _patch_graph_tools(monkeypatch):
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: _DummyModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
 
@@ -106,11 +106,11 @@ def test_agent_node_binds_filtered_tools_for_active_skill(monkeypatch, tmp_path)
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path))
@@ -157,11 +157,11 @@ def test_agent_node_binds_all_except_denied_for_disallow_only_policy(
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path))
@@ -200,11 +200,11 @@ def test_agent_node_binds_no_tools_for_active_empty_policy(monkeypatch, tmp_path
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: RecordingModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path))
@@ -254,11 +254,11 @@ def test_agent_node_forces_answer_after_tool_budget(monkeypatch, tmp_path):
     model = BudgetModel()
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: model)
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path), agent_max_tool_interactions=1)
@@ -311,11 +311,11 @@ def test_agent_node_caps_parallel_tool_calls_to_budget(monkeypatch, tmp_path):
     model = OvershootModel()
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: model)
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path), agent_max_tool_interactions=1)
@@ -368,11 +368,11 @@ def test_agent_node_strips_tool_calls_from_exhausted_raw_model(monkeypatch, tmp_
     model = RawToolCallModel()
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: model)
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
     cfg = AgentConfig(persist_dir=str(tmp_path), agent_max_tool_interactions=1)

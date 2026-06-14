@@ -1,21 +1,22 @@
-"""Pure deterministic scoring for tool routing expectations."""
+"""Pure deterministic scoring for tool routing expectations.
+
+The tool-name groups below are sourced from
+:mod:`agent.tools.inventory` so the evaluator taxonomy stays in sync with the
+graph/session base tool inventory. The public names here are kept stable for
+importers; only their source changed.
+"""
 
 from __future__ import annotations
 
-RAG_TOOL_NAMES = ("rag_explore", "rag_search", "rag_get_context")
-HISTORY_TOOL_NAMES = ("recall_history",)
-WEB_TOOL_NAMES = (
-    "full-web-search",
-    "get-web-search-summaries",
-    "get-single-web-page-content",
+from agent.tools.inventory import (
+    HISTORY_TOOL_NAMES,
+    LOCAL_TOOL_NAMES,
+    RAG_TOOL_NAMES,
+    WEB_BEHAVIOR_TOOL_NAMES as WEB_TOOL_NAMES,
+    behavior_tool_names,
 )
-LOCAL_TOOL_NAMES = ("read_file", "bash")
-ALL_BEHAVIOR_TOOL_NAMES = (
-    *RAG_TOOL_NAMES,
-    *HISTORY_TOOL_NAMES,
-    *WEB_TOOL_NAMES,
-    *LOCAL_TOOL_NAMES,
-)
+
+ALL_BEHAVIOR_TOOL_NAMES = tuple(behavior_tool_names())
 TOOL_FAMILIES = {
     "rag": set(RAG_TOOL_NAMES),
     "history": set(HISTORY_TOOL_NAMES),

@@ -2,7 +2,12 @@
 
 from agent.evaluation.base import EvalResult
 from agent.evaluation.behavior import BehaviorEvaluator
-from agent.evaluation.metrics.tool_routing import RAG_FORBIDDEN, score_tool_expectations
+from agent.evaluation.metrics.tool_routing import (
+    ALL_BEHAVIOR_TOOL_NAMES,
+    RAG_FORBIDDEN,
+    score_tool_expectations,
+)
+from agent.tools.inventory import WEB_BEHAVIOR_TOOL_NAMES, behavior_tool_names
 
 
 def test_behavior_generate_has_two_cases_per_tool_plus_no_tool(tmp_path):
@@ -30,6 +35,26 @@ def test_behavior_forbidden_universe_includes_local_tools():
     assert "bash" in RAG_FORBIDDEN
     assert "read_file" in no_tool_case["expected_tools_forbidden"]
     assert "bash" in no_tool_case["expected_tools_forbidden"]
+
+
+def test_behavior_universe_matches_inventory_and_keeps_web_names():
+    # The behavior universe is the inventory's behavior_tool_names, so the
+    # forbidden universes never silently shrink when MCP tools are absent.
+    assert set(ALL_BEHAVIOR_TOOL_NAMES) == set(behavior_tool_names())
+    for web_name in WEB_BEHAVIOR_TOOL_NAMES:
+        assert web_name in ALL_BEHAVIOR_TOOL_NAMES
+
+
+def test_behavior_generated_categories_are_within_inventory_universe():
+    evaluator = BehaviorEvaluator()
+    universe = set(behavior_tool_names())
+
+    for case in evaluator.generate():
+        if case["category"] == "no_tool":
+            continue
+        assert case["category"] in universe
+        for tool_name in case.get("expected_tools_include", []):
+            assert tool_name in universe
 
 
 def test_score_tool_expectations_accepts_first_tool_options():

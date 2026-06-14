@@ -35,11 +35,11 @@ def _recall_history(query: str) -> str:
 def _patch_graph_tools(monkeypatch, model):
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: model)
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
     )
     monkeypatch.setattr(
-        "agent.graph.create_history_tool",
+        "agent.tools.inventory.create_history_tool",
         lambda _cfg, store=None: _recall_history,
     )
 

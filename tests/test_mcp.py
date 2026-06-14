@@ -184,7 +184,7 @@ def test_session_create_without_mcp(monkeypatch, tmp_path):
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _c: DummyModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _c: [fake_explore, fake_search, fake_context],
     )
 
@@ -241,10 +241,10 @@ def test_session_create_loads_mcp_tools(monkeypatch, tmp_path):
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _c: DummyModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _c: [fake_explore, fake_search, fake_context],
     )
-    monkeypatch.setattr("agent.graph.create_history_tool", lambda _c, store=None: fake_recall)
+    monkeypatch.setattr("agent.tools.inventory.create_history_tool", lambda _c, store=None: fake_recall)
 
     async def fake_load():
         return [fake_web], {"web_fetch": "web_search"}
@@ -305,10 +305,10 @@ def test_session_create_survives_mcp_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr("agent.graph.get_chat_model", lambda _c: DummyModel())
     monkeypatch.setattr(
-        "agent.graph.create_rag_tools",
+        "agent.tools.inventory.create_rag_tools",
         lambda _c: [fake_explore, fake_search, fake_context],
     )
-    monkeypatch.setattr("agent.graph.create_history_tool", lambda _c, store=None: fake_recall)
+    monkeypatch.setattr("agent.tools.inventory.create_history_tool", lambda _c, store=None: fake_recall)
 
     async def failing_load():
         raise RuntimeError("mcp unavailable")

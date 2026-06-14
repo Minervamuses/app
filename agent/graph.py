@@ -5,14 +5,12 @@ from langgraph.graph import END, START, StateGraph
 
 from agent.config import AgentConfig
 
-from agent.adapters.langchain import create_rag_tools
-from agent.history_rag import create_history_tool
 from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
 from agent.policy_tool_node import PolicyToolNode
 from agent.skills.validator import validate_skill_output
 from agent.state import AgentState
-from agent.tools import create_bash_tool, create_read_file_tool
+from agent.tools import inventory as tool_inventory
 
 
 def _skill_runtime_state(runtime) -> dict:
@@ -99,12 +97,11 @@ def build_graph(
         the bounded agent ↔ tools loop for a single turn.
     """
     model = get_chat_model(config)
-    tools = create_rag_tools(config)
-    tools.append(create_history_tool(config, store=history_store))
-    tools.append(create_read_file_tool(config))
-    tools.append(create_bash_tool(config))
-    if extra_tools:
-        tools = tools + list(extra_tools)
+    tools = tool_inventory.build_base_tools(
+        config,
+        history_store=history_store,
+        extra_tools=extra_tools,
+    )
     tools_by_name = {getattr(tool, "name", str(tool)): tool for tool in tools}
     tool_order = [getattr(tool, "name", str(tool)) for tool in tools]
     bound_model_cache = {
