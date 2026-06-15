@@ -1,11 +1,10 @@
 """OpenRouter LLM provider for the agent layer."""
 
 import os
-import time
 from typing import Any
 
 from langchain_openai import ChatOpenAI
-from openai import OpenAI, RateLimitError
+from openai import OpenAI
 
 from agent.config import AgentConfig
 
@@ -33,41 +32,28 @@ def get_chat_model(config: AgentConfig | None = None) -> ChatOpenAI:
         # uncomment if switching back to a non-reasoning chat model.
         # temperature=0.3,
         max_tokens=config.llm_max_tokens,
-        max_retries=10,
+        max_retries=config.llm_max_retries,
     )
 
 
 class OpenRouterLLM(BaseLLM):
-    """LLM provider via OpenRouter API for prompt→text calls in eval/agent code."""
+    """LLM provider via OpenRouter API for prompt→text calls in eval/agent code.
 
-    MAX_RETRIES = 10
-    INITIAL_DELAY = 10.0
+    Rate-limit/retry handling is delegated to the official OpenAI client via its
+    ``max_retries`` setting; there is no local backoff loop.
+    """
 
     def __init__(self, model_name: str | None = None, config: AgentConfig | None = None):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set")
+        config = config or AgentConfig()
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            max_retries=config.llm_max_retries,
         )
-        config = config or AgentConfig()
         self.model = model_name or config.llm_model
-
-    def _call_with_retry(self, **kwargs):
-        """Call the OpenAI API with exponential backoff on rate limits."""
-        delay = self.INITIAL_DELAY
-        last_err: Exception | None = None
-
-        for _attempt in range(self.MAX_RETRIES):
-            try:
-                return self.client.chat.completions.create(**kwargs)
-            except RateLimitError as e:
-                last_err = e
-                time.sleep(delay)
-                delay *= 2
-
-        raise RuntimeError(f"Failed after {self.MAX_RETRIES} retries") from last_err
 
     def invoke(
         self,
@@ -90,6 +76,6 @@ class OpenRouterLLM(BaseLLM):
         if extra_body is not None:
             kwargs["extra_body"] = extra_body
 
-        resp = self._call_with_retry(**kwargs)
+        resp = self.client.chat.completions.create(**kwargs)
         content = resp.choices[0].message.content
         return content.strip() if content else ""
