@@ -107,6 +107,16 @@ def test_render_base_tool_prompt_covers_every_base_tool():
         assert f"**{name}**" in prompt
 
 
+def test_base_workflow_has_graceful_give_up_rule():
+    prompt = tool_inventory.render_base_tool_prompt()
+
+    # The give-up discipline must be explicit: bounded searching, no
+    # rag_get_context on irrelevant results, and an honest not-found answer.
+    assert "Give up gracefully" in prompt
+    assert "indexed knowledge base does not contain enough evidence" in prompt
+    assert "do NOT call rag_get_context on irrelevant results" in prompt
+
+
 def test_system_prompt_embeds_rendered_base_tool_prompt():
     from agent.session import SYSTEM_PROMPT
 
