@@ -59,6 +59,51 @@ def test_c1_dataset_cases_match_legacy_behavior_case_ids():
     assert frozen_ids == legacy_ids
 
 
+def test_c1_dataset_specs_match_legacy_behavior_cases():
+    """Catch semantic drift, not just id drift.
+
+    The frozen C1 cases and the legacy behavior cases must agree on category,
+    prompts, and every gold expectation, so `--suite behavior` and `--claim c1`
+    cannot disagree on the expected behavior for the same case id (the exact bug
+    that let the reclassified embedding case diverge across the two suites).
+    """
+    behavior_by_id = {case["id"]: case for case in BehaviorEvaluator().generate()}
+    frozen_by_id = {
+        case.id: c1_case_to_behavior_case(case)
+        for split in ("dev", "test")
+        for case in load_claim_dataset("c1", split)
+    }
+
+    assert set(behavior_by_id) == set(frozen_by_id)
+
+    expectation_keys = (
+        "expected_tool_family",
+        "expected_first_tool",
+        "expected_first_tool_in",
+        "expected_tools_include",
+        "expected_tools_any_of",
+        "expected_tool_count",
+        "expected_filters_include",
+        "expected_answer_regex",
+    )
+
+    def _questions(case):
+        if case.get("messages"):
+            return list(case["messages"])
+        return [case["question"]] if case.get("question") else []
+
+    for cid, behavior_case in behavior_by_id.items():
+        frozen_case = frozen_by_id[cid]
+        assert behavior_case.get("category") == frozen_case.get("category"), cid
+        assert _questions(behavior_case) == _questions(frozen_case), cid
+        # Forbidden tools are scored as a set, so order is not significant.
+        assert set(behavior_case.get("expected_tools_forbidden") or []) == set(
+            frozen_case.get("expected_tools_forbidden") or []
+        ), cid
+        for key in expectation_keys:
+            assert behavior_case.get(key) == frozen_case.get(key), (cid, key)
+
+
 def test_score_c1_trace_matches_legacy_scorer_for_frozen_case():
     frozen = load_claim_dataset("c1", "dev")[1]
     behavior_case = c1_case_to_behavior_case(frozen)
