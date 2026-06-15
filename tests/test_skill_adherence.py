@@ -98,12 +98,32 @@ def test_active_skill_state_and_prompt_are_ready_before_turn(tmp_path, monkeypat
     prompt_text = "\n".join(message.content for message in state["messages"])
 
     assert answer == "ok"
+    # The session initial state carries the same serialized active-skill slice
+    # (and fresh validation defaults) as the graph loader.
+    serialized_keys = {
+        "active_skill",
+        "skill_root",
+        "skill_instructions",
+        "loaded_references",
+        "task_mode",
+        "allowed_tools",
+        "denied_tools",
+        "tool_policy_active",
+        "validation_errors",
+        "validation_attempts",
+        "validation_retry_requested",
+    }
+    assert serialized_keys <= set(state)
     assert state["active_skill"] == "academic-paper-writing"
+    assert state["task_mode"] == "revision"
     assert state["skill_instructions"].startswith("---")
     assert state["loaded_references"] == {
         "references/section-playbooks.md": "section reference"
     }
     assert state["tool_policy_active"] is True
+    assert state["validation_errors"] == []
+    assert state["validation_attempts"] == 0
+    assert state["validation_retry_requested"] is False
     assert "# Academic Paper Writing" in prompt_text
 
 

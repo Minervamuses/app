@@ -82,13 +82,32 @@ def test_skill_loader_populates_state_from_runtime(monkeypatch, tmp_path):
 
     result = graph.invoke({"messages": [HumanMessage(content="hi")]})
 
+    # The loader fills the complete serialized active-skill slice.
+    serialized_keys = {
+        "active_skill",
+        "skill_root",
+        "skill_instructions",
+        "loaded_references",
+        "task_mode",
+        "allowed_tools",
+        "denied_tools",
+        "tool_policy_active",
+        "validation_errors",
+        "validation_attempts",
+        "validation_retry_requested",
+    }
+    assert serialized_keys <= set(result)
     assert result["active_skill"] == "paper-writing"
     assert result["skill_root"] == str(runtime.root)
     assert result["skill_instructions"] == "# Skill"
     assert result["loaded_references"] == {"references/guide.md": "guide"}
+    assert result["task_mode"] == "revision"
     assert result["allowed_tools"] == ["read_file"]
     assert result["denied_tools"] == ["bash"]
     assert result["tool_policy_active"] is True
+    assert result["validation_errors"] == []
+    assert result["validation_attempts"] == 0
+    assert result["validation_retry_requested"] is False
 
 
 def test_agent_node_binds_filtered_tools_for_active_skill(monkeypatch, tmp_path):

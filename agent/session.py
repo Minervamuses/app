@@ -30,6 +30,7 @@ from agent.skills import (
 )
 from agent.skills.runtime import render_tool_availability_block
 from agent.skills.validator import validate_skill_output
+from agent.state import skill_runtime_to_agent_state
 from agent.tools import inventory as tool_inventory
 from agent.thinking import (
     Clarify,
@@ -292,24 +293,6 @@ class ChatSession:
             for name in tool_inventory.base_tool_names(extra_tools=self.extra_tools)
         ]
 
-    def _active_skill_state(self) -> dict:
-        runtime = self.active_skill_runtime
-        if runtime is None:
-            return {}
-        return {
-            "active_skill": runtime.name,
-            "skill_root": str(runtime.root),
-            "skill_instructions": runtime.instructions,
-            "loaded_references": dict(runtime.pinned_references),
-            "task_mode": runtime.task_mode,
-            "allowed_tools": sorted(runtime.allowed_tools),
-            "denied_tools": sorted(runtime.denied_tools),
-            "tool_policy_active": runtime.tool_policy_active,
-            "validation_errors": [],
-            "validation_attempts": 0,
-            "validation_retry_requested": False,
-        }
-
     def _render_plan_block(
         self,
         *,
@@ -503,7 +486,7 @@ class ChatSession:
         messages: list = list(input_messages)
         initial_state = {
             "messages": input_messages,
-            **self._active_skill_state(),
+            **skill_runtime_to_agent_state(self.active_skill_runtime),
         }
         async for update in self.graph.astream(
             initial_state,

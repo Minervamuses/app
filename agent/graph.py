@@ -9,26 +9,8 @@ from agent.llm.openrouter import get_chat_model
 from agent.history import prepare_messages_for_agent
 from agent.policy_tool_node import PolicyToolNode
 from agent.skills.validator import validate_skill_output
-from agent.state import AgentState
+from agent.state import AgentState, skill_runtime_to_agent_state
 from agent.tools import inventory as tool_inventory
-
-
-def _skill_runtime_state(runtime) -> dict:
-    if runtime is None:
-        return {}
-    return {
-        "active_skill": runtime.name,
-        "skill_root": str(runtime.root),
-        "skill_instructions": runtime.instructions,
-        "loaded_references": dict(runtime.pinned_references),
-        "task_mode": runtime.task_mode,
-        "allowed_tools": sorted(runtime.allowed_tools),
-        "denied_tools": sorted(runtime.denied_tools),
-        "tool_policy_active": runtime.tool_policy_active,
-        "validation_errors": [],
-        "validation_attempts": 0,
-        "validation_retry_requested": False,
-    }
 
 
 def _tool_interaction_count(messages: list) -> int:
@@ -172,7 +154,7 @@ def build_graph(
             return {}
         if skill_runtime_getter is None:
             return {}
-        return _skill_runtime_state(skill_runtime_getter())
+        return skill_runtime_to_agent_state(skill_runtime_getter())
 
     def skill_validator_node(state: AgentState):
         active_skill = state.get("active_skill")
