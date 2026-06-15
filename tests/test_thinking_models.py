@@ -46,12 +46,15 @@ def test_get_chat_model_for_role_applies_role_model_and_reviewer_tokens(
 ):
     calls: list[dict] = []
 
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs):
-            calls.append(kwargs)
+    def fake_get_openrouter_chat_model(config, **kwargs):
+        calls.append({"config": config, **kwargs})
+        return object()
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(thinking, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(
+        thinking,
+        "get_openrouter_chat_model",
+        fake_get_openrouter_chat_model,
+    )
     cfg = AgentConfig(
         persist_dir=str(tmp_path),
         thinking_reviewer_model="openai/gpt-5.2",
@@ -64,10 +67,9 @@ def test_get_chat_model_for_role_applies_role_model_and_reviewer_tokens(
     get_chat_model_for_role(cfg, role="reviewer")
     get_chat_model_for_role(cfg, role="rewrite")
 
-    assert calls[0]["model"] == "openai/gpt-5.2"
+    assert calls[0]["config"] is cfg
+    assert calls[0]["model_name"] == "openai/gpt-5.2"
     assert calls[0]["max_tokens"] == 8192
-    assert calls[1]["model"] == "anthropic/claude-haiku-5"
+    assert calls[0]["temperature"] == 0.3
+    assert calls[1]["model_name"] == "anthropic/claude-haiku-5"
     assert calls[1]["max_tokens"] == 1024
-    # Role models share the same single source of truth for retries.
-    assert calls[0]["max_retries"] == 7
-    assert calls[1]["max_retries"] == 7

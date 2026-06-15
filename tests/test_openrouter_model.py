@@ -1,8 +1,10 @@
-"""Tests for main OpenRouter chat model configuration."""
+"""Tests for LangChain LLM model factories."""
 
 from agent.config import AgentConfig
-from agent.llm import openrouter
-from agent.llm.openrouter import OpenRouterLLM, get_chat_model
+from agent.llm import ollama, openrouter
+from agent.llm.ollama import get_ollama_chat_model
+from agent.llm.openrouter import get_chat_model, get_openrouter_chat_model
+from agent.llm.text import invoke_text
 
 
 def test_get_chat_model_uses_main_model_and_configured_token_limit(monkeypatch, tmp_path):
@@ -42,56 +44,61 @@ def test_get_chat_model_delegates_retries_to_client(monkeypatch, tmp_path):
     assert calls[0]["max_retries"] == 7
 
 
-def test_openrouter_llm_passes_retries_to_openai_client(monkeypatch, tmp_path):
-    init_kwargs: list[dict] = []
+def test_get_openrouter_chat_model_applies_eval_overrides(monkeypatch, tmp_path):
+    calls: list[dict] = []
 
-    class FakeOpenAI:
+    class FakeChatOpenAI:
         def __init__(self, **kwargs):
-            init_kwargs.append(kwargs)
+            calls.append(kwargs)
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(openrouter, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(openrouter, "ChatOpenAI", FakeChatOpenAI)
     cfg = AgentConfig(persist_dir=str(tmp_path), llm_max_retries=7)
 
-    OpenRouterLLM(config=cfg)
+    get_openrouter_chat_model(
+        cfg,
+        model_name="openai/gpt-5.2",
+        max_tokens=300,
+        temperature=0.0,
+        extra_body={"reasoning": {"enabled": False}},
+    )
 
-    assert init_kwargs[0]["max_retries"] == 7
+    assert calls[0]["model"] == "openai/gpt-5.2"
+    assert calls[0]["max_tokens"] == 300
+    assert calls[0]["temperature"] == 0.0
+    assert calls[0]["max_retries"] == 7
+    assert calls[0]["extra_body"] == {"reasoning": {"enabled": False}}
 
 
-def test_openrouter_llm_invoke_calls_client_completion_directly(monkeypatch, tmp_path):
-    """invoke() should hit the client completion API with no local retry wrapper."""
-    create_calls: list[dict] = []
+def test_get_ollama_chat_model_applies_filter_overrides(monkeypatch, tmp_path):
+    calls: list[dict] = []
 
-    class FakeMessage:
-        content = "  hello  "
+    class FakeChatOllama:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
 
-    class FakeChoice:
-        message = FakeMessage()
+    monkeypatch.setattr(ollama, "ChatOllama", FakeChatOllama)
+    cfg = AgentConfig(persist_dir=str(tmp_path), filter_llm_model="llama3.1:8b")
+
+    get_ollama_chat_model(cfg, max_tokens=8, temperature=0.0)
+
+    assert calls[0]["model"] == "llama3.1:8b"
+    assert calls[0]["num_predict"] == 8
+    assert calls[0]["temperature"] == 0.0
+
+
+def test_invoke_text_invokes_chat_model_with_human_message():
+    seen_messages = []
 
     class FakeResponse:
-        choices = [FakeChoice()]
+        content = "  hello  "
 
-    class FakeCompletions:
-        def create(self, **kwargs):
-            create_calls.append(kwargs)
+    class FakeModel:
+        def invoke(self, messages):
+            seen_messages.extend(messages)
             return FakeResponse()
 
-    class FakeChat:
-        completions = FakeCompletions()
-
-    class FakeOpenAI:
-        def __init__(self, **kwargs):
-            self.chat = FakeChat()
-
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(openrouter, "OpenAI", FakeOpenAI)
-    cfg = AgentConfig(persist_dir=str(tmp_path), llm_model="some/model")
-
-    llm = OpenRouterLLM(config=cfg)
-    result = llm.invoke("hi", max_tokens=42)
+    result = invoke_text(FakeModel(), "hi")
 
     assert result == "hello"
-    assert create_calls[0]["model"] == "some/model"
-    assert create_calls[0]["max_tokens"] == 42
-    # The retry wrapper was removed; invoke must not depend on it.
-    assert not hasattr(llm, "_call_with_retry")
+    assert seen_messages[0].content == "hi"

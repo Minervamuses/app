@@ -8,6 +8,15 @@ Results are written **append-only** with version metadata so runs can be
 compared over time and regressions detected. See `EVALUATOR_PLAN.md` at the repo
 root for the full design rationale.
 
+## LLM access contract
+
+All agent and evaluation model calls use LangChain chat models from
+`agent.llm`. Runtime uses `get_chat_model()` / `get_chat_model_for_role()`;
+evaluation helper roles use the same contract through OpenRouter or Ollama
+chat-model factories plus `invoke_text()` when a plain string response is
+needed. The old `BaseLLM` prompt-to-text provider hierarchy is intentionally
+removed.
+
 ## The four claims
 
 | Claim | What it measures | Driver | Core metrics (Tier 1, deterministic) |
@@ -62,6 +71,7 @@ Inside an interactive chat session:
 | `--no-mcp` | Skip MCP tool loading. |
 
 `--suite behavior|e2e|thinking` still runs the legacy suites during migration;
+their model calls use the same LangChain access contract as the main runtime.
 `--all` runs those legacy suites (not the c1–c4 claims).
 
 ### Prerequisites per claim

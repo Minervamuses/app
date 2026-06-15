@@ -12,11 +12,10 @@ rag = { path = "../rag", develop = true }
 
 langchain-core = "^1.2.0"
 langchain-openai = "^1.1.12"
+langchain-ollama = "^1.1.0"
 langchain-mcp-adapters = "^0.2.2"
 langgraph = "^1.1.4"
 mcp = "^1.27.0"
-openai = "^2.30.0"
-ollama = "^0.6.0"
 pydantic = "^2.0"
 python-dotenv = "^1.0.0"
 prompt-toolkit = "^3.0.52"

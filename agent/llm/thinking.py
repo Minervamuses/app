@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
-from typing import Literal
-
-from langchain_openai import ChatOpenAI
+from typing import Any, Literal
 
 from agent.config import AgentConfig
+from agent.llm.openrouter import get_openrouter_chat_model
 
 ThinkingRole = Literal["reviewer", "rewrite", "repair"]
 
@@ -45,7 +43,7 @@ def get_chat_model_for_role(
     config: AgentConfig,
     *,
     role: ThinkingRole,
-) -> ChatOpenAI:
+) -> Any:
     """Return an OpenRouter chat model for one extended-thinking role."""
     attr = _ROLE_MODEL_ATTRS[role]
     model_name = str(getattr(config, attr, "") or "").strip()
@@ -55,20 +53,14 @@ def get_chat_model_for_role(
             "using /thinking extended."
         )
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is not set")
-
     max_tokens = (
         config.thinking_reviewer_max_tokens
         if role == "reviewer"
         else 1024
     )
-    return ChatOpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-        model=model_name,
+    return get_openrouter_chat_model(
+        config,
+        model_name=model_name,
         temperature=0.3,
         max_tokens=max_tokens,
-        max_retries=config.llm_max_retries,
     )

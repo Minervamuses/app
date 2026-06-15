@@ -1,12 +1,26 @@
 """Tests for end-to-end evaluation result details."""
 
 from agent.config import AgentConfig
-from agent.evaluation.endtoend import EndToEndEvaluator
+from agent.evaluation.endtoend import EndToEndEvaluator, JUDGE_RESPONSE_FORMAT
+
+
+class _FakeTextResponse:
+    content = '  {"score": 3, "rationale": "matches"}  '
 
 
 class _FakeJudge:
-    def invoke(self, *args, **kwargs):
-        return '{"score": 3, "rationale": "matches"}'
+    def invoke(self, messages):
+        self.messages = messages
+        return _FakeTextResponse()
+
+
+class _FakeModel:
+    def __init__(self):
+        self.bound_kwargs = None
+
+    def bind(self, **kwargs):
+        self.bound_kwargs = kwargs
+        return self
 
 
 class _FakeSession:
@@ -20,6 +34,47 @@ class _FakeSession:
             {"name": "rag_search", "args": {"query": "x"}},
             {"name": "rag_get_context", "args": {"pid": "p", "chunk_id": 1}},
         ]
+
+
+def test_e2e_initializes_langchain_eval_models(monkeypatch, tmp_path):
+    ollama_calls: list[dict] = []
+    openrouter_calls: list[dict] = []
+
+    def fake_ollama_factory(config, **kwargs):
+        ollama_calls.append({"config": config, **kwargs})
+        return _FakeModel()
+
+    def fake_openrouter_factory(config, **kwargs):
+        openrouter_calls.append({"config": config, **kwargs})
+        return _FakeModel()
+
+    monkeypatch.setattr(
+        "agent.evaluation.endtoend.get_ollama_chat_model",
+        fake_ollama_factory,
+    )
+    monkeypatch.setattr(
+        "agent.evaluation.endtoend.get_openrouter_chat_model",
+        fake_openrouter_factory,
+    )
+    cfg = AgentConfig(
+        persist_dir=str(tmp_path),
+        gen_llm_model="gen/model",
+        judge_llm_model="judge/model",
+        filter_llm_model="filter:model",
+    )
+
+    evaluator = EndToEndEvaluator(cfg)
+
+    assert ollama_calls[0]["model_name"] == "filter:model"
+    assert ollama_calls[0]["max_tokens"] == 8
+    assert ollama_calls[0]["temperature"] == 0.0
+    assert openrouter_calls[0]["model_name"] == "gen/model"
+    assert openrouter_calls[0]["max_tokens"] == 4096
+    assert openrouter_calls[1]["model_name"] == "judge/model"
+    assert openrouter_calls[1]["max_tokens"] == 300
+    assert evaluator._judge_llm.bound_kwargs == {
+        "response_format": JUDGE_RESPONSE_FORMAT,
+    }
 
 
 def test_e2e_records_tool_trace(monkeypatch, tmp_path):

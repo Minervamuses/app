@@ -17,8 +17,8 @@ class AgentConfig(RAGConfig):
     # Main chat LLM used by the agent's LangGraph loop.
     llm_model: str = "deepseek/deepseek-v4-pro"
     llm_max_tokens: int = 4096
-    # Retry count delegated to the official OpenAI client (used by both the
-    # ChatOpenAI path and OpenRouterLLM). Single source of truth for retries.
+    # Retry count delegated through LangChain/OpenAI clients. Single source of
+    # truth for runtime and evaluation OpenRouter chat models.
     llm_max_retries: int = 10
 
     # Evaluation LLMs

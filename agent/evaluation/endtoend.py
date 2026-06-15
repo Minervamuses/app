@@ -15,8 +15,9 @@ from rag.api import list_chunks
 from agent.config import AgentConfig
 
 from agent.evaluation.base import BaseEvaluator, EvalResult, _extract_json, tool_inventory
-from agent.llm.ollama import OllamaLLM
-from agent.llm.openrouter import OpenRouterLLM
+from agent.llm.ollama import get_ollama_chat_model
+from agent.llm.openrouter import get_openrouter_chat_model
+from agent.llm.text import invoke_text
 from agent.session import ChatSession
 
 FILTER_PROMPT = """Is this text chunk semantically meaningful content that a human would ask questions about? Answer YES or NO only.
@@ -102,9 +103,24 @@ class EndToEndEvaluator(BaseEvaluator):
         self.config = config or AgentConfig()
         self.extra_tools = list(extra_tools or [])
         self.available_tools = tool_inventory(self.extra_tools)
-        self._filter_llm = OllamaLLM(model_name=self.config.filter_llm_model, config=self.config)
-        self._gen_llm = OpenRouterLLM(model_name=self.config.gen_llm_model, config=self.config)
-        self._judge_llm = OpenRouterLLM(model_name=self.config.judge_llm_model, config=self.config)
+        self._filter_llm = get_ollama_chat_model(
+            self.config,
+            model_name=self.config.filter_llm_model,
+            max_tokens=8,
+            temperature=0.0,
+        )
+        self._gen_llm = get_openrouter_chat_model(
+            self.config,
+            model_name=self.config.gen_llm_model,
+            max_tokens=4096,
+            temperature=0.0,
+        )
+        self._judge_llm = get_openrouter_chat_model(
+            self.config,
+            model_name=self.config.judge_llm_model,
+            max_tokens=300,
+            temperature=0.0,
+        ).bind(response_format=JUDGE_RESPONSE_FORMAT)
 
     def generate(self, n: int = 15, output_path: str | None = None) -> list[dict]:
         """Generate synthesis questions from groups of related chunks.
@@ -147,10 +163,9 @@ class EndToEndEvaluator(BaseEvaluator):
             filtered = []
             for hit in sampled:
                 preview = hit.text[:400]
-                verdict = self._filter_llm.invoke(
+                verdict = invoke_text(
+                    self._filter_llm,
                     FILTER_PROMPT.format(chunk_text=preview),
-                    max_tokens=8,
-                    temperature=0.0,
                 )
                 if verdict.strip().upper().startswith("YES"):
                     filtered.append(hit)
@@ -170,7 +185,7 @@ class EndToEndEvaluator(BaseEvaluator):
             prompt = GENERATE_PROMPT.format(chunk_texts=chunk_texts)
 
             try:
-                response = self._gen_llm.invoke(prompt, max_tokens=4096, temperature=0.0)
+                response = invoke_text(self._gen_llm, prompt)
                 data = _extract_json(response)
             except (ValueError, json.JSONDecodeError):
                 continue
@@ -232,12 +247,7 @@ class EndToEndEvaluator(BaseEvaluator):
             judge_response = ""
             judge_failed = False
             try:
-                judge_response = self._judge_llm.invoke(
-                    judge_prompt,
-                    max_tokens=300,
-                    temperature=0.0,
-                    response_format=JUDGE_RESPONSE_FORMAT,
-                )
+                judge_response = invoke_text(self._judge_llm, judge_prompt)
                 judge_data = _extract_json(judge_response)
                 score = int(judge_data.get("score", 0))
                 score = max(0, min(3, score))
