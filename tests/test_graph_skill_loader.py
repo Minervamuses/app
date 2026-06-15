@@ -351,6 +351,60 @@ def test_agent_node_caps_parallel_tool_calls_to_budget(monkeypatch, tmp_path):
     assert result["messages"][-1].content == "final answer"
 
 
+def test_agent_node_never_exceeds_cap_across_multiple_rounds(monkeypatch, tmp_path):
+    """Across several rounds, each emitting extra parallel calls, the per-turn
+    tool count must never exceed agent_max_tool_interactions."""
+
+    class GreedyModel:
+        def __init__(self):
+            self.bound_calls: list[list] = []
+            self.raw_calls: list[list] = []
+
+        def bind_tools(self, _tools):
+            model = self
+
+            class Bound:
+                def invoke(self, messages):
+                    model.bound_calls.append(messages)
+                    # Always asks for two parallel searches every round.
+                    return AIMessage(
+                        content="",
+                        tool_calls=[
+                            {"name": "rag_search", "args": {"query": "a"}, "id": f"a{len(model.bound_calls)}"},
+                            {"name": "rag_search", "args": {"query": "b"}, "id": f"b{len(model.bound_calls)}"},
+                        ],
+                    )
+
+            return Bound()
+
+        def invoke(self, messages):
+            self.raw_calls.append(messages)
+            return AIMessage(content="final answer")
+
+    model = GreedyModel()
+    monkeypatch.setattr("agent.graph.get_chat_model", lambda _cfg: model)
+    monkeypatch.setattr(
+        "agent.tools.inventory.create_rag_tools",
+        lambda _cfg: [_rag_explore, _rag_search, _rag_get_context],
+    )
+    monkeypatch.setattr(
+        "agent.tools.inventory.create_history_tool",
+        lambda _cfg, store=None: _recall_history,
+    )
+    cfg = AgentConfig(persist_dir=str(tmp_path), agent_max_tool_interactions=3)
+    graph = build_graph(cfg)
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="hi")]},
+        config={"recursion_limit": 16},
+    )
+
+    tool_messages = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+    # Round 1 runs 2 of 3; round 2 is capped to the remaining 1; then exhausted.
+    assert len(tool_messages) == 3
+    assert result["messages"][-1].content == "final answer"
+
+
 def test_agent_node_strips_tool_calls_from_exhausted_raw_model(monkeypatch, tmp_path):
     """The exhausted path uses an unbound model, but any returned tool calls must
     still be dropped so the budget is enforced mechanically."""
