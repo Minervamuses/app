@@ -18,23 +18,16 @@ if [[ -n "$(git status --short)" ]]; then
   exit 1
 fi
 
-mkdir -p eval/runs
 RUN_STARTED_AT="$(date -u +"%Y%m%dT%H%M%SZ")"
-RUN_CONTEXT="eval/runs/full-eval-${SPLIT}-${RUN_STARTED_AT}.context.txt"
 
-{
-  echo "full_eval_started_at=${RUN_STARTED_AT}"
-  echo "split=${SPLIT}"
-  echo "head=$(git rev-parse HEAD)"
-  echo "head_short=$(git rev-parse --short HEAD)"
-  echo "branch=$(git branch --show-current)"
-  echo "allow_skips=${ALLOW_SKIPS}"
-  echo "no_mcp=${NO_MCP}"
-  echo "run_legacy_suites=${RUN_LEGACY_SUITES}"
-  echo
-  echo "[git status before eval]"
-  git status --short
-} | tee "$RUN_CONTEXT"
+echo "full_eval_started_at=${RUN_STARTED_AT}"
+echo "split=${SPLIT}"
+echo "head=$(git rev-parse HEAD)"
+echo "head_short=$(git rev-parse --short HEAD)"
+echo "branch=$(git branch --show-current)"
+echo "allow_skips=${ALLOW_SKIPS}"
+echo "no_mcp=${NO_MCP}"
+echo "run_legacy_suites=${RUN_LEGACY_SUITES}"
 
 MCP_ARGS=()
 if [[ "$NO_MCP" == "1" ]]; then
@@ -78,13 +71,6 @@ if [[ "$RUN_LEGACY_SUITES" == "1" ]]; then
     "${MCP_ARGS[@]}"
 fi
 
-{
-  echo
-  echo "[git status after eval]"
-  git status --short
-} | tee -a "$RUN_CONTEXT"
-
 echo
 echo "Formal eval complete."
-echo "Run context: $RUN_CONTEXT"
 echo "Ledger: eval/runs/*.jsonl"
