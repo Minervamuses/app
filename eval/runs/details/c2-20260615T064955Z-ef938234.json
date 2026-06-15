@@ -1,0 +1,134 @@
+{
+  "claim": "c2",
+  "details": [
+    {
+      "filters": {},
+      "gold": {
+        "k": 5,
+        "relevant": [
+          {
+            "chunk_id": 0,
+            "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/Score.java"
+          }
+        ]
+      },
+      "id": "c2-score-java-wrapper",
+      "k": 5,
+      "prediction": [
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/Score.java"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/ScoreContainer.java"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "pidna2/src/pidna2/legacy/__init__.py"
+        },
+        {
+          "chunk_id": 314,
+          "pid": "pidna2/data/pdb_ids_result.json"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/ScoreTable.java"
+        }
+      ],
+      "query": "Score.java extends MutationResult id field",
+      "scores": {
+        "mrr": 1.0,
+        "ndcg@5": 1.0,
+        "recall@5": 1.0
+      }
+    },
+    {
+      "filters": {},
+      "gold": {
+        "k": 5,
+        "relevant": [
+          {
+            "chunk_id": 0,
+            "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/ScoreContainer.java"
+          }
+        ]
+      },
+      "id": "c2-score-container-columns",
+      "k": 5,
+      "prediction": [
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/ScoreContainer.java"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/Score.java"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/PiDNA/src/snoopy/pdb/pidna/ScoreTable.java"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "pidna2/src/pidna2/legacy/__init__.py"
+        },
+        {
+          "chunk_id": 314,
+          "pid": "pidna2/data/pdb_ids_result.json"
+        }
+      ],
+      "query": "ScoreContainer natural column order mutatedCount sequence diffScore",
+      "scores": {
+        "mrr": 1.0,
+        "ndcg@5": 1.0,
+        "recall@5": 1.0
+      }
+    },
+    {
+      "filters": {},
+      "gold": {
+        "k": 5,
+        "relevant": [
+          {
+            "chunk_id": 0,
+            "pid": "pidna2/README.md"
+          }
+        ]
+      },
+      "id": "c2-pidna-readme-web-interface",
+      "k": 5,
+      "prediction": [
+        {
+          "chunk_id": 0,
+          "pid": "web/backend/pyproject.toml"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "pidna2/README.md"
+        },
+        {
+          "chunk_id": 4,
+          "pid": "Research_notes/20260124/frontend_implementation_plan.md"
+        },
+        {
+          "chunk_id": 1,
+          "pid": "Research_notes/20260312/pidna1_inference_analysis.md"
+        },
+        {
+          "chunk_id": 0,
+          "pid": "PiDNA1/source_code/sql/db_id.sql"
+        }
+      ],
+      "query": "PiDNA2 web interface three step wizard prediction results",
+      "scores": {
+        "mrr": 0.5,
+        "ndcg@5": 0.6309297535714575,
+        "recall@5": 1.0
+      }
+    }
+  ],
+  "name": "C2Retrieval",
+  "run_id": "c2-20260615T064955Z-ef938234",
+  "total": 3
+}

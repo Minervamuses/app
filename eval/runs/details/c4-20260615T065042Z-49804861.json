@@ -1,0 +1,73 @@
+{
+  "claim": "c4",
+  "details": [
+    {
+      "actual_tools": [
+        "read_file"
+      ],
+      "answer": "這份 EVALUATOR_PLAN.md 將實作拆成七個循序漸進的階段：**Phase 1** 打地基，建立 dataset schema/loader、append-only ledger、以及涵蓋 Chroma collection 內容（而非僅 raw.json）的可重現指紋機制；**Phase 2** 遷移 C1（工具路由正確性），補全 `tool_inventory`、凍結既有 behavior case 為 JSONL、並抽離純比對邏輯為 module-level pure function；**Phase 3** 實作 C2（檢索品質），以固定 eval fixture store 跑 recall@k / MRR / nDCG@k 等確定性 rank metric，並接入 fingerprint guard 確保可重現；**Phase 4** 拆成 C3a（validator 確定性 P/R）、C3b（reviewer 當分類器，以 macro P/R/F1 評估 decision / failure_mode / route / severity）、C3c（走 normal 與 extended 兩條 ChatSession 整合路徑驗證 skill validation retry 是否觸發）三個獨立子評估；**Phase 5** 為 C4 端到端任務完成建立確定性 checklist rubric（必叫工具、必含事實）；**Phase 6** 是公開 benchmark spike，接一個 BEIR 小子集產出可重現的 nDCG@10，失敗不阻擋 C1–C4 交付；**Phase 7** 則是在 CLI slash command registry 新增 eval 指令（列為非 MVP 的後續階段）。全程以每階段獨立可交付、unit test 綠燈收尾為原則，且前三個階段大多無需 API key 或 Ollama 即可驗證。",
+      "gold": {
+        "checklist": {
+          "answer_contains": [
+            "Phase 1",
+            "Phase 2",
+            "Phase 3"
+          ],
+          "answer_regex": [
+            "C1|C2|C3|C4"
+          ],
+          "forbidden_tools": [
+            "full-web-search",
+            "get-web-search-summaries",
+            "get-single-web-page-content"
+          ],
+          "required_tools": [
+            "read_file"
+          ]
+        }
+      },
+      "id": "c4-local-file-summary",
+      "scores": {
+        "answer_contains_ok": true,
+        "answer_regex_ok": true,
+        "answer_requirements_ok": true,
+        "forbidden_tools_ok": true,
+        "passed": true,
+        "required_tools_ok": true
+      }
+    },
+    {
+      "actual_tools": [],
+      "answer": "You asked me to remember that the deployment codename is **Blue Lantern**（藍燈籠）. That's visible right here in our current conversation — you mentioned it just before this message.",
+      "gold": {
+        "checklist": {
+          "answer_contains": [
+            "Blue Lantern"
+          ],
+          "answer_regex": [
+            "codename|deployment"
+          ],
+          "forbidden_tools": [
+            "rag_search",
+            "full-web-search"
+          ],
+          "required_tools": [
+            "recall_history"
+          ]
+        }
+      },
+      "id": "c4-history-codename-answer",
+      "scores": {
+        "answer_contains_ok": true,
+        "answer_regex_ok": true,
+        "answer_requirements_ok": true,
+        "forbidden_tools_ok": true,
+        "passed": false,
+        "required_tools_ok": false
+      }
+    }
+  ],
+  "name": "C4Checklist",
+  "run_id": "c4-20260615T065042Z-49804861",
+  "total": 2
+}
