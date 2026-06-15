@@ -70,5 +70,5 @@ def get_chat_model_for_role(
         model=model_name,
         temperature=0.3,
         max_tokens=max_tokens,
-        max_retries=10,
+        max_retries=config.llm_max_retries,
     )

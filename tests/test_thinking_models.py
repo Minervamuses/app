@@ -58,6 +58,7 @@ def test_get_chat_model_for_role_applies_role_model_and_reviewer_tokens(
         thinking_reviewer_max_tokens=8192,
         thinking_rewrite_model="anthropic/claude-haiku-5",
         thinking_repair_model="meta-llama/llama-3.1-8b-instruct",
+        llm_max_retries=7,
     )
 
     get_chat_model_for_role(cfg, role="reviewer")
@@ -67,3 +68,6 @@ def test_get_chat_model_for_role_applies_role_model_and_reviewer_tokens(
     assert calls[0]["max_tokens"] == 8192
     assert calls[1]["model"] == "anthropic/claude-haiku-5"
     assert calls[1]["max_tokens"] == 1024
+    # Role models share the same single source of truth for retries.
+    assert calls[0]["max_retries"] == 7
+    assert calls[1]["max_retries"] == 7
