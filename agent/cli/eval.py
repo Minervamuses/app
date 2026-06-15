@@ -129,6 +129,9 @@ def _run_claim(
             config,
             extra_tools=extra_tools,
             allow_skips=allow_skips,
+            # Stream per-case/turn/tool progress so a slow model call is
+            # distinguishable from a hang during a live C1 run.
+            progress_cb=lambda message: print(message, flush=True),
         )
         cases = load_claim_dataset(claim, split)
         print(f"[{claim}] Loaded {len(cases)} {split} cases")

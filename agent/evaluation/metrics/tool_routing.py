@@ -8,6 +8,8 @@ importers; only their source changed.
 
 from __future__ import annotations
 
+import re
+
 from agent.tools.inventory import (
     HISTORY_TOOL_NAMES,
     LOCAL_TOOL_NAMES,
@@ -55,8 +57,15 @@ def score_tool_expectations(
     case: dict,
     actual_tools: list[str],
     actual_args: list[dict],
+    answer: str = "",
 ) -> dict[str, bool]:
-    """Score one expected tool-routing case against an actual tool trace."""
+    """Score one expected tool-routing case against an actual tool trace.
+
+    ``answer`` is the agent's final text response for the case. It is only used
+    when the case carries the optional ``expected_answer_regex`` gold field;
+    cases without that field score identically to before (the ``answer_ok``
+    metric is simply absent), so existing datasets are unaffected.
+    """
     scores: dict[str, bool] = {}
     actual_count = len(actual_tools)
 
@@ -97,6 +106,13 @@ def score_tool_expectations(
         scores["filters_used"] = (
             any(all(f in args for f in expected_filters) for args in search_args)
             if search_args else False
+        )
+
+    expected_answer_regex = case.get("expected_answer_regex")
+    if expected_answer_regex:
+        text = answer or ""
+        scores["answer_ok"] = all(
+            re.search(pattern, text) is not None for pattern in expected_answer_regex
         )
 
     return scores

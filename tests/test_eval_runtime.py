@@ -131,9 +131,11 @@ def test_eval_cli_runs_c1_claim_and_appends_ledger(monkeypatch, tmp_path):
     seen: dict = {}
 
     class FakeC1RoutingEvaluator:
-        def __init__(self, _config, *, extra_tools=None, allow_skips=False):
+        def __init__(self, _config, *, extra_tools=None, allow_skips=False,
+                     progress_cb=None):
             seen["extra_tools"] = extra_tools
             seen["allow_skips"] = allow_skips
+            seen["progress_cb"] = progress_cb
 
         def evaluate(self, cases):
             return EvalResult(
@@ -156,7 +158,10 @@ def test_eval_cli_runs_c1_claim_and_appends_ledger(monkeypatch, tmp_path):
     )
 
     assert result.name == "C1Routing"
-    assert seen == {"extra_tools": [fake_web_fetch], "allow_skips": True}
+    assert seen["extra_tools"] == [fake_web_fetch]
+    assert seen["allow_skips"] is True
+    # The CLI must hand C1 a progress callback so live runs stream activity.
+    assert callable(seen["progress_cb"])
 
     ledger_path = tmp_path / "eval" / "runs" / "c1.jsonl"
     payload = json.loads(ledger_path.read_text(encoding="utf-8").splitlines()[0])

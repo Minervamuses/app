@@ -28,6 +28,7 @@ _METRIC_NAMES = {
     "forbidden_ok": "forbidden_tool_accuracy",
     "tool_family": "tool_family_accuracy",
     "filters_used": "filter_accuracy",
+    "answer_ok": "answer_accuracy",
 }
 
 
@@ -80,13 +81,24 @@ class C1RoutingEvaluator(BaseEvaluator):
         history_store: ChatHistoryStore | None = None,
         allow_skips: bool = False,
         turn_runner: TurnRunner | None = None,
+        progress_cb: Callable[[str], None] | None = None,
     ):
         self.config = config or AgentConfig()
         self.extra_tools = list(extra_tools or [])
         self.history_store = history_store
         self.allow_skips = allow_skips
         self.turn_runner = turn_runner
+        self.progress_cb = progress_cb
         self.available_tools = tool_inventory(self.extra_tools)
+
+    def _emit(self, message: str) -> None:
+        """Forward a progress line to the configured callback, if any.
+
+        Progress makes slow model/RAG calls distinguishable from a hang: a live
+        run streams case/turn/tool activity instead of going silent.
+        """
+        if self.progress_cb is not None:
+            self.progress_cb(message)
 
     def generate(self, n: int = 0, output_path: str | None = None) -> list[dict]:
         """Load the frozen C1 dev dataset.
@@ -114,6 +126,7 @@ class C1RoutingEvaluator(BaseEvaluator):
 
         for raw_case in cases:
             case = c1_case_to_behavior_case(raw_case)
+            self._emit(f"[c1] case start: {case.get('id')}")
             missing = missing_required_tools(case, available)
             if missing:
                 if not self.allow_skips:
@@ -122,13 +135,14 @@ class C1RoutingEvaluator(BaseEvaluator):
                         f"{sorted(missing)}"
                     )
                 skipped += 1
+                self._emit(f"[c1] case skipped: {case.get('id')} ({sorted(missing)})")
                 details.append(_skipped_detail(case, missing))
                 continue
 
-            tool_calls, error, step_log = self._run_trace(case)
+            tool_calls, error, step_log, answer = self._run_trace(case)
             actual_tools = [tc["name"] for tc in tool_calls]
             actual_args = [tc["args"] for tc in tool_calls]
-            scores = score_c1_trace(raw_case, actual_tools, actual_args)
+            scores = score_c1_trace(raw_case, actual_tools, actual_args, answer=answer)
             case_passed = bool(scores) and all(scores.values())
             routing_correct += case_passed
             evaluated += 1
@@ -154,8 +168,16 @@ class C1RoutingEvaluator(BaseEvaluator):
                 "passed": case_passed,
                 "step_log": step_log,
             }
+            # Answer-regex cases (e.g. graceful give-up) are scored on the final
+            # text, so keep that text in the detail for auditing the verdict.
+            if case.get("expected_answer_regex"):
+                case_detail["final_answer"] = answer
             if error:
                 case_detail["error"] = error
+            self._emit(
+                f"[c1] case done: {case.get('id')} "
+                f"({len(actual_tools)} tool(s), passed={case_passed})"
+            )
             details.append(case_detail)
 
         scores = {"routing_accuracy": routing_correct / evaluated if evaluated else 0}
@@ -179,11 +201,21 @@ class C1RoutingEvaluator(BaseEvaluator):
             },
         )
 
-    def _run_trace(self, case: dict) -> tuple[list[dict], str | None, list[dict]]:
+    def _run_trace(
+        self, case: dict
+    ) -> tuple[list[dict], str | None, list[dict], str]:
+        case_id = case.get("id")
         messages = list(case.get("messages") or [case["question"]])
         setup_history = case.get("setup_history")
         if self.turn_runner is not None:
-            return self.turn_runner(messages, setup_history), None, []
+            result = self.turn_runner(messages, setup_history)
+            # The runner may return just the tool-call list (legacy) or a
+            # (tool_calls, final_answer) pair when answer-regex scoring matters.
+            if isinstance(result, tuple):
+                runner_calls, runner_answer = result
+            else:
+                runner_calls, runner_answer = result, ""
+            return list(runner_calls), None, [], runner_answer
 
         step_log: list[dict] = []
 
@@ -193,15 +225,22 @@ class C1RoutingEvaluator(BaseEvaluator):
                 entry: dict = {"node": node_name, "msg_type": type(msg).__name__}
                 emitted = getattr(msg, "tool_calls", None)
                 if emitted:
-                    entry["emitted_tool_calls"] = [
+                    names = [
                         call.get("name") if isinstance(call, dict)
                         else getattr(call, "name", None)
                         for call in emitted
                     ]
+                    entry["emitted_tool_calls"] = names
                     entry["n_emitted"] = len(emitted)
+                    for name in names:
+                        self._emit(f"[c1] case {case_id} tool call: {name}")
                 if type(msg).__name__ == "ToolMessage":
                     entry["tool_name"] = getattr(msg, "name", None)
                     entry["result_preview"] = str(getattr(msg, "content", ""))[:300]
+                    self._emit(
+                        f"[c1] case {case_id} tool result: "
+                        f"{getattr(msg, 'name', None)}"
+                    )
                 step_log.append(entry)
 
         session = ChatSession(
@@ -216,24 +255,33 @@ class C1RoutingEvaluator(BaseEvaluator):
             progress_cb=_progress,
         )
         tool_calls: list[dict] = []
+        answer = ""
         try:
-            for message in messages:
-                _answer, turn_calls = asyncio.run(session.turn_with_trace(message))
+            for index, message in enumerate(messages, start=1):
+                self._emit(f"[c1] case {case_id} turn {index}/{len(messages)} start")
+                answer, turn_calls = asyncio.run(session.turn_with_trace(message))
                 tool_calls.extend(turn_calls)
         except GraphRecursionError:
-            return [], "GraphRecursionError", step_log
+            return [], "GraphRecursionError", step_log, ""
         except Exception as exc:
-            return [], f"{type(exc).__name__}: {exc}", step_log
-        return tool_calls, None, step_log
+            return [], f"{type(exc).__name__}: {exc}", step_log, ""
+        return tool_calls, None, step_log, answer
 
 
 def score_c1_trace(
     case: EvalCase | dict,
     actual_tools: list[str],
     actual_args: list[dict],
+    answer: str = "",
 ) -> dict[str, bool]:
-    """Score one C1 dataset case against a tool trace."""
-    return score_tool_expectations(c1_case_to_behavior_case(case), actual_tools, actual_args)
+    """Score one C1 dataset case against a tool trace.
+
+    ``answer`` is only consulted for cases carrying ``expected_answer_regex``
+    (e.g. graceful-give-up cases); other cases score unchanged.
+    """
+    return score_tool_expectations(
+        c1_case_to_behavior_case(case), actual_tools, actual_args, answer=answer
+    )
 
 
 def c1_case_to_behavior_case(case: EvalCase | dict) -> dict:
