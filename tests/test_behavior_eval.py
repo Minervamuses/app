@@ -10,7 +10,7 @@ from agent.evaluation.metrics.tool_routing import (
 from agent.tools.inventory import WEB_BEHAVIOR_TOOL_NAMES, behavior_tool_names
 
 
-def test_behavior_generate_has_two_cases_per_tool_plus_no_tool(tmp_path):
+def test_behavior_generate_category_counts(tmp_path):
     evaluator = BehaviorEvaluator()
     cases = evaluator.generate()
 
@@ -18,7 +18,10 @@ def test_behavior_generate_has_two_cases_per_tool_plus_no_tool(tmp_path):
     categories = [case["category"] for case in cases]
     assert categories.count("rag_explore") == 2
     assert categories.count("rag_search") == 2
-    assert categories.count("rag_get_context") == 2
+    # One rag_get_context case was reclassified to graceful give-up to stay in
+    # sync with the C1 dev dataset (embedding topic is not in the indexed KB).
+    assert categories.count("rag_get_context") == 1
+    assert categories.count("rag_graceful_give_up") == 1
     assert categories.count("recall_history") == 2
     assert categories.count("get-web-search-summaries") == 2
     assert categories.count("full-web-search") == 2
@@ -50,7 +53,8 @@ def test_behavior_generated_categories_are_within_inventory_universe():
     universe = set(behavior_tool_names())
 
     for case in evaluator.generate():
-        if case["category"] == "no_tool":
+        # Behavioral categories (no tool / graceful give-up) are not tool names.
+        if case["category"] in ("no_tool", "rag_graceful_give_up"):
             continue
         assert case["category"] in universe
         for tool_name in case.get("expected_tools_include", []):

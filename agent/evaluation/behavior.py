@@ -136,17 +136,24 @@ class BehaviorEvaluator(BaseEvaluator):
             },
             {
                 "id": "rag_context_embedding_followup",
-                "category": "rag_get_context",
-                "messages": [
-                    "How does the embedding module work?",
-                    "Show me more context around the most relevant result.",
-                ],
+                "category": "rag_graceful_give_up",
+                "question": "How does the embedding module work?",
                 "expected_tool_family": "rag",
-                "expected_first_tool": "rag_search",
-                "expected_tools_include": ["rag_search", "rag_get_context"],
-                "expected_tools_forbidden": RAG_FORBIDDEN,
-                "expected_tool_count": {"min": 2, "max": 6},
-                "rationale": "Multi-turn context expansion should search first, then retrieve surrounding chunks.",
+                "expected_first_tool_in": ["rag_search", "rag_explore"],
+                "expected_tools_include": ["rag_search"],
+                "expected_tools_forbidden": ["rag_get_context", *RAG_FORBIDDEN],
+                "expected_tool_count": {"min": 1, "max": 3},
+                "expected_answer_regex": [
+                    "(?i)(knowledge base|indexed|KB)",
+                    "(?i)(not contain|not enough|not found|no relevant|insufficient"
+                    "|lacks|does not contain|doesn't contain|no evidence|no information)",
+                ],
+                "rationale": (
+                    "The embedding module is not in the indexed KB. Correct behavior "
+                    "is a bounded search (1-3 rag_search calls) then an honest "
+                    "not-found answer, not repeated re-searching or rag_get_context "
+                    "on irrelevant results. Kept in sync with the C1 dev dataset."
+                ),
             },
             {
                 "id": "rag_context_pwm_followup",
@@ -309,9 +316,14 @@ class BehaviorEvaluator(BaseEvaluator):
         case: dict,
         actual_tools: list[str],
         actual_args: list[dict],
+        answer: str = "",
     ) -> dict[str, bool]:
-        """Score one behavior case against its expected tool trace."""
-        return score_tool_expectations(case, actual_tools, actual_args)
+        """Score one behavior case against its expected tool trace.
+
+        ``answer`` is only consulted for cases carrying ``expected_answer_regex``
+        (e.g. graceful-give-up cases); other cases score unchanged.
+        """
+        return score_tool_expectations(case, actual_tools, actual_args, answer=answer)
 
     def evaluate(self, cases: list[dict]) -> EvalResult:
         """Run each case through the agent graph and compare tool behavior.
@@ -331,6 +343,7 @@ class BehaviorEvaluator(BaseEvaluator):
             "forbidden_ok": "forbidden_tool_accuracy",
             "tool_family": "tool_family_accuracy",
             "filters_used": "filter_accuracy",
+            "answer_ok": "answer_accuracy",
         }
         metric_correct = {key: 0 for key in metric_names}
         metric_total = {key: 0 for key in metric_names}
@@ -363,23 +376,28 @@ class BehaviorEvaluator(BaseEvaluator):
                 history_store=history_store,
             )
             tool_calls: list[dict] = []
+            answer = ""
             error = None
 
             try:
                 for question in questions:
-                    _answer, turn_calls = asyncio.run(session.turn_with_trace(question))
+                    answer, turn_calls = asyncio.run(session.turn_with_trace(question))
                     tool_calls.extend(turn_calls)
             except GraphRecursionError:
                 error = "GraphRecursionError"
                 tool_calls = []
+                answer = ""
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
                 tool_calls = []
+                answer = ""
 
             actual_tools = [tc["name"] for tc in tool_calls]
             actual_args = [tc["args"] for tc in tool_calls]
             actual_count = len(actual_tools)
-            scores = self._score_tool_expectations(case, actual_tools, actual_args)
+            scores = self._score_tool_expectations(
+                case, actual_tools, actual_args, answer=answer
+            )
             case_passed = bool(scores) and all(scores.values())
             routing_correct += case_passed
             evaluated += 1
@@ -392,6 +410,10 @@ class BehaviorEvaluator(BaseEvaluator):
                 "actual_count": actual_count,
                 "scores": scores,
             }
+            # Answer-regex cases (e.g. graceful give-up) are scored on the final
+            # text, so keep that text in the detail for auditing the verdict.
+            if case.get("expected_answer_regex"):
+                case_detail["final_answer"] = answer
             if error:
                 case_detail["error"] = error
 
