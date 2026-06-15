@@ -40,6 +40,13 @@ class AgentConfig(RAGConfig):
 
     # Agent context controls (same-turn bounds)
     agent_max_messages: int = 20
+    # Per-turn hard cap on tool interactions (enforced in graph.agent_node and
+    # graph._cap_tool_calls). Default 4 is data-backed: in the C1 dev routing
+    # run, every normal eligible case fit within 0-4 tool calls, while the only
+    # runaway (the embedding case) made 8 RAG calls because the topic was absent
+    # from the indexed KB and the agent lacked give-up discipline -- not because
+    # 4 was too low. So the fix is graceful give-up (prompt + eval), not a larger
+    # cap. Scope is per turn, not per conversation.
     agent_max_tool_interactions: int = 4
 
     # Long-term memory: keep this many most-recent turns in the prompt;
