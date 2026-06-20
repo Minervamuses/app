@@ -1,0 +1,280 @@
+hash	short	date	author	subject
+6097e03f4acc69680989643e27ddc82db73e9e16	6097e03	2026-03-28	Minervamuses	feat: initial project scaffold — multi-layer RAG KMS
+672a2c8c3f17c31332c4bb28fb1de84c08fb135b	672a2c8	2026-03-28	Minervamuses	chore: gitignore agent configs and Zone.Identifier files
+38f1a71966ab13cbd96f9aa35597c5dea792370c	38f1a71	2026-03-28	Minervamuses	fix: langchain_core import path and gitignore store/ pattern
+67212dcbc7c6d9c483555f6edc431f29364e6190	67212dc	2026-03-28	Minervamuses	refactor: conda+poetry env setup and batch repo ingestion
+45395e775845cd31ca7383ff42f4517bd57a298a	45395e7	2026-03-28	Minervamuses	feat: install kms as editable package for global imports
+d63e8eba09a2e446a78a47e5de07a0959fab229d	d63e8eb	2026-03-28	Minervamuses	fix: use absolute path for store directory
+1536ed2b863c841e87107a3c4c3cab00a84d0d52	1536ed2	2026-03-28	Minervamuses	feat: add interactive query CLI for searching the KMS
+0d42b94ba25e1b974c5f415e18929ca953591d70	0d42b94	2026-03-28	Minervamuses	feat: add default LLM model config (llama-3.3-70b-instruct:free)
+bf2d0655ee030d6dffc60eddff83d8668765f6f7	bf2d065	2026-03-28	Minervamuses	feat: multi-layer ingestion with LLM folder tagging
+3cb6879613b74651cad984edabf69a6e7897a152	3cb6879	2026-03-28	Minervamuses	feat: add multi-turn conversational query CLI
+28b867793b3d1c3ee8a825f3e87d971ed7210cdb	28b8677	2026-03-29	Minervamuses	feat: extract richer auto metadata during ingestion
+ceeac4322a0cf748efc0200a3e597ee7a7425831	ceeac43	2026-03-29	Minervamuses	feat: add arbitrary metadata filtering to store and retriever
+b4100788880d304d28e62d3f3901e6dda58bc841	b410078	2026-03-29	Minervamuses	feat: add tool-calling support to LLM layer
+a23f311408acb806965642a4263efdafb7bee95f	a23f311	2026-03-29	Minervamuses	feat: add search tool with schema and metadata filter executor
+44ae6a3fd3909761ad47970f55727f4213ab169d	44ae6a3	2026-03-29	Minervamuses	refactor: rewrite chat.py as agent loop with tool calling
+a83df85e57d98983fd92db2dc62850fcf946d3bf	a83df85	2026-03-29	Minervamuses	fix: use $contains for tag filtering in SearchTool
+94baf9f88c99345375a3d022ea4827e39028aa28	94baf9f	2026-03-29	Minervamuses	fix: store dates as YYYYMMDD integers for ChromaDB range queries
+df0e7a4f1bf383944764938ced55d19d9b194b61	df0e7a4	2026-03-31	Minervamuses	feat: add folder summary generation to LLM tagger
+150801874d8465225fb565feb574de67388d0dee	1508018	2026-03-31	Minervamuses	feat: multi-collection ingest with folder summaries
+082403a6b997d4551ece82d4577c11877b85a257	082403a	2026-03-31	Minervamuses	refactor: rewrite SearchTool for multi-collection search
+4cefa72e28aa168955b64500cbf14860b7992c3d	4cefa72	2026-03-31	Minervamuses	fix: tune agent system prompt to prevent over-searching
+3d2e20d0a9ee62aef51ba5c09be7cdd1d245851e	3d2e20d	2026-03-31	Minervamuses	refactor: auto-discover collections from repo directory structure
+ce97fbd5b36797b53ccbbec27824013c7d016fb9	ce97fbd	2026-03-31	Minervamuses	refactor: replace multi-collection constants with single KNOWLEDGE_COLLECTION
+ad56ec29b62934235cfac371f282072f6b3e71cd	ad56ec2	2026-03-31	Minervamuses	feat: add ExploreTool for knowledge base discovery
+50d80734926dc1c41ba4a8002b2b643d2515c9ac	50d8073	2026-03-31	Minervamuses	feat: add ContextTool for expanding search results with surrounding chunks
+571780ffdc1e784974b34999398e23673670f14e	571780f	2026-03-31	Minervamuses	refactor: rewrite SearchTool for single-collection metadata filtering
+117306b1a2cfb121360056388bb3a4a8253ba388	117306b	2026-03-31	Minervamuses	refactor: update tool __init__.py exports with ExploreTool and ContextTool
+95714ea8a8617fa389538c2fe1166c18cbbef4ff	95714ea	2026-03-31	Minervamuses	refactor: rewrite ingest for single collection with category/tags metadata
+0fe692e1f46ccec729ca00d84610ecf5b179fff0	0fe692e	2026-03-31	Minervamuses	refactor: use KNOWLEDGE_COLLECTION in query CLI
+e711e52885f9db776b3bb06db4e36317bfb87eac	e711e52	2026-03-31	Minervamuses	refactor: register 3 tools in chat CLI with _tool_map dispatch
+a316c5f93fc254c4334dc45f19669565792e40d7	a316c5f	2026-04-02	Minervamuses	feat: add langgraph and langchain-openai deps
+36effd342a370527e57ab6ec46566f2053b95582	36effd3	2026-04-02	Minervamuses	refactor: add get_chat_model() factory for LangGraph
+1b0a8e9200077a8766edeb3cc7c8448b34ff82c5	1b0a8e9	2026-04-02	Minervamuses	refactor: convert tools to LangChain @tool factories
+8013a1c521b57d0d691218041fa8c2b47c3d1f83	8013a1c	2026-04-02	Minervamuses	feat: add kms/agent/ with LangGraph StateGraph
+ca4fd5abb075cac423cfc9355edfbb7ec7755076	ca4fd5a	2026-04-02	Minervamuses	refactor: rewrite cli/chat.py around LangGraph compiled graph
+991cf0015bcb6773afbe44eb0ccae9d51d10ab5f	991cf00	2026-04-02	Minervamuses	refactor: remove custom BaseTool ABC
+20b9b369d3c965b5734662a081524bdf45d40bf7	20b9b36	2026-04-02	Minervamuses	refactor: remove dead ChatResponse/ToolCall and OpenRouterLLM.chat()
+4f9365e202e695935738623cedd29387ad8d6367	4f9365e	2026-04-02	Minervamuses	docs: add info.md explaining langgraph branch changes
+b36f65e64ff081821940d2b9f60f2e9c25ddf0ad	b36f65e	2026-04-02	Minervamuses	docs: add pipeline SVG diagrams to info.md
+12bb40193a644860b06ea801183aaae1ab0dfa48	12bb401	2026-04-05	Minervamuses	feat: add folder_prefix filter to search tool
+1955d1566e1c5e2b03ee29418cff943f54f300c4	1955d15	2026-04-05	Minervamuses	feat: add kms/evaluation/ module with three evaluator types
+628c070305aefad0c2e1c7864dec37a6c1decf1b	628c070	2026-04-05	Minervamuses	fix: remove folder_prefix from retrieval evaluator _build_where call
+7ddb2501ea1bf084fe190d95a8975b7917a41a6f	7ddb250	2026-04-05	Minervamuses	fix: make behavior evaluator support multi-turn test cases
+04148beae365fdce84b4c60664523b71bc0864a9	04148be	2026-04-05	Minervamuses	fix: add _extract_json helper to handle markdown code fences
+1be4e81678c5e4ec8c6e3ba24cc6fc0a368a7616	1be4e81	2026-04-05	Minervamuses	feat: add chunk_hit_rate metric to end-to-end evaluator
+2b33844653ed78b032ed42c1def5946130d9a877	2b33844	2026-04-05	Minervamuses	feat: add kms/cli/eval.py for one-command evaluation runs
+23479b4573376d58736b9e755fba5b023bf30093	23479b4	2026-04-05	Minervamuses	fix: use result messages instead of get_state, add filter_accuracy
+341126f0d7c0c17725c6e8e22cd92139c9870c96	341126f	2026-04-05	Minervamuses	fix: use result messages instead of get_state in e2e evaluator
+82b791f847ff67e50d75f03e9e05028f44a4ee31	82b791f	2026-04-05	Minervamuses	fix: avoid KeyError on multi-turn cases without 'question' key
+62b665ac7d4de7ec0b652fda82f4c1f6daf1dbb7	62b665a	2026-04-05	Minervamuses	fix: increase recursion limit to 32 and catch GraphRecursionError
+012621abc0fe9a1f90568582d8f81a306702c9a7	012621a	2026-04-05	Minervamuses	refactor: reposition RetrievalEvaluator as embedding quality unit test
+b29ef969b5d611bea871ed4825d2bbe5c6de4369	b29ef96	2026-04-05	Minervamuses	feat: add gen_llm_model and judge_llm_model to KMSConfig
+6a37d25b6c747076d71caa6d59798860a043d189	6a37d25	2026-04-05	Minervamuses	refactor: split e2e evaluator into separate gen and judge LLMs
+f32c10ffd43d9dc95bde186b7415c61b3acd9dd8	f32c10f	2026-04-05	Minervamuses	refactor: remove RetrievalEvaluator
+2678ddfbd0e0f2e73cb91a968175c2bbca15cf90	2678ddf	2026-04-05	Minervamuses	refactor: remove retrieval suite from eval CLI
+d104a9737c59b1f377e05d003f1a5087fb6ef2ea	d104a97	2026-04-05	Minervamuses	fix: increase gen_llm max_tokens from 500 to 4096
+1889eac65b945412422c54710c05a27efe4cd756	1889eac	2026-04-05	Minervamuses	fix: catch all agent errors in e2e evaluator gracefully
+55c9c0c160b517d1cdbfbc3d4da319223169bac9	55c9c0c	2026-04-05	Minervamuses	fix: handle None content from LLM response in OpenRouterLLM.invoke()
+588c791277e8ef065d7dff1d3dabc90c60842aa5	588c791	2026-04-05	Minervamuses	refactor: track store/eval/ results while keeping chroma store ignored
+508e196fcd109d58e2afb00acd664321e23147b1	508e196	2026-04-11	Minervamuses	feat: add Ollama chunk quality filter and swap agent LLM to glm-5
+0971332b9b2015edb03ec60fde3add317f532687	0971332	2026-04-13	Codex	Bound agent context
+e757dacbdcc4f429a31f7541f367aef62707f7fb	e757dac	2026-04-13	Codex	Add experiment note
+f8ac1ffec63674b7676a1338702ac356755d61a5	f8ac1ff	2026-04-13	Codex	fix: enforce structured judge output in e2e eval
+f6ce5c3e36569276365787129686534ec7a1753a	f6ce5c3	2026-04-18	Codex	test: add smoke baseline for decoupling refactor
+80eafb3fdd44d890a3be68f61b5cea345f51a25a	80eafb3	2026-04-18	Codex	refactor: move _extract_date to kms/utils/paths
+72177bc3e3ab1fe0b2847c462ecbd916b03dc3a0	72177bc	2026-04-18	Codex	refactor: centralise folder_meta.json path in KMSConfig
+99da6f7749141ee031efe477fc9ec7be9c5f6e3b	99da6f7	2026-04-18	Codex	feat: add framework-neutral types (Hit / Inventory / ContextWindow)
+833f84d213728c381adba500c418bd2584902416	833f84d	2026-04-18	Codex	refactor: extract where-clause builder to kms/filters
+e0b9eedd4b904574264d369884fd21ed57900105	e0b9eed	2026-04-18	Codex	feat: add framework-neutral public API (kms.api)
+2192c7b9eb7b38f2c767d318a4cb8efa6dba3811	2192c7b	2026-04-18	Codex	refactor: move kms/tool/ to kms/adapters/langchain as thin wrappers
+b94d55a4735406d32dc17ab4a6e4b514204d5547	b94d55a	2026-04-18	Codex	refactor: move ChatSession to kms/agent/session, decouple evaluation from cli
+caa76a40aa1226b88a34ee4b4325315b618a7264	caa76a4	2026-04-18	Codex	feat: expose public API at kms top-level
+d52b4d127a896e7b9ff6918bdc6184ce8e63ca9e	d52b4d1	2026-04-18	Codex	chore: verify decoupled library boundaries
+968edf0c0a486ca05ae92e45ef38657765ce4673	968edf0	2026-04-18	Codex	refactor: extract agent layer from kms core
+8f676ca4bf29c02ce822927294cd67c38b608db2	8f676ca	2026-04-18	Codex	refactor: rename core packages to rag and agent
+6be7f94246ad89afd49ce0b3fcbff0001dd49ab9	6be7f94	2026-04-18	Codex	refactor: treat repo root as a rag-agent workspace
+4158b0c6ee7789752df79bcd48716645dc0de1da	4158b0c	2026-04-18	Codex	refactor(rag): stop guessing host project via __file__
+e687925ef7193ddb33ebb6a58e14c4ce1e642d47	e687925	2026-04-18	Codex	refactor(agent): own LLM providers instead of importing rag.llm
+365fef2b7ea3e614508cbea1b80bc90547affeca	365fef2	2026-04-18	Codex	feat(rag): add list_chunks API so consumers stop touching rag.store
+b17b855aa2689d0cd5cecb13435277aac83c5fcd	b17b855	2026-04-18	Codex	refactor(rag): drop langchain-openai from rag — agent owns that helper now
+0598ec351d90da0a478c99b9a7fd09c82be095b4	0598ec3	2026-04-18	Codex	refactor(rag): nest package inside its own project directory
+8c320a3d7315741059240355ce036ba8d3a32b8e	8c320a3	2026-04-18	Codex	build: split workspace into agent and rag — each with own conda env + poetry
+0ad1922df15808881f1652de00fbfe1782d3b4b5	0ad1922	2026-04-18	Codex	chore: drop stale repo_split_plan.md
+176198322fae4d4bb127a6a811684208ea9a08b8	1761983	2026-04-18	Codex	refactor: move rag out of app; depend on it via ../rag path
+6eee212f5b7f2788848cfb67aa4889f130b71ddd	6eee212	2026-04-18	Codex	docs: update info.md for external rag
+7b9c8d5d9cb584b463e58a0ca860bec9c361d110	7b9c8d5	2026-04-18	Codex	fix: point rag path dep at ../rag in pyproject.toml
+d9eb2ffd92ed44951dfde706d09495932aef8334	d9eb2ff	2026-04-18	Codex	chore: ignore .pytest_cache in app
+05003053c10eafe337925b88b873e0a08c8e68e7	0500305	2026-04-18	Codex	refactor: move store/eval → eval
+912116232f9c9de4bf374dd884c1ee5bab7f170d	9121162	2026-04-18	Codex	feat(eval): default --output to eval/
+2a676188b476ba61c768b11a155f41d3a9c630db	2a67618	2026-04-20	Codex	feat(agent): add turn-aware memory module with rolling compaction
+42cfe459e5e045a2b516d10c72b34fd47fe375f8	42cfe45	2026-04-20	Codex	refactor(graph): accept optional extra_tools kwarg
+4e62926012b32cc3d7f9c1d2ac099340f7a5b2e3	4e62926	2026-04-20	Codex	refactor(session): turn-aware state with rolling compaction
+94a7e142bdcf4f3c9ab83c662f9f5b256d64b294	94a7e14	2026-04-20	Codex	test(memory): cover turn compaction triggers and prompt assembly
+593d4a44b23428302bd0ddcd2e0df544143360a8	593d4a4	2026-04-20	Codex	build(deps): add langchain-mcp-adapters and mcp
+78bc8bdf8c26d6d66176117de47b2e5fab18021b	78bc8bd	2026-04-20	Codex	feat(agent): add MCP stdio loader for Web Search and GitHub servers
+3357bd3864e0c9ef4a0c86c8cdf0a604a097f8a4	3357bd3	2026-04-20	Codex	feat(session): tool-policy prompt and async ChatSession.create()
+dcd8fc27a2ce26d6cac0eae436c45814b8abd33c	dcd8fc2	2026-04-20	Codex	feat(cli): async startup with MCP loading, plus .env.example and tests
+7c09d4730d80326b387f7c23b20dcfcfb21352e6	7c09d47	2026-04-20	Codex	docs(note): MCP setup and opencode vs app-runtime distinction
+aa4ba6594d3f4cc21ead04d6762dbe433fd14efd	aa4ba65	2026-04-20	Codex	refactor(config): move agent-only settings from rag to AgentConfig
+e68db325012c7372c3c6bff3170fe4bd4ed16284	e68db32	2026-04-20	Codex	feat(cli): load app/.env on startup via python-dotenv
+c0b851804162f3174e416a6dc0b5581a3e00ad5d	c0b8518	2026-04-20	Codex	fix(mcp): silence stdio parse-error spam from noisy MCP servers
+1fc93bc09b8d13d3a685d2729aebe55cc663a08f	1fc93bc	2026-04-20	Codex	fix(session): make turn() async so MCP async-only tools work
+01faf91785857034ddffaf26805e641dea30cac9	01faf91	2026-04-20	Codex	fix(cli): survive GraphRecursionError instead of killing the chat session
+e381ddc7fd008399dde0c3a342e37cb9578021cb	e381ddc	2026-04-20	Codex	feat(cli): stream tool-call progress so long turns don't look hung
+33d011bd2aa0d00d72529543658696085d72b04f	33d011b	2026-04-20	Codex	fix(mcp): silence MCP server stderr by wrapping launch in /bin/sh
+9c39917efbb2e0ab1818be1e6fe6ba092e843b19	9c39917	2026-04-20	Codex	fix(mcp): filter subprocess stdout so only JSON-RPC lines reach the client
+613dbcb75ef20346d4ab51fafa7ecdd280c7730c	613dbcb	2026-04-20	Codex	fix(graph): turn tool exceptions into tool messages instead of crashing turn
+ef2ff46fd8aeb5bde4dde9195b535f920350c261	ef2ff46	2026-04-24	Codex	refactor(agent): bind rag tool contract
+fff169915ce80e1c10f1afc75f4502a8bb0b6d50	fff1699	2026-04-25	Codex	refactor: drop dead RAG adapters, dead helper, fix chat CLI, update info title
+30fb848892623dcadfda3663b2920b7b6226c250	30fb848	2026-04-25	Codex	build: track poetry.lock for reproducible installs
+d795650fde5257987f23d2c3525212695b98c282	d795650	2026-04-25	Codex	feat(config): add agent_recent_turns_window for upcoming history_rag eviction
+44cd3b30e15138879166189d2de67bf0cfb155e9	44cd3b3	2026-04-25	Codex	feat(history_rag): add ChatHistoryStore with module-level cache
+e07c0e299adf53b457df2d89b7b59b045fd4bcac	e07c0e2	2026-04-25	Codex	feat(history_rag): add recall_history StructuredTool factory
+07ebc6b7cc7a29d49b863cc4eb52466d7e7a340d	07ebc6b	2026-04-25	Codex	feat(graph): wire recall_history into the agent toolset
+a377ad1d6ca41fa487a9d1500724a148fda245d9	a377ad1	2026-04-25	Codex	refactor(session): replace LLM compaction with vector-DB eviction
+50bb2c449963307f8a9d17c723859e8e8c64c894	50bb2c4	2026-04-25	Codex	docs(info): describe history_rag long-term memory
+d7b5063c4fbf7bf116f4e54f503ff08e43fe0c78	d7b5063	2026-04-26	Codex	fix(history): preserve unevicted turns during tool pruning
+e562cf9b28b34e34a8c57fe5c5b11c2d38e50eb2	e562cf9	2026-04-26	Codex	test(history): cover recent-turn pruning boundary
+31b8620146d5914e796e661d6cb226d63479dd5f	31b8620	2026-04-26	Codex	docs(history): clarify chat history persistence
+b0fc5dd3172bd0663b014a89071d5fc1a2c65e30	b0fc5dd	2026-04-26	Codex	fix(session): flush recent turns on chat exit
+37d2c6e20acef203b1ab05a27b820b84edb1c97f	37d2c6e	2026-04-26	Codex	test(session): cover chat exit history flush
+808a8562c71cb454b8af519befca96910daed11e	808a856	2026-04-26	Codex	docs(history): document shutdown chat persistence
+10eed6f7d8acd6a57149f7c0295779e95ca2b2b6	10eed6f	2026-04-26	Codex	fix(cli): normalize quit commands before dispatch
+7c87d45e7008dc956dd07566f76a20b1686d2442	7c87d45	2026-04-26	Codex	test(cli): cover normalized quit inputs
+eed4cfad957c2dc5b302b7ecfc78bfe756d4b70d	eed4cfa	2026-04-27	Codex	fix(session): inject history store into recall tool
+35b17a63e22f8adfddb37a67190ed1524ca28e8e	35b17a6	2026-04-27	Codex	feat(eval): load configured MCP tools
+a20268dd33468ec07b0f2969229a07efb0a68b83	a20268d	2026-04-27	Codex	feat(eval): expand behavior tool routing cases
+3c0f3b75453b2bf71939b0e2bf3b017a29acca00	3c0f3b7	2026-04-27	Codex	feat(eval): record e2e tool traces
+ada3ec94984a58d52ace5bf749d0112ed8d75c93	ada3ec9	2026-04-27	Codex	fix(eval): merge expected_first_tool with expected_first_tool_in instead of overwriting
+7131f8b55ab4db4db6a6bb8ae7744fd5f5905b69	7131f8b	2026-04-27	Codex	feat(eval): skip behavior cases when required tools are not loaded
+6318fb7c297e7f474e7f39e854ba03896c4c11ed	6318fb7	2026-04-27	Codex	test(eval): allow rag_explore as first tool for direct-search behavior cases
+259ce199dbb9b9d505986461a62e63fafe1cee4a	259ce19	2026-04-27	Codex	fix(eval): isolate end-to-end runs from the real chat history store
+97cd1c1e06ffd3aec7126c17e195238f934f9dcc	97cd1c1	2026-05-03	Codex	refactor(cli): inject chat line reader
+245edef21d78f98caec4faf347b3ce2203b9724f	245edef	2026-05-03	Codex	feat(cli): use prompt_toolkit for chat input
+7a92f4016bb24a48b3def9c10a4359363f5ed663	7a92f40	2026-05-03	Codex	feat(cli): add slash commands and completion
+3b7a3b4213b442d65de4c2ddde7091cba278223d	3b7a3b4	2026-05-03	Codex	build(env): use conda app env for poetry installs
+086cd586f06f62bfe021c155a677e01a27e53c77	086cd58	2026-05-04	Codex	feat(cli): add /ingest, /sync, /prune slash commands
+a06b76093ff0f0e7114af01859a5d222e71887fc	a06b760	2026-05-04	Codex	fix(cli): make /clear also wipe the scrollback buffer
+51765b0d027c85ee077bce42b5f102fc1b596cd8	51765b0	2026-05-04	Codex	feat(cli): add /init to ingest the parent repo minus this app
+b0b2184755ca94f880f9701e0aba8088e9ccc635	b0b2184	2026-05-07	Codex	feat(tools): add agent/tools package with read_file tool
+78638688ebe1185005b48cea595d561435087d7c	7863868	2026-05-07	Codex	feat(graph): register read_file tool in chat graph
+1d7ba89b9a0bdbd71c43a707459d4dcaee84ef09	1d7ba89	2026-05-07	Codex	test(tools): cover read_file happy path and error cases
+145af260dcfb1502e3887ef2c7bffac9a29889d0	145af26	2026-05-07	Codex	Buid skills guide
+00e10c846f38b898d161c1e128e0ef5cb35d5880	00e10c8	2026-05-07	Codex	Add local skill tracing and academic writing skill
+4d2620b6e36e1c1e1da817ac482936f49fb5ba4f	4d2620b	2026-05-10	Codex	Add discussion turn metadata
+b4e983b44e19088df3ba2fa33182fd9bce180f2d	b4e983b	2026-05-10	Codex	Add MCP tool family metadata
+7cdea456f1841cc4dce41429459b33f19bde67f7	7cdea45	2026-05-10	Codex	Persist discussion turns to markdown
+28b498e74a0674e5d076aebc993aa95e82f54fe0	28b498e	2026-05-10	Codex	Expose discussion mode in CLI
+71bbbff0cf45078076f9dfeb1f3056fa3980d9e6	71bbbff	2026-05-10	Codex	Rename discussion mode to plan mode internally
+1ee453c75d311602b6a6b1eb729a7957b42ea75a	1ee453c	2026-05-10	Codex	Replace /discuss with /mode framework
+7920ab2b7292324578dc48f8a4cabf93cc209898	7920ab2	2026-05-10	Codex	Log all tool results in plan log markdown
+8241ab6c89e9c5e781fb9b0bc720174ca64398b8	8241ab6	2026-05-10	Codex	Inject plan-mode hint into prompt history
+34c95a87e01c5a2c9cfc900d618a1fde6a293e76	34c95a8	2026-05-10	Codex	Gitignore plan_logs/
+2031752a7ed864c36169325756fd57cc2723f9f4	2031752	2026-05-10	Codex	Add bash tool with mandatory user approval
+719337077982aa4d101696d5782588a19bcaa714	7193370	2026-05-10	Codex	Wire bash tool into chat graph and system prompt
+20882ba1a3e18adeb6fcf197343c7a2427d364ab	20882ba	2026-05-14	Codex	docs: refresh architecture overview to cover bash, skills, and plan mode
+a3c640e3d388e93733710326bf1467b26ff848de	a3c640e	2026-05-14	Codex	chore(skills): add academic paper manifest
+749494e771484c249ad53e0d00000234adf6099f	749494e	2026-05-14	Codex	feat(skills): add capability broker
+b635c8b083711ef908df05424a4fa9d3245d10f6	b635c8b	2026-05-14	Codex	feat(skills): add skill runtime loader
+e5f38ee73f7ed8456ebee561f39fa1f809154bf2	e5f38ee	2026-05-14	Codex	feat(state): add skill runtime fields
+037590a1cfca82ab17cad7e697467a9cfa1ce550	037590a	2026-05-14	Codex	feat(session): wire active skill runtime
+cda88c3eb5e434ad9135797e76dccd88932df8be	cda88c3	2026-05-14	Codex	feat(cli): add skill slash command
+77b8b6df9ee517c0f7e93e957d2d596060ce5c98	77b8b6d	2026-05-14	Codex	feat(tools): make read_file skill-root aware
+692763bab8c154af156a153164c028ea71339a6a	692763b	2026-05-14	Codex	feat(graph): add skill loader node
+d03857af0b8d9809af666b7d2c8d69098cd67ec1	d03857a	2026-05-14	Codex	feat(config): expose skill runtime toggles
+7866359d4f8f95d6ff1da3c43b18bad9eb7c7a34	7866359	2026-05-14	Codex	feat(graph): enforce skill tool policy
+473c0103fe88e8112c86188d12648ea0744fd5f1	473c010	2026-05-14	Codex	feat(graph): bind tools per active skill
+e134d86dc31b5778a6c3061bfb4c85c30f7b10ea	e134d86	2026-05-14	Codex	feat(graph): validate active skill responses
+a0dc7c6e7633febf2b59e7356e7af26e8dd3314f	a0dc7c6	2026-05-14	Codex	test(skills): add runtime adherence coverage
+28e8ef8b00e2a64e06e11730f9224d88620ef267	28e8ef8	2026-05-14	Codex	refactor(skills): remove static metadata block from system prompt
+1580f3977efd340dc2ca87e611954a98ad10722f	1580f39	2026-05-14	Codex	refactor(cli): drop skill startup banner
+4e17416649159be810ea199b2abd080a576f155d	4e17416	2026-05-14	Codex	feat(skills): clarify user-activation model in system prompt
+837ebf21a9ec12ecce6670f3457f4812fa94f958	837ebf2	2026-05-14	Codex	feat(prompt): enforce traditional Chinese and language matching
+ae91092cfa8e361af7c464c711d1c25fb8bc7074	ae91092	2026-05-14	Codex	feat(bash): show Enter-denies hint in approval prompt
+4cc018de8a659c98a9a7108d70a8885a0d15871e	4cc018d	2026-05-14	Codex	fix(cli): treat blank input as redisplay, not exit
+bb7fed6c28cd9fb4e6bb8e3e0ed0c6a2716aecb3	bb7fed6	2026-05-14	Codex	docs: rewrite info.md for skill runtime overhaul
+a09f4b0ecc5c67ba74a3ab150779921b8bc2b175	a09f4b0	2026-05-18	Codex	fix(cli): translate skill activation errors
+dadd58e791cc154c875d64428864b180072f8f70	dadd58e	2026-05-18	Codex	fix(skills): make tool policy explicit
+9d3e07e2918997175cb757b6e51d81ea336dc050	9d3e07e	2026-05-18	Codex	fix(skills): mark denied tools as errors
+7856576a806a973bbe1440cef906e1570ece639c	7856576	2026-05-18	Codex	fix(tools): keep skill resources scoped
+6729d77ec0914b73902c6f0f09e33d0bf3fede94	6729d77	2026-05-18	Codex	feat(skills): cap pinned context size
+7dc721d803e5da79945d6a9eecef3eed31dc7461	7dc721d	2026-05-18	Codex	fix(tools): block sensitive file reads
+df31826a3a93dc19e2bebd6972983dffcac577cd	df31826	2026-05-18	Codex	feat(skills): validate manifests
+fd882f3dc6706613a27337eaba0254694c7c43e0	fd882f3	2026-05-18	Codex	refactor(skills): register deterministic validators
+ad78d0268f8b8b0fb5489b51b6470d67522d0010	ad78d02	2026-05-18	Codex	docs(skills): expand academic writing references
+72b915f04db209cb604bfa5f576180d83d0ed2bb	72b915f	2026-05-18	Codex	docs(skills): align runtime documentation
+59aa8e0d00dc2177062c51cd5820711c9f423d07	59aa8e0	2026-05-24	Codex	Add thinking mode slash command
+a5dc6ff54ffa4a8cda179b754b30c42bc2252f42	a5dc6ff	2026-05-24	Codex	Add extended thinking schemas
+02a674f7dbfd469f266e84b369518d45ddb77d5e	02a674f	2026-05-24	Codex	Wire extended thinking controller
+41c6bed145aa5aef9fddc2fca550f74c9d747d05	41c6bed	2026-05-24	Codex	Add thinking reviewer eval suite
+e8cd8d518847f462282f219288587db821ad925f	e8cd8d5	2026-05-24	Codex	Prioritize blocker review routing
+cfc79fd319a52e52020187d550f4a31937a7b210	cfc79fd	2026-05-24	Codex	docs(thinking): replace v2 plan with v3 design
+a32667536f213c6230b7b67079535c0dfb9ed711	a326675	2026-05-24	Codex	Add thinking role model config
+ddaa7b94f53053dbbbdf2f73aa44021703ee44ce	ddaa7b9	2026-05-24	Codex	Guard extended thinking activation
+1c18c0defbe62dbb32755266590c3e74d00bce1f	1c18c0d	2026-05-24	Codex	Vendor prompt-master skill
+88fb116a0b43576d5ab0775a920ae0dccd8f342d	88fb116	2026-05-24	Codex	Implement v3.4 extended thinking flow
+5c8dbffa18371d0dc14734446fb42d80bd2569dc	5c8dbff	2026-05-24	Codex	Document extended thinking skill helper
+1b47138c9f20bb132f48e3217f90477ef3ddb267	1b47138	2026-05-24	Codex	Configure extended thinking models
+7de10c1a195c51f2efe335b854f025fcfaa9bf37	7de10c1	2026-05-24	Codex	Add interactive thinking mode picker
+c06d9fb83b2ce1d0b15b3bd57ce5c78bed426437	c06d9fb	2026-05-24	Codex	Enforce per-turn tool budget
+7e609e415f92e7413a9684dd791e35804060511a	7e609e4	2026-05-24	Codex	fix(thinking): enforce Traditional Chinese in reviewer / rewrite / repair prompts
+c43ed9a68b584bb7fa27d15de3e72a1acb59014d	c43ed9a	2026-05-24	Codex	fix(cli): drop description column from /skill picker
+0587c67940093bb5907040f5fbc58545a4915724	0587c67	2026-05-24	Codex	fix(config): raise thinking_reviewer_max_tokens to 4096
+147e918df1fad83228e65035bad622b4cde2dfbb	147e918	2026-05-24	Codex	Problem to be solved saved
+60945d3240339fc67b6500cba8e80079a3688ccd	60945d3	2026-05-25	Codex	P0: add academic history search capability
+fbfe550758ab5152265a6129ba50c4e08e0fda31	fbfe550	2026-05-25	Codex	P1a: add shared tool availability helper
+d25e40d05cef02d15e2cd9a1994a86c1e22e9170	d25e40d	2026-05-25	Codex	P1b: pass tool availability to rewrite prompts
+37371d411d65a303baaf4a278d61412150c8ef10	37371d4	2026-05-25	Codex	P1c: pass tool availability to review prompts
+352afa6df34f135ae7593936d82f9d2547ed996a	352afa6	2026-05-25	Codex	P1d: inject tool availability into extended session
+7917b7e7239c1af84fc165114e2a339df3922a82	7917b7e	2026-05-25	Codex	P2: route retrieval gaps back to reviser
+4db22f320e782e22f86fc97b65ffc9adda69df5b	4db22f3	2026-05-25	Codex	P4: document skill tool availability rules
+61b87c4ee495d54c108feea8bdab50829e73b3d1	61b87c4	2026-05-25	Gary_Chiang	Merge pull request #1 from Minervamuses/fix/history-tool-availability
+fdf906ec691a64699d40523fc764c3ac61e3ae8b	fdf906e	2026-05-25	Codex	fix(thinking): harden review routing safeguards
+55e604b7e4d8ebfa3ff4932e7a3261eaa9a1eeac	55e604b	2026-05-27	Codex	docs: preserve evaluation and history availability notes
+859a7386c4a466bae722588570ecb95784a15e53	859a738	2026-05-28	Codex	config: switch main agent to deepseek v4 pro
+4b20d2285cd3774eb28cd5c38bcc9870d2696190	4b20d22	2026-05-28	Codex	eval: add dataset loader schema validation
+e2615834bd9b91da6144c94e6dd6db0bcdb9ebfc	e261583	2026-05-28	Codex	eval: add append-only run ledger
+700a86b4167b37986ac9a049133c8db809cc7759	700a86b	2026-05-28	Codex	eval: add reproducibility metadata fingerprints
+f2947f5b65409609dd1d978d8403deed5ed66fcc	f2947f5	2026-05-28	Codex	eval: extract tool routing scorer
+015ac6022f80d0903b323bf3c6f6908bbb104e24	015ac60	2026-05-28	Codex	eval: include local tools in routing universe
+75282a6fd4df09ed2195534fee2e304e90307802	75282a6	2026-05-28	Codex	eval: add c1 routing claim runner
+eca66b73dfb3c2643d832dd054859a3afb0dd0ea	eca66b7	2026-05-28	Codex	eval: add c1 claim cli entry
+447f0358dd7d70604a68f149ef986adb41a9975c	447f035	2026-05-28	Codex	eval: handle array embeddings in store fingerprints
+dd4115b01bdd2a7b5dfa72d3b31409baf96bc148	dd4115b	2026-05-28	Codex	eval: add ranked retrieval metrics
+28e996f8114c6b05a8aadd09fe69417a31137692	28e996f	2026-05-28	Codex	eval: add c2 retrieval runner
+b2d4b8d088aaf7b7209efcb281faab80324f0df7	b2d4b8d	2026-05-28	Codex	eval: wire c2 claim cli
+2e36b7a5adca547649929674659e2f0ca791f4c7	2e36b7a	2026-05-28	Codex	eval: add c3 validator evaluator
+955a5cb39ad08273d5878ae4a12a2d09baed9967	955a5cb	2026-05-28	Codex	eval: add c3 reviewer classifier evaluator
+f0215104bd0b1142111966580fb35f6a5656345b	f021510	2026-05-28	Codex	eval: add c3 session validation evaluator
+d0d843f738ae2fd4d8856bf7a911fe4df9981431	d0d843f	2026-05-28	Codex	eval: wire c3 claim cli
+3a254e28e85169c19060d870d95b1aaadd291180	3a254e2	2026-05-28	Codex	eval: add c4 checklist evaluator
+342304dff4270ebeff42bac5c453a9172a2ea065	342304d	2026-05-28	Codex	eval: wire c4 claim cli
+4bbaff49c5802583150a151aa90fae71bdc24f28	4bbaff4	2026-05-28	Codex	eval: add beir scifact benchmark spike
+61be2912929c56080b565a3628c0c0c46a9fe615	61be291	2026-05-28	Codex	eval: add slash command
+3c0f9ea900fd0fa055438588914ded4220fc34f5	3c0f9ea	2026-05-28	Codex	docs: add evaluation package readme
+85d6590022fc4d008c8371ddc7d2aa4e847d142b	85d6590	2026-05-30	Codex	agent: disable temperature for reasoning-model main LLM
+a572356d8d88c4044637485c2421fc05c2ba2079	a572356	2026-05-30	Codex	chore: consolidate stray notes/ into note/ convention
+379e4b6897d3630cf938f57c5f71c4ada9b6c4be	379e4b6	2026-05-30	Codex	docs: record C1 routing eval first-run findings
+72ff55f5907d8bc16eccebfb49cd1f4c6ef9e607	72ff55f	2026-05-30	Codex	feat(eval): instrument C1 runner for runaway diagnosis (Phase 0)
+370d0ac58301e6793363ce5eb0496694ebb09478	370d0ac	2026-05-30	Codex	docs: add fix plan for agent tool-call runaway
+21510ed6ed8e411bdb80c4993ba59d20de8718a1	21510ed	2026-05-30	Codex	docs: add tool-call runaway debug note
+7e8c639d8d3788f202f9ed9121907f70a2310613	7e8c639	2026-05-30	Codex	docs: reprioritize fix plan after Phase 0 findings
+63a09dea5409683ecb9ce51e9835f471d746d4e5	63a09de	2026-05-30	Codex	fix(agent): align tool budget with visible tool history
+4333fa4374e2b765c91c0a14bf473b27f5a79e45	4333fa4	2026-05-31	Codex	fix(agent): strip tool calls from exhausted raw model response
+c59807db0a00e08c32939c1a329b912be37705f3	c59807d	2026-05-31	Codex	eval: record dev claim run
+c52268174d162e44c2c04fa8665c0b3c1cf7e88e	c522681	2026-05-31	Codex	docs(eval): add 2026-05-31 claim run note with dataset inventory
+ae55ef5721fcef4e20db777788e1dea97a1ad9c7	ae55ef5	2026-05-31	Codex	docs: reconstruct info.md to match current agent architecture
+c88b50498bb5ca7b8e970d93d707e52474a76874	c88b504	2026-05-31	Codex	Example for Extended Thinking mode added
+aff7f99c4cbbdcf58a2d975624c39baf7a7670c8	aff7f99	2026-05-31	Codex	Document extended thinking scope behavior
+c94604a29365e70b651e5fb8fc5666515ab51e94	c94604a	2026-06-14	Codex	docs: organize pending problem books
+639f48d2ce14161328ffc908dee60e4a3b363e22	639f48d	2026-06-14	Codex	docs: use codex agents file
+c6f277c4ee22502168c673791eb1a1e0644a2d25	c6f277c	2026-06-14	Codex	fix: parse skill frontmatter with pyyaml
+147754ef5bbf361786d05151573d3c46f49b380e	147754e	2026-06-14	Codex	chore: remove completed frontmatter task
+63184937435d46677bfd6ecbdd004a6830ce9781	6318493	2026-06-14	Codex	refactor: single-source the base tool inventory
+53ef61c212cc6a2c986b0b914f0507fda7e7228b	53ef61c	2026-06-14	Codex	chore: close base-tool-inventory-single-source task
+62fac4349f0f80e0d2dccb43019170d82194cdb2	62fac43	2026-06-14	Codex	fix: derive tool-availability fallback from the base inventory
+857ff0bb4fa9adfb929ca5c8c0df38ac95ccc512	857ff0b	2026-06-14	Codex	chore: close agent-history-tool-availability task
+ca26bcf92566688f513a92949a49e8776d9423f2	ca26bcf	2026-06-14	Codex	test: regress archived history-recall failure scenario
+b265a425d43d6920a66191c76b740fc0af3d8a3c	b265a42	2026-06-14	Codex	chore: close agent-history-recall-user-facing-failure task
+b0e675f1faa261c24ad3f4755806f8ce7c7035d9	b0e675f	2026-06-15	Codex	refactor: centralize skill state serialization
+e61c99093a2870062fbb31923775ebbf5b0ecf9b	e61c990	2026-06-15	Codex	fix(llm): delegate OpenRouter retries to client
+5947563d65aefccbda20907739eed716fb7dfe3f	5947563	2026-06-15	Codex	chore: close openrouter-retry-cleanup task
+e43baaa7bd037cea5e19e7b6d904f97438cd8863	e43baaa	2026-06-15	Codex	fix(llm): forward llm_max_retries to thinking role models
+6424539ed1b68806614025ada28f6d716eca242b	6424539	2026-06-15	Codex	fix(agent): add graceful give-up rule to base tool workflow prompt
+bea1d6ef15fc99865c2cc4da0e470fc45f9fbfe5	bea1d6e	2026-06-15	Codex	test(eval): reclassify C1 embedding case as graceful give-up
+468126ac6914bb23d01fea8e2dec754602664056	468126a	2026-06-15	Codex	feat(eval): add give-up answer scoring and progress to C1 routing
+050e07eae8166381a9cc71aebdffc10242c8bd96	050e07e	2026-06-15	Codex	test(agent): assert tool cap holds across multi-round parallel calls
+ad72c3456f943de64a3a1fbec34ad7e5b97083ab	ad72c34	2026-06-15	Codex	docs(config): document data-backed agent tool-call cap default
+d08ba17782204c23030a9216fd04daac6164a377	d08ba17	2026-06-15	Codex	chore: mark agent-tool-call-runaway-followups task done
+48cd5b27cd21e909c480ca26e7f3a6bfb439428e	48cd5b2	2026-06-15	Codex	fix(eval): sync BehaviorEvaluator embedding case to graceful give-up
+5070cc3c876c0ee7de0b01b62f02c2f33fe8c0c1	5070cc3	2026-06-15	Codex	test(eval): guard against C1/behavior spec drift
+12508b5af284f09df6da331126b15da17e37326d	12508b5	2026-06-15	Codex	chore: remove completed runaway follow-up task
+f213adac317847b93e84ed23692399c8dd663912	f213ada	2026-06-15	Codex	refactor(llm): standardize chat model access
+f826e4158525cb352da835a757efc8706b8b01db	f826e41	2026-06-15	Codex	chore(tasks): remove solved llm access card
+e36ef78f2ba1a7e554ebda62b38dbefd0659c823	e36ef78	2026-06-15	Codex	chore(eval): add full eval runner
+ca8d08f70e45a82491231ecd72306fd19236ef5a	ca8d08f	2026-06-15	Codex	fix(eval): keep full runner ledger-only
+5ae47a63f976356446ac7f4f60da12555a2ae937	5ae47a6	2026-06-15	Codex	test(eval): record full dev eval run
+e23d36fbd006d46893937cfb01050b3787c2cff6	e23d36f	2026-06-15	Codex	docs(note): add june 15 eval report
+fa1cd8d36cce81cdb74da2608e124b95eea9f2d5	fa1cd8d	2026-06-15	Codex	docs(note): revise june 15 report focus
