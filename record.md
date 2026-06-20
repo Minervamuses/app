@@ -85,14 +85,18 @@
 - Embedder：local Ollama `bge-m3`
 - recursion limit：32
 
-相較 4/5，這次換了 agent LLM，加入 local Ollama chunk quality filter，並移除 redundant 的 `chunk_hit_rate` metric。結果很差但很有用：25 個 end-to-end cases 中，avg_score_raw 只有 0.76，72% 是 0 分。失敗分成兩大類：10 個 hit recursion limit，8 個 judge parsing failed。報告裡的重要結論是雙峰分佈：agent 只要能乾淨完成，通常能拿高分；一旦失敗，就整個 turn 爆掉。
+相較 4/5，這次換了 agent LLM，加入 local Ollama chunk quality filter，並移除 redundant 的 `chunk_hit_rate` metric。chunk quality filter 會先擋掉 compiled JS、lock files、SQL DDL 等不適合拿來生成問題的 chunk，這說明當時 evaluation 不是只在測 agent，也在修「測資生成」本身的品質。
+
+結果很差但很有用。End-to-end 從 30 個嘗試 cases 中被 filter 跳過 5 個，剩 25 個計分；avg_score 只有 25.3%，avg_score_raw 是 0.76/3，score_3_pct 24%，score_2_pct 0%，score_1_pct 4%，score_0_pct 72%。Behavior suite 也只有 8 個 built-in cases，分項是 first_tool_accuracy 60%、tool_count_accuracy 75%、no_tool_accuracy 100%、tools_coverage 0%、filter_accuracy 100%。這些數字讓問題輪廓很清楚：agent 並非完全不會選工具，該不用工具時也能閉嘴，但它幾乎不會完整覆蓋應使用的工具集合，且工具次數控制不穩。
+
+18 個 zero-score cases 被分成兩類：10 個 hit recursion limit，占 zero cases 56%；8 個 judge parsing failed，占 44%。報告裡的重要結論是雙峰分佈：agent 只要能乾淨完成，通常能拿高分，7 個非零 cases 中有 6 個是滿分；一旦失敗，就整個 turn 爆掉。這個觀察後來反覆出現：repo 的主要問題常常不是「答案品質平均偏低」，而是某些 runtime 邊界一破就變成 hard failure。
 
 當時看到兩個關鍵問題：
 
 1. `z-ai/glm-5` tool-happy。簡單問題可以叫 10 到 18 次工具。SYSTEM_PROMPT 說 1 到 3 次搜尋後要 synthesize，但模型沒有停。
 2. Judge parsing failure 可能把有內容的答案直接打 0。報告指出有些 raw answer 看起來是實質回答，但因 judge JSON parse fail 被歸零。
 
-計畫中的 next steps 是：先修 judge parsing，例如讓 OpenRouter judge 呼叫支援 JSON object response format 並記錄 raw response；再收斂 agent over-looping；最後再判斷 GLM-5 是否適合。
+計畫中的 next steps 是：先修 judge parsing，例如讓 OpenRouter judge 呼叫支援 JSON object response format 並記錄 raw response，預估可能救回約 4 個 cases，avg_score_raw 可提高 0.3 到 0.5；再收斂 agent over-looping，預估可能救回 5 到 8 個 cases，avg_score_raw 可提高 0.6 到 1.0；最後再判斷 GLM-5 是 prompt adherence 問題，還是模型本身 tool-use default 與這個 agent 不合。報告也保留了當時的結果檔路徑：`store/eval/e2e_cases_20260411_1915.json`、`store/eval/e2e_results_20260411_1915.json`、`store/eval/behavior_results_20260411_1908.json`。這些路徑本身後來成為「舊 eval 結果不可當 baseline」的背景，因為 schema 與 suite 都在 5 月重建。
 
 2026-04-13 的 `note/20260413/agent_state_cleanup.md` 則處理另一個可靠性問題：LangGraph state growth。當時的任務是減少不必要的 state 成長，特別是：
 
@@ -100,7 +104,7 @@
 - 限制同一 turn 內的 tool-context growth。
 - session 是 process-scoped，重開不延續舊 graph checkpoint memory。
 
-使用者接受了幾個決策：移除完整 tool outputs 的 long-term history、加 fixed message-count cap、session 結束即結束；但拒絕只保留最近 1 或 2-3 turn，因為記憶策略後續另有計畫。部分接受的是同 turn tool interactions bounded window，設定為 4。
+使用者接受了幾個決策：A，移除完整 `ToolMessage` contents from long-term history；E，對 prompt-visible history 套 fixed message-count cap；F，session ends with process，下一次 launch 從乾淨 conversation 開始。使用者拒絕 B 與 C，也就是不接受只保留最近 1 turn 或最近 2-3 turns，因為記憶策略後續另有計畫。部分接受的是 D，bound same-turn tool interactions，window 設成 4。這組決策很重要，因為它不是單純技術 refactor，而是使用者對「短期對話可見性」和「長期可追溯記錄」之間的取捨：不能為了省 token 直接犧牲最近對話脈絡，但也不能讓 tool payload 無限制累積。
 
 實作落地到：
 
@@ -164,7 +168,7 @@
 
 這個區分很重要，因為使用者很容易以為在 opencode 設 MCP 後 Python agent 也會有同樣工具。實際上兩個 host 完全獨立。
 
-當時 Web Search MCP 需要安裝 `mrkrsl/web-search-mcp` release zip，並用 Node 啟動。GitHub MCP 則用 GitHub 官方 Go binary。文件也明確指出 GitHub MCP 不是 local git workflow 的替代品，local clone/pull/rebase/commit 仍應走 terminal。
+當時 Web Search MCP 需要安裝 `mrkrsl/web-search-mcp` release zip，並用 Node 啟動；它不是 npm package，而是 GitHub release zip，且需要 `npx playwright install chromium` 下載約 300 MiB browser binaries。成功後預期工具是 `full-web-search`、`get-web-search-summaries`、`get-single-web-page-content`。GitHub MCP 則用 GitHub 官方 Go binary，啟動參數是 `stdio`，toolsets 限在 repos、pull_requests、issues、actions、context。文件也明確指出 GitHub MCP 不是 local git workflow 的替代品，local clone/pull/rebase/commit 仍應走 terminal。
 
 這段落地了一批 runtime 變更：
 
@@ -184,7 +188,7 @@
 
 這段還有 `2a67618` 到 `4e62926` 的 memory work：turn-aware memory module 與 rolling compaction。當時長期記憶還不是後來的 history vector DB eviction，但已經開始從單純 prompt history 走向 turn-aware state。
 
-落地成果是：Python agent 可以在 startup 時載入外部 MCP tools，且即使某個 MCP server 失敗，session 仍會啟動，只是少了那些外部工具。這種 failure behavior 對後來 evaluation 很重要，因為 C1 web cases 可以在 `--no-mcp` 時被 skip，而不是讓整個 eval 崩潰。
+落地成果是：Python agent 可以在 startup 時載入外部 MCP tools，且即使某個 MCP server 失敗，session 仍會啟動，只是少了那些外部工具。若完全不用 MCP，可在 env 裡不開 `AGENT_ENABLE_MCP_*`，或 CLI 用 `--no-mcp`；此時 agent 仍有 local KB tools。這種 failure behavior 對後來 evaluation 很重要，因為 C1 web cases 可以在 `--no-mcp` 時被 skip，而不是讓整個 eval 崩潰。文件還順手記錄了一個不直接相關但重要的記憶設定：long-term conversation memory 當時每 `config.agent_turns_per_compaction` 個 completed turns，預設 10 turn，會 compact 成 rolling summary；這是在 history vector store 完全成形前的過渡設計。
 
 ## 2026-04-25 至 2026-04-27：長期記憶從壓縮轉成 History RAG
 
@@ -430,7 +434,7 @@ C2 對固定 eval fixture 有非常嚴格的 reproducibility 要求。因為 sem
 - `61be291` eval slash command。
 - `3c0f9ea` evaluation package README。
 
-2026-05-30 的 `note/20260530/c1_routing_findings.md` 是 C1 第一次跑況。當時命令是 `python -m agent.cli.eval --claim c1 --split dev --allow-skips --no-mcp`。dev 共 8 題，評到 5、跳過 3 個 web 題。routing_accuracy 0.6，但分項很有啟發：
+2026-05-30 的 `note/20260530/c1_routing_findings.md` 是 C1 第一次跑況。當時命令是 `python -m agent.cli.eval --claim c1 --split dev --allow-skips --no-mcp`，run_id 是 `c1-20260530T080146Z-c36d63e0`。dev 共 8 題，評到 5、跳過 3 個 web 題。因為 `allow_skips=true` 且 skipped=3，這個 run 被標成 `baseline_eligible=false`，不能和後來評滿 8 題的 run 直接比較。routing_accuracy 0.6，但分項很有啟發：
 
 - first_tool_accuracy 1.00
 - tool_family_accuracy 1.00
@@ -439,16 +443,16 @@ C2 對固定 eval fixture 有非常嚴格的 reproducibility 要求。因為 sem
 - forbidden_tool_accuracy 0.80
 - tool_count_accuracy 0.60
 
-結論是 agent 「選對門」很穩，但愛迴圈、叫太多工具，且不愛用專門工具。最嚴重的 `rag_get_context` embedding follow-up case 叫了 15 次工具、狂刷 `rag_search` 12 次、逃去 `bash`，而且全程沒用 `rag_get_context`。這個發現直接引出 5/30 tool-call runaway debug。
+兩個真實發現分別是：第一，`rag_search` 類的「scoring 模組怎麼運作」路由是對的，但實際叫了 5 次工具，超過 gold 的 1-4 次，只掛在 count；第二，`rag_get_context` 類的「embedding 模組」加「展開上下文」追問爆走，叫了 15 次工具、狂刷 `rag_search` 12 次、逃去 `bash`，而且全程沒用 `rag_get_context`。所以結論不是 agent 一開始就選錯工具家族，而是「選對門」的直覺很穩，first_tool / family / no_tool 都是 1.0；真正弱點是 count 最差，以及該用專門工具時一直用 search 土法硬找。這個發現直接引出 5/30 tool-call runaway debug。
 
-2026-05-31 又跑了一次 C1-C4 dev claims。結果寫在 `note/20260531/20260531-eval-claim-run.md`：
+2026-05-31 又跑了一次 C1-C4 dev claims。結果寫在 `note/20260531/20260531-eval-claim-run.md`。這些 run 都是 dev split，`baseline_eligible=false`，結果在 UTC 14:02 到 14:03 連續寫入 ledger；C1 的 web tools 是故意不載入，所以 3 個 web cases skip 不算失敗。
 
 - C1：4 過 / 1 失敗 / 3 skip，routing 0.80。
 - C2：3 題全有命中，recall@5 = 1.0、MRR = 0.83、nDCG@5 = 0.88。
 - C3：validator 3/3，reviewer 3 題對 2 題，session 2/2。
 - C4：1 過 / 1 失敗，task_success 0.50。
 
-共同教訓是：三個失敗有兩個是「該叫的工具沒叫」。C1 embedding 該用 `rag_get_context` 卻一直 search；C4 history codename 該用 `recall_history` 卻憑上下文答。C3 reviewer 則有過度挑剔問題，把乾淨稿誤判成 block。資料集盤點也指出 C2/C4 太薄，C1 每個 category 只有一題，統計不穩。
+共同教訓是：三個失敗有兩個是「該叫的工具沒叫」。C1 embedding 該用 `rag_get_context` 卻一直 search；C4 history codename 答案內容其實講出 `Blue Lantern`，但沒呼叫 `recall_history`，而且當時中文「部署代號」沒有命中英文 regex `codename|deployment`。C3 reviewer 則有過度挑剔問題，把乾淨稿誤判成 block，failure mode 是 `user_input_missing`，使 decision / route macro-F1 掉到 0.56，但 severity 判斷仍是 1.0。資料集盤點也指出 C2/C4 太薄，C1 每個 category 只有一題，統計不穩：C1 dev/test 各 8 題但每類只有 1 題，C2 dev 3 / test 1，C3 dev 8 / test 4，C4 dev 2 / test 1，而且沒有 `manifest.json` 或 `holdout.jsonl`。C2 test 的 `c2-score-container-columns-frozen` 還只是 dev 同題 frozen 版，獨立鑑別力很低。
 
 ## 2026-05-30 至 2026-06-15：Tool-call runaway 的偵錯與修復
 
@@ -509,9 +513,13 @@ Phase 0 instrumentation (`72ff55f`) 在 C1 runner 裡用 `progress_cb` 記錄每
 
 「三月 15 號之前的研究內容，假設要單獨發一篇 paper，符合 ICLR 格式與規範，abstract 應該安排哪些重點？」
 
-使用者補充資料在 `Research_notes`，不要直接寫 abstract，先用中文討論內容安排。agent 後來給出結構化建議，品質本身不差：包含 ICLR fit 判斷、abstract 板塊安排、缺口與替代期刊建議。但 trace 暴露兩個 workflow 級問題。
+使用者補充資料在 `Research_notes`，不要直接寫 abstract，先用中文討論內容安排。原始 CLI trace 顯示，agent 第一輪沒有直接亂寫，而是先追問到 3/15 為止的研究重點摘要、是否已有草稿或全文、輸出語言與字數限制；使用者明確說資料在 `Research_notes`、目前沒有內容、不是要寫 abstract 而是問應放哪些重點後，agent 才開始查資料。這一點很重要，因為它說明 extended mode 的 intake 行為不是完全錯誤：在資料位置不明時它會先問，資料位置明確後會進工具查詢。
 
-第一個問題是工具預算作用域。trace 中第二回合共 12 次工具：
+agent 後來給出結構化建議，品質本身不差：它先判斷 ICLR 是否適合，指出 ICLR 期待 learning/representation 創新、benchmark、ablation 與 prior work 比較，而使用者到 3/15 的成果更像 legacy bioinformatics tool 的系統性逆向工程與 methodology parity work；接著盤點 PiDNA 原始方法論、PiDNA1/PiDNA2 架構差異、Pref(r) 錯誤、beta 參數、PFM/PWM 流程偏差、PFM flexibility criterion、SelectRatio 50% cap、using3XRange fallback、`ufire.txt.gz` ground truth、12 項 parity gaps 等材料；再把 abstract 分成問題背景、研究目標、方法概述、關鍵發現、貢獻/意義、限制六個板塊。它也明確說如果硬投 ICLR，還缺修正前後定量預測表現、與 DeepPBS 等 modern methods 比較、以及方法可推廣性的額外案例；較適合的投稿方向反而是 Bioinformatics、BMC Bioinformatics 或 JOSS。
+
+這份回答之所以值得記錄，是因為它同時展示了 extended thinking 的價值與問題：它沒有憑空亂寫，輸出結構也符合 academic-writing skill 的守門方向；但 trace 暴露 workflow 層級的缺陷。
+
+第一個問題是工具預算作用域。trace 中第二回合共 12 次工具，實際順序是 `rag_explore + read_file`、兩次 `rag_search`、`recall_history + rag_explore`、兩次 `rag_search`、一次 `rag_explore`、三次 `rag_search`。這個 flat trace 看起來像 5/30 那種工具爆走，但 debug note 判定它不是同一類 bug，因為每個 graph run 的 4 次工具上限其實有生效。
 
 - writer graph run：最多 4 次工具。
 - reviewer。
@@ -548,6 +556,8 @@ Phase 0 instrumentation (`72ff55f`) 在 C1 runner 裡用 `progress_cb` 記錄每
 4. Skill metadata frontmatter parser 手刻，但 repo 已依賴 PyYAML。
 5. OpenRouter retry 手寫 backoff，但官方 client 已有 retry。
 
+6/14 到 6/15 的工作在 `note/20260615/report.md` 中被整理成三條主線：第一，整理 agent 的基礎能力邊界，讓工具清單、工具可用性、skill 狀態與 LLM 存取方式都有單一來源；第二，把 C1 embedding 失敗案例重新定義成「找不到資料時要優雅放棄」，並補上可評分的答案規格；第三，建立可以一次跑完 C1-C4 的 dev 評測流程，並記錄當天全量結果。這一階段也把 `to_be_solved/` 重新整理成仍待解問題與 archive，舊 `agent.md` 改名成 `AGENTS.md`，並關閉或移除一批已完成問題卡：`frontmatter-parser-pyyaml`、`base-tool-inventory-single-source`、`agent-history-tool-availability`、`agent-history-recall-user-facing-failure`、`openrouter-retry-cleanup`、`agent-tool-call-runaway-followups`、`llm-access-contract`。這讓 6 月中旬的 repo 狀態從「很多調查散落在 note 和 task card」變成「已修、未修、已歸檔」比較清楚。
+
 6/14 至 6/15 的 commit 幾乎逐項處理：
 
 - `c6f277c` 用 PyYAML parse skill frontmatter，取代手寫 parser。
@@ -567,6 +577,8 @@ Phase 0 instrumentation (`72ff55f`) 在 C1 runner 裡用 `progress_cb` 記錄每
 
 Base tool inventory 的意義是把 `rag_explore`、`rag_search`、`rag_get_context`、`recall_history`、`read_file`、`bash` 的靜態 metadata、tool instance 建立、tool name list、system prompt tool descriptions、tool workflow policy、evaluation tool taxonomy 收斂到同一處。這直接降低了 prompt 說有工具但 runtime 沒綁、或 eval 用另一套工具 universe 的風險。
 
+Tool availability fallback 也被明確修正。extended thinking 的 writer、rewriter、reviewer 如果沒有傳入 `base_tool_names`，原本可能 render 出空的 available tools，導致角色以為 base tools 都不可用；現在 `render_tool_availability_block()` 在參數是 `None` 時 fallback 到 base inventory，但明確傳入空 list 仍代表沒有工具。同時 `capability_map.yaml` 補上 `rag.search` 與 `history.search` 的差異：`recall_history` 查的是持久化聊天歷史，不是 indexed knowledge base。這正是 5/27 spec 想避免的混淆。
+
 History recall 舊失敗情境也被固定成 deterministic regression test。測試重點包括：
 
 - `recall_history` 可用但 writer 沒先查時，reviewer 要標 `retrieval_not_attempted` 並導向 reviser。
@@ -575,7 +587,13 @@ History recall 舊失敗情境也被固定成 deterministic regression test。�
 
 LLM access contract 的整理則讓主 agent loop、eval、thinking roles 都走更一致的 LangChain chat model factory。這減少了「同樣是 LLM 呼叫但走不同抽象」的維護成本。
 
+OpenRouter retry 也被收斂成單一 config：新增 `AgentConfig.llm_max_retries`，`get_chat_model()` 把它傳給 `ChatOpenAI`，prompt-to-text 呼叫改依賴 client retry，不再維護 `_call_with_retry`、`MAX_RETRIES`、`INITIAL_DELAY`。Thinking role models 也補上同一個 retry 設定，避免 extended roles 還停在硬編碼 retry 值。
+
+C1 graceful-give-up 的新規格也在這裡定型。原本 `rag_context_embedding_followup` 被視為應使用 `rag_get_context` 的 case；但既然 indexed KB 沒有 embedding module 資料，正確行為應改成 bounded search 後誠實說資料不足。新 gold 允許第一個工具是 `rag_search` 或 `rag_explore`，必須至少用 `rag_search`，禁止 `rag_get_context`、history、web、file、bash，工具次數限制 1-3，最終答案必須同時提到 KB/indexed knowledge base 以及 not-found/insufficient evidence 訊號。Legacy `BehaviorEvaluator` 也同步成這套規格，並加 semantic parity test，避免同一 case id 在兩套 eval 中語意漂移。
+
 Full eval runner `scripts/run_full_eval.sh` 讓 C1-C4 可以一次跑完。它預設跑 dev split，跑前拒絕 dirty worktree，可用 `ALLOW_SKIPS=1` 控 C1 skip，可用 `NO_MCP=1` 關 MCP，結果只寫既有 ledger。
+
+當天的 ledger 寫入明確記錄在 `eval/runs/c1.jsonl`、`eval/runs/c2.jsonl`、`eval/runs/c3.jsonl`、`eval/runs/c4.jsonl`，逐題明細是 `eval/runs/details/c1-20260615T064950Z-6d27a65d.json`、`c2-20260615T064955Z-ef938234.json`、`c3-20260615T065007Z-c039bf54.json`、`c4-20260615T065042Z-49804861.json`。這補上了舊 eval 最大缺口之一：結果不是覆蓋式 JSON，而是 append-only ledger 加 per-run details。
 
 6/15 的 dev eval 結果是：
 
