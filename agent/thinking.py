@@ -5,13 +5,22 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Literal, TypeVar
+from dataclasses import asdict, dataclass, field
+from typing import Any, Literal, Sequence, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field, ValidationError
 
 from agent.skills.runtime import render_tool_availability_block
 
+
+FusionCandidateStatus = Literal["success", "failed", "timeout", "empty"]
+FusionReliabilityTier = Literal[
+    "full_panel",
+    "partial_panel",
+    "single_candidate",
+    "fallback",
+]
 
 ReviewSeverity = Literal["blocker", "major", "minor", "note"]
 ReviewDecision = Literal["pass", "revise", "block"]
@@ -72,6 +81,77 @@ class RevisedDraft(BaseModel):
     draft: str
     rebuttal: str = ""
     format_warning: str = ""
+
+
+@dataclass(frozen=True)
+class FusionCandidate:
+    """One proposer graph result in the extended-thinking fusion panel."""
+
+    candidate_id: str
+    model_id: str
+    status: FusionCandidateStatus
+    answer: str
+    tool_trace_summary: str
+    error: str = ""
+    elapsed_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class FusionCandidateTrace:
+    """Per-candidate segmented trace; kept separate so tool_call_ids never cross."""
+
+    candidate_id: str
+    model_id: str
+    status: FusionCandidateStatus
+    new_messages: list = field(default_factory=list)
+    tool_calls: list[dict] = field(default_factory=list)
+    trace_events: list[dict] = field(default_factory=list)
+    tool_trace_summary: str = ""
+    answer_excerpt: str = ""
+
+
+@dataclass
+class FusionAggregateResult:
+    """Session-level aggregate result over the successful candidate panel."""
+
+    draft: str
+    selected_candidate_ids: list[str] = field(default_factory=list)
+    dropped_candidate_ids: list[str] = field(default_factory=list)
+    reliability_tier: FusionReliabilityTier | str = ""
+    summary_for_reviewer: str = ""
+    removed_or_uncertain_points: list[str] = field(default_factory=list)
+    aggregator_error: str = ""
+
+
+@dataclass
+class FusionTurnMetadata:
+    """Compact, JSON-serializable fusion metadata for one extended turn."""
+
+    candidate_statuses: dict[str, str] = field(default_factory=dict)
+    model_ids: dict[str, str] = field(default_factory=dict)
+    selected_ids: list[str] = field(default_factory=list)
+    dropped_ids: list[str] = field(default_factory=list)
+    omitted_successful_ids: list[str] = field(default_factory=list)
+    reliability_tier: str = ""
+    aggregator_error: str = ""
+    side_effect_policy: bool = False
+    quorum: int = 0
+    resolved_proposer_models: list[str] = field(default_factory=list)
+    resolved_aggregator_model: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a plain dict suitable for turn logs and trace events."""
+        return asdict(self)
+
+
+class _AggregatorResponse(BaseModel):
+    """Raw JSON contract returned by the aggregator LLM."""
+
+    draft: str
+    selected_candidate_ids: list[str] = Field(default_factory=list)
+    dropped_candidate_ids: list[str] = Field(default_factory=list)
+    summary_for_reviewer: str = ""
+    removed_or_uncertain_points: list[str] = Field(default_factory=list)
 
 
 _JSON_FENCE_RE = re.compile(
@@ -453,6 +533,213 @@ def review_draft(
         ),
     )
     return parse_structured_output(ReviewReport, text)
+
+
+def aggregate_messages(
+    *,
+    raw_user_input: str,
+    rewritten_prompt: str,
+    successful_candidates: Sequence[FusionCandidate],
+    skill_context: str = "",
+    tool_availability: str = "",
+) -> list:
+    """Build aggregator messages that fuse successful candidate answers.
+
+    The aggregator is a plain LLM synthesis step, NOT a tool call. Its prompt
+    must never describe itself as tool evidence so downstream traces keep the
+    aggregator out of ``tool_calls``.
+    """
+    availability = tool_availability.strip() or render_tool_availability_block()
+    candidate_blocks = []
+    for candidate in successful_candidates:
+        candidate_blocks.append(
+            f"--- {candidate.candidate_id} (model: {candidate.model_id}) ---\n"
+            f"Answer:\n{candidate.answer}\n\n"
+            f"Tool trace summary:\n{candidate.tool_trace_summary or '(none)'}"
+        )
+    candidates_text = "\n\n".join(candidate_blocks) or "(none)"
+    valid_ids = ", ".join(candidate.candidate_id for candidate in successful_candidates)
+    return [
+        SystemMessage(content=(
+            "You are the aggregator for extended thinking mode. Several proposer "
+            "agents independently answered the same rewritten prompt. Fuse their "
+            "candidate answers into one best full-text draft. You are performing a "
+            "synthesis step, not calling a tool, and you must not invent a tool "
+            "call. Prefer claims that multiple candidates agree on; drop claims "
+            "only one candidate makes that look unsupported by its tool trace. Do "
+            "not introduce citations, data, methods, or findings that no candidate "
+            "and neither the raw input nor the skill context provides. Return only "
+            "valid JSON matching the schema. Use only the supplied candidate ids.\n\n"
+            "語言策略：JSON 內所有自然語言欄位（draft、summary_for_reviewer、"
+            "removed_or_uncertain_points）使用與「Raw user input」相同的語言。"
+            "如果 raw input 是中文，使用繁體中文（絕對不要使用簡體），保留技術專有"
+            "名詞（RAG、GPT、DOI、JSON 等）原文。"
+        )),
+        HumanMessage(content=(
+            "Aggregate result schema:\n"
+            "{\n"
+            '  "draft": "the fused full-text answer for the user",\n'
+            '  "selected_candidate_ids": ["candidate ids whose content you kept"],\n'
+            '  "dropped_candidate_ids": ["candidate ids you rejected"],\n'
+            '  "summary_for_reviewer": "what you merged, agreed, or rejected",\n'
+            '  "removed_or_uncertain_points": ["claims you removed or flagged uncertain"]\n'
+            "}\n\n"
+            f"Valid candidate ids: {valid_ids or '(none)'}\n"
+            "selected_candidate_ids and dropped_candidate_ids must each be a subset "
+            "of the valid candidate ids and must not overlap.\n\n"
+            f"Raw user input:\n{raw_user_input}\n\n"
+            f"Rewritten prompt:\n{rewritten_prompt}\n\n"
+            f"Active skill context:\n{skill_context or '(none)'}\n\n"
+            f"Tool availability:\n{availability}\n\n"
+            f"Candidate answers:\n{candidates_text}"
+        )),
+    ]
+
+
+def parse_aggregate_result(
+    text: str,
+    *,
+    successful_candidate_ids: Sequence[str],
+) -> FusionAggregateResult:
+    """Parse and validate the aggregator JSON into a FusionAggregateResult.
+
+    Raises :class:`ThinkingOutputError` on invalid JSON, schema violations, a
+    blank draft, an unknown candidate id, or selected/dropped overlap. The
+    ``reliability_tier`` is left unset; the session control flow owns it.
+    """
+    raw = text.strip()
+    fenced = _JSON_FENCE_RE.match(raw)
+    if fenced:
+        raw = fenced.group("body").strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ThinkingOutputError(f"invalid JSON from aggregator: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ThinkingOutputError("aggregator output is not a JSON object")
+    try:
+        parsed = _AggregatorResponse.model_validate(payload)
+    except ValidationError as exc:
+        raise ThinkingOutputError(f"invalid aggregator schema: {exc}") from exc
+
+    if not parsed.draft.strip():
+        raise ThinkingOutputError("aggregator returned a blank draft")
+
+    valid = set(successful_candidate_ids)
+    selected = list(parsed.selected_candidate_ids)
+    dropped = list(parsed.dropped_candidate_ids)
+    unknown = [cid for cid in (*selected, *dropped) if cid not in valid]
+    if unknown:
+        raise ThinkingOutputError(
+            f"aggregator referenced unknown candidate ids: {', '.join(unknown)}"
+        )
+    overlap = set(selected) & set(dropped)
+    if overlap:
+        raise ThinkingOutputError(
+            f"aggregator selected and dropped the same candidate ids: "
+            f"{', '.join(sorted(overlap))}"
+        )
+
+    return FusionAggregateResult(
+        draft=parsed.draft,
+        selected_candidate_ids=selected,
+        dropped_candidate_ids=dropped,
+        reliability_tier="",
+        summary_for_reviewer=parsed.summary_for_reviewer,
+        removed_or_uncertain_points=list(parsed.removed_or_uncertain_points),
+        aggregator_error="",
+    )
+
+
+def aggregate_candidates(
+    model,
+    *,
+    raw_user_input: str,
+    rewritten_prompt: str,
+    successful_candidates: Sequence[FusionCandidate],
+    skill_context: str = "",
+    tool_availability: str = "",
+) -> FusionAggregateResult:
+    """Run the aggregator LLM over successful candidates and parse the result.
+
+    Only successful candidates may be passed; failed, timed-out, or empty
+    candidates belong in fusion metadata and reviewer evidence, never in the
+    aggregator's candidate input.
+    """
+    text = invoke_text(
+        model,
+        aggregate_messages(
+            raw_user_input=raw_user_input,
+            rewritten_prompt=rewritten_prompt,
+            successful_candidates=successful_candidates,
+            skill_context=skill_context,
+            tool_availability=tool_availability,
+        ),
+    )
+    return parse_aggregate_result(
+        text,
+        successful_candidate_ids=[c.candidate_id for c in successful_candidates],
+    )
+
+
+def build_fusion_evidence_summary(
+    *,
+    candidates: Sequence[FusionCandidate],
+    candidate_traces: Sequence[FusionCandidateTrace],
+    aggregate_result: FusionAggregateResult,
+    metadata: FusionTurnMetadata,
+    per_result_chars: int = 500,
+) -> str:
+    """Build the reviewer evidence summary from the fusion result objects.
+
+    Each candidate's tool trace is summarized from that candidate's own
+    segmented trace, so the same ``tool_call_id`` appearing in two candidates is
+    never cross-matched to the wrong ToolMessage.
+    """
+    trace_by_id = {trace.candidate_id: trace for trace in candidate_traces}
+    lines = [
+        "=== Fusion candidate panel ===",
+        f"reliability_tier: {metadata.reliability_tier or '(none)'}",
+        f"selected_candidate_ids: {', '.join(metadata.selected_ids) or '(none)'}",
+        f"dropped_candidate_ids: {', '.join(metadata.dropped_ids) or '(none)'}",
+        f"omitted_successful_ids: {', '.join(metadata.omitted_successful_ids) or '(none)'}",
+    ]
+    if metadata.aggregator_error:
+        lines.append(f"aggregator_error: {metadata.aggregator_error}")
+    if aggregate_result.summary_for_reviewer:
+        lines.append(
+            f"aggregator_summary_for_reviewer: {aggregate_result.summary_for_reviewer}"
+        )
+    if aggregate_result.removed_or_uncertain_points:
+        lines.append("removed_or_uncertain_points:")
+        lines.extend(
+            f"  - {point}" for point in aggregate_result.removed_or_uncertain_points
+        )
+    for candidate in candidates:
+        trace = trace_by_id.get(candidate.candidate_id)
+        if trace is not None:
+            tool_summary = summarize_tool_trace(
+                trace.tool_calls,
+                trace.new_messages,
+                source_label=f"[{candidate.candidate_id} {candidate.model_id}]",
+                per_result_chars=per_result_chars,
+            )
+        else:
+            tool_summary = candidate.tool_trace_summary or "Tool calls: none"
+        excerpt = (
+            trim_head(candidate.answer, per_result_chars)
+            if candidate.answer
+            else "(no answer)"
+        )
+        lines.extend([
+            f"--- {candidate.candidate_id} (model: {candidate.model_id}) "
+            f"status={candidate.status} ---",
+            f"answer_excerpt: {excerpt}",
+            tool_summary,
+        ])
+        if candidate.error:
+            lines.append(f"error: {candidate.error}")
+    return "\n".join(lines)
 
 
 def summarize_tool_trace(

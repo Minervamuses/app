@@ -11,6 +11,10 @@ from typing import Any
 
 from agent.config import AgentConfig
 from agent.evaluation.datasets import dataset_hash
+from agent.llm.thinking import (
+    resolve_fusion_aggregator_model,
+    resolve_fusion_proposer_models,
+)
 from agent.paths import find_app_root
 
 REQUIRED_STORE_FILES = ("chroma.sqlite3", "raw.json", "folder_meta.json")
@@ -88,6 +92,20 @@ def model_metadata(config: AgentConfig) -> dict:
         "thinking_reviewer_model": config.thinking_reviewer_model,
         "thinking_rewrite_model": config.thinking_rewrite_model,
         "thinking_repair_model": config.thinking_repair_model,
+        # Resolved fusion models plus the fusion knobs that change eval behavior.
+        "thinking_fusion_proposer_models": resolve_fusion_proposer_models(config),
+        "thinking_fusion_aggregator_model": resolve_fusion_aggregator_model(config),
+        "thinking_fusion_aggregator_max_tokens": config.thinking_fusion_aggregator_max_tokens,
+        "thinking_fusion_proposer_tool_interactions": (
+            config.thinking_fusion_proposer_tool_interactions
+        ),
+        "thinking_fusion_candidate_timeout_seconds": (
+            config.thinking_fusion_candidate_timeout_seconds
+        ),
+        "thinking_fusion_quorum": config.thinking_fusion_quorum,
+        "thinking_fusion_allow_side_effect_tools": (
+            config.thinking_fusion_allow_side_effect_tools
+        ),
         "embed_model": config.embed_model,
         "tagger_model": config.tagger_model,
     }

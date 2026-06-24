@@ -162,3 +162,57 @@ def test_collect_repro_metadata_includes_versions_dataset_models_and_store(tmp_p
     assert metadata["n_samples"] == 3
     assert metadata["agent_git"]["sha"]
     assert metadata["store"]["content_hash"] == expected_fingerprint
+
+
+def test_model_metadata_includes_resolved_fusion_models(tmp_path):
+    from agent.evaluation.repro import model_metadata
+
+    cfg = AgentConfig(
+        persist_dir=str(tmp_path),
+        thinking_fusion_proposer_models=("prop-a", "prop-b"),
+        thinking_fusion_aggregator_model="agg-x",
+    )
+
+    models = model_metadata(cfg)
+
+    assert models["thinking_fusion_proposer_models"] == ["prop-a", "prop-b"]
+    assert models["thinking_fusion_aggregator_model"] == "agg-x"
+
+
+def test_model_metadata_includes_fusion_behavior_knobs(tmp_path):
+    from agent.evaluation.repro import model_metadata
+
+    cfg = AgentConfig(
+        persist_dir=str(tmp_path),
+        thinking_fusion_quorum=3,
+        thinking_fusion_candidate_timeout_seconds=42.0,
+        thinking_fusion_proposer_tool_interactions=5,
+        thinking_fusion_allow_side_effect_tools=True,
+    )
+
+    models = model_metadata(cfg)
+
+    assert models["thinking_fusion_quorum"] == 3
+    assert models["thinking_fusion_candidate_timeout_seconds"] == 42.0
+    assert models["thinking_fusion_proposer_tool_interactions"] == 5
+    assert models["thinking_fusion_allow_side_effect_tools"] is True
+    # Existing model fields stay intact.
+    assert models["llm_model"] == cfg.llm_model
+    assert models["embed_model"] == cfg.embed_model
+
+
+def test_model_metadata_resolves_fusion_defaults(tmp_path):
+    from agent.evaluation.repro import model_metadata
+
+    cfg = AgentConfig(
+        persist_dir=str(tmp_path),
+        llm_model="primary",
+        gen_llm_model="gen",
+        thinking_reviewer_model="reviewer",
+        judge_llm_model="judge",
+    )
+
+    models = model_metadata(cfg)
+
+    assert models["thinking_fusion_proposer_models"] == ["primary", "gen", "reviewer"]
+    assert models["thinking_fusion_aggregator_model"] == "judge"

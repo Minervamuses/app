@@ -69,6 +69,11 @@ def _config(tmp_path, **overrides):
         "thinking_rewrite_model": "anthropic/claude-haiku-5",
         "thinking_reviewer_model": "openai/gpt-5.2",
         "thinking_repair_model": "meta-llama/llama-3.1-8b-instruct",
+        # One proposer keeps the fusion panel in single-candidate mode, so the
+        # reviewer/reviser routing under test runs exactly as the single writer
+        # did before fusion (no aggregator, no quorum branch).
+        "thinking_fusion_proposer_models": ("writer-model",),
+        "thinking_fusion_aggregator_model": "openai/gpt-5.2",
     }
     data.update(overrides)
     return AgentConfig(**data)

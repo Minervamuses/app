@@ -38,6 +38,17 @@ class AgentConfig(RAGConfig):
     thinking_rewrite_visible_chars: int = 2000
     thinking_rewrite_skill_chars: int = 4000
 
+    # Extended-thinking fusion candidate panel (replaces the single writer stage
+    # of /thinking extended). Empty proposer/aggregator slots resolve to existing
+    # role models in agent.llm.thinking; no new slash command or mode is added.
+    thinking_fusion_proposer_models: tuple[str, ...] = ()
+    thinking_fusion_aggregator_model: str = ""
+    thinking_fusion_aggregator_max_tokens: int = 4096
+    thinking_fusion_proposer_tool_interactions: int = 2
+    thinking_fusion_candidate_timeout_seconds: float = 180.0
+    thinking_fusion_quorum: int = 2
+    thinking_fusion_allow_side_effect_tools: bool = False
+
     # Agent context controls (same-turn bounds)
     agent_max_messages: int = 20
     # Per-turn hard cap on tool interactions (enforced in graph.agent_node and

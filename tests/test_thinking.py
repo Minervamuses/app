@@ -533,3 +533,206 @@ def test_parse_reviser_output_final_fallback_warns_when_unsafe_to_strip():
 
 def test_extract_draft_for_user_uses_marker_when_present():
     assert extract_draft_for_user("DRAFT:\nVisible\n\nREBUTTAL:\nHidden") == "Visible"
+
+
+# --- Fusion aggregator + evidence -----------------------------------------
+
+from agent.thinking import (  # noqa: E402
+    FusionAggregateResult,
+    FusionCandidate,
+    FusionCandidateTrace,
+    FusionTurnMetadata,
+    aggregate_candidates,
+    aggregate_messages,
+    build_fusion_evidence_summary,
+    parse_aggregate_result,
+)
+
+
+def _candidate(candidate_id, model_id, answer, *, status="success", error="", summary="Tool calls: none"):
+    return FusionCandidate(
+        candidate_id=candidate_id,
+        model_id=model_id,
+        status=status,
+        answer=answer,
+        tool_trace_summary=summary,
+        error=error,
+    )
+
+
+def _aggregate_json(draft="fused", selected=None, dropped=None, summary="merged", removed=None):
+    return json.dumps({
+        "draft": draft,
+        "selected_candidate_ids": selected if selected is not None else ["candidate-1"],
+        "dropped_candidate_ids": dropped or [],
+        "summary_for_reviewer": summary,
+        "removed_or_uncertain_points": removed or [],
+    })
+
+
+def test_parse_aggregate_result_accepts_valid_json():
+    result = parse_aggregate_result(
+        _aggregate_json(draft="fused draft", selected=["candidate-1"], dropped=["candidate-2"]),
+        successful_candidate_ids=["candidate-1", "candidate-2"],
+    )
+
+    assert isinstance(result, FusionAggregateResult)
+    assert result.draft == "fused draft"
+    assert result.selected_candidate_ids == ["candidate-1"]
+    assert result.dropped_candidate_ids == ["candidate-2"]
+    assert result.summary_for_reviewer == "merged"
+
+
+def test_parse_aggregate_result_rejects_invalid_json():
+    with pytest.raises(ThinkingOutputError, match="invalid JSON from aggregator"):
+        parse_aggregate_result("not json", successful_candidate_ids=["candidate-1"])
+
+
+def test_parse_aggregate_result_rejects_blank_draft():
+    with pytest.raises(ThinkingOutputError, match="blank draft"):
+        parse_aggregate_result(
+            _aggregate_json(draft="   ", selected=[]),
+            successful_candidate_ids=["candidate-1"],
+        )
+
+
+def test_parse_aggregate_result_rejects_unknown_candidate_id():
+    with pytest.raises(ThinkingOutputError, match="unknown candidate ids"):
+        parse_aggregate_result(
+            _aggregate_json(selected=["candidate-9"]),
+            successful_candidate_ids=["candidate-1"],
+        )
+
+
+def test_parse_aggregate_result_rejects_selected_dropped_overlap():
+    with pytest.raises(ThinkingOutputError, match="selected and dropped"):
+        parse_aggregate_result(
+            _aggregate_json(selected=["candidate-1"], dropped=["candidate-1"]),
+            successful_candidate_ids=["candidate-1"],
+        )
+
+
+def test_aggregate_messages_include_inputs_and_candidate_identity():
+    candidates = [
+        _candidate("candidate-1", "model-a", "Answer one"),
+        _candidate("candidate-2", "model-b", "Answer two"),
+    ]
+    messages = aggregate_messages(
+        raw_user_input="raw question",
+        rewritten_prompt="rewritten task",
+        successful_candidates=candidates,
+        skill_context="skill ctx",
+        tool_availability="[Tool availability]\navailable_tools: read_file",
+    )
+    prompt_text = "\n".join(str(m.content) for m in messages)
+
+    assert "raw question" in prompt_text
+    assert "rewritten task" in prompt_text
+    assert "Answer one" in prompt_text
+    assert "Answer two" in prompt_text
+    assert "candidate-1" in prompt_text
+    assert "candidate-2" in prompt_text
+    assert "model-a" in prompt_text
+    assert "model-b" in prompt_text
+    assert "[Tool availability]" in prompt_text
+    assert "skill ctx" in prompt_text
+
+
+def test_aggregate_messages_do_not_describe_call_as_tool_evidence():
+    messages = aggregate_messages(
+        raw_user_input="raw",
+        rewritten_prompt="rewritten",
+        successful_candidates=[_candidate("candidate-1", "model-a", "answer")],
+    )
+    system_text = str(messages[0].content)
+
+    assert "not calling a tool" in system_text
+    assert "must not invent a tool" in system_text
+
+
+def test_aggregate_candidates_invokes_model_and_parses():
+    model = _QueuedModel([_aggregate_json(draft="merged draft", selected=["candidate-1"])])
+    result = aggregate_candidates(
+        model,
+        raw_user_input="raw",
+        rewritten_prompt="rewritten",
+        successful_candidates=[_candidate("candidate-1", "model-a", "answer")],
+    )
+
+    assert result.draft == "merged draft"
+    assert result.selected_candidate_ids == ["candidate-1"]
+
+
+def _trace(candidate_id, model_id, *, call_id, args, result, answer, status="success"):
+    return FusionCandidateTrace(
+        candidate_id=candidate_id,
+        model_id=model_id,
+        status=status,
+        new_messages=[ToolMessage(content=result, tool_call_id=call_id)],
+        tool_calls=[{"id": call_id, "name": "read_file", "args": args}],
+        trace_events=[],
+        answer_excerpt=answer,
+    )
+
+
+def test_build_fusion_evidence_summary_includes_tier_and_ids():
+    candidates = [
+        _candidate("candidate-1", "model-a", "Answer one"),
+        _candidate("candidate-2", "model-b", "", status="failed", error="boom"),
+    ]
+    aggregate = FusionAggregateResult(
+        draft="fused",
+        selected_candidate_ids=["candidate-1"],
+        dropped_candidate_ids=[],
+        reliability_tier="partial_panel",
+        summary_for_reviewer="kept candidate-1",
+        removed_or_uncertain_points=["dropped weak claim"],
+    )
+    metadata = FusionTurnMetadata(
+        selected_ids=["candidate-1"],
+        dropped_ids=[],
+        omitted_successful_ids=[],
+        reliability_tier="partial_panel",
+        aggregator_error="",
+    )
+
+    summary = build_fusion_evidence_summary(
+        candidates=candidates,
+        candidate_traces=[],
+        aggregate_result=aggregate,
+        metadata=metadata,
+    )
+
+    assert "reliability_tier: partial_panel" in summary
+    assert "selected_candidate_ids: candidate-1" in summary
+    assert "kept candidate-1" in summary
+    assert "dropped weak claim" in summary
+    assert "candidate-1 (model: model-a) status=success" in summary
+    assert "candidate-2 (model: model-b) status=failed" in summary
+    assert "error: boom" in summary
+
+
+def test_fusion_evidence_summary_does_not_cross_pair_colliding_call_ids():
+    traces = [
+        _trace("candidate-1", "model-a", call_id="call-1", args={"path": "a.md"},
+               result="RESULT-A", answer="answer A"),
+        _trace("candidate-2", "model-b", call_id="call-1", args={"path": "b.md"},
+               result="RESULT-B", answer="answer B"),
+    ]
+    candidates = [
+        _candidate("candidate-1", "model-a", "answer A"),
+        _candidate("candidate-2", "model-b", "answer B"),
+    ]
+    metadata = FusionTurnMetadata(reliability_tier="full_panel")
+
+    summary = build_fusion_evidence_summary(
+        candidates=candidates,
+        candidate_traces=traces,
+        aggregate_result=FusionAggregateResult(draft="fused"),
+        metadata=metadata,
+    )
+
+    seg1 = summary.split("candidate-2 (model: model-b)")[0]
+    seg2 = summary.split("candidate-2 (model: model-b)")[1]
+    assert "RESULT-A" in seg1 and "RESULT-B" not in seg1
+    assert "RESULT-B" in seg2 and "RESULT-A" not in seg2
