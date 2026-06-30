@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import time
 
 from citation.capture import capture_citation
 from citation.discovery import agentic_discover
@@ -57,7 +58,7 @@ async def _select_candidate(
             return None
         if raw.isdigit() and 1 <= int(raw) <= len(candidates):
             return candidates[int(raw) - 1]
-        print("  (invalid selection)")
+        print("  (invalid selection; enter one paper number)")
 
 
 async def _confirm_crossref(
@@ -89,7 +90,17 @@ def _print_trace(result) -> None:
     print("-----------------------\n")
 
 
-async def _auto_capture(runtime, candidates, *, max_attempts):
+def _make_progress_printer():
+    started = time.perf_counter()
+
+    def progress(message: str) -> None:
+        elapsed = time.perf_counter() - started
+        print(f"[+{elapsed:5.1f}s] {message}", flush=True)
+
+    return progress
+
+
+async def _auto_capture(runtime, candidates, *, max_attempts, progress_cb=None):
     """Smoke-test mode: try ranked candidates until one captures cleanly.
 
     Auto mode never prompts, so an ambiguous Crossref match is refused (no
@@ -101,7 +112,9 @@ async def _auto_capture(runtime, candidates, *, max_attempts):
         chosen = candidates[i]
         last_chosen = chosen
         print(f"\n[auto] attempt {i + 1}/{attempts}: {chosen.short_label()}")
-        result = await capture_citation(runtime, chosen, confirm_cb=None)
+        result = await capture_citation(
+            runtime, chosen, confirm_cb=None, progress_cb=progress_cb
+        )
         _print_trace(result)
         if result.ok:
             return result, chosen
@@ -109,7 +122,10 @@ async def _auto_capture(runtime, candidates, *, max_attempts):
 
 
 async def _run(args: argparse.Namespace) -> int:
+    progress = _make_progress_printer()
+    progress("runtime: loading config, model, and Web Search MCP")
     runtime = await build_runtime(load_mcp=True)
+    progress(f"runtime: ready with {len(runtime.web_tools)} web-search tool(s)")
 
     if not runtime.web_tools:
         print(
@@ -130,10 +146,13 @@ async def _run(args: argparse.Namespace) -> int:
     if runtime.llm is None:
         print("  (no LLM configured — falling back to a single literal query)")
     try:
-        candidates = await agentic_discover(runtime, request, limit=args.limit)
+        candidates = await agentic_discover(
+            runtime, request, limit=args.limit, progress_cb=progress
+        )
     except WebSearchUnavailable as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+    progress(f"discovery: finished with {len(candidates)} candidate(s)")
 
     if not candidates:
         print(
@@ -146,7 +165,12 @@ async def _run(args: argparse.Namespace) -> int:
     _print_candidates(candidates)
 
     if args.auto:
-        result, chosen = await _auto_capture(runtime, candidates, max_attempts=args.auto_attempts)
+        result, chosen = await _auto_capture(
+            runtime,
+            candidates,
+            max_attempts=args.auto_attempts,
+            progress_cb=progress,
+        )
         if result is None:
             print(
                 f"FAILED: none of the top {min(args.auto_attempts, len(candidates))} "
@@ -160,7 +184,12 @@ async def _run(args: argparse.Namespace) -> int:
             print("No paper selected. Exiting.")
             return 0
         print(f"\nCapturing citation for: {chosen.short_label()} ...\n")
-        result = await capture_citation(runtime, chosen, confirm_cb=_confirm_crossref)
+        result = await capture_citation(
+            runtime,
+            chosen,
+            confirm_cb=_confirm_crossref,
+            progress_cb=progress,
+        )
         _print_trace(result)
 
     if result.ok:

@@ -10,6 +10,7 @@ _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 # Anything that is not a word char or hyphen becomes a separator.
 _SEPARATORS = re.compile(r"[^\w-]+", re.UNICODE)
 _MULTI_UNDERSCORE = re.compile(r"_+")
+_MAX_FILENAME_STEM_CHARS = 160
 
 
 def normalize_title_to_filename(title: str) -> str:
@@ -31,6 +32,8 @@ def normalize_title_to_filename(title: str) -> str:
     text = _MULTI_UNDERSCORE.sub("_", text).strip("_")
     if not text:
         text = "untitled"
+    if len(text) > _MAX_FILENAME_STEM_CHARS:
+        text = text[:_MAX_FILENAME_STEM_CHARS].rstrip("_") or "untitled"
     return f"{text}.bib"
 
 
@@ -69,7 +72,7 @@ def looks_like_bibtex(text: str | None) -> bool:
     return stripped.startswith("@") and "{" in stripped and "}" in stripped
 
 
-_BIBTEX_TITLE = re.compile(r"\btitle\s*=\s*[{\"]+(.+?)[}\"]+\s*,?\s*$", re.IGNORECASE | re.MULTILINE)
+_BIBTEX_TITLE_START = re.compile(r"\btitle\s*=\s*", re.IGNORECASE)
 
 
 def extract_bibtex_title(bibtex: str) -> str | None:
@@ -78,8 +81,70 @@ def extract_bibtex_title(bibtex: str) -> str | None:
     Used to name the output file from the *authoritative* title rather than a
     messy search-result label. Brace groups are flattened to plain text.
     """
-    m = _BIBTEX_TITLE.search(bibtex or "")
+    m = _BIBTEX_TITLE_START.search(bibtex or "")
     if not m:
         return None
-    title = re.sub(r"[{}]", "", m.group(1)).strip().rstrip(",").strip()
+    raw_title = _read_bibtex_field_value(bibtex, m.end())
+    if raw_title is None:
+        return None
+    title = re.sub(r"[{}]", "", raw_title).strip().rstrip(",").strip()
     return title or None
+
+
+def _read_bibtex_field_value(text: str, start: int) -> str | None:
+    i = start
+    while i < len(text) and text[i].isspace():
+        i += 1
+    if i >= len(text):
+        return None
+
+    opener = text[i]
+    if opener == "{":
+        value, _end = _read_balanced_braces(text, i)
+        return value
+    if opener == '"':
+        return _read_quoted_string(text, i)
+
+    j = i
+    while j < len(text) and text[j] not in ",\n\r":
+        j += 1
+    return text[i:j].strip() or None
+
+
+def _read_balanced_braces(text: str, start: int) -> tuple[str | None, int]:
+    depth = 0
+    chars: list[str] = []
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+            if depth > 1:
+                chars.append(ch)
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return "".join(chars).strip(), i + 1
+            chars.append(ch)
+        else:
+            chars.append(ch)
+        i += 1
+    return None, i
+
+
+def _read_quoted_string(text: str, start: int) -> str | None:
+    chars: list[str] = []
+    escaped = False
+    for ch in text[start + 1:]:
+        if escaped:
+            chars.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            chars.append(ch)
+            escaped = True
+            continue
+        if ch == '"':
+            return "".join(chars).strip()
+        chars.append(ch)
+    return None

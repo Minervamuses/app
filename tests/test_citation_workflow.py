@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 
+from citation import bibtex
 from citation import capture
 from citation.discovery import parse_summaries
 from citation.models import PaperCandidate
@@ -64,10 +65,11 @@ def test_capture_retries_alternate_doi_through_crossref(monkeypatch, tmp_path):
         candidate,
         *,
         confirm_cb,
-        result,
-        allow_direct=True,
-        exclude=None,
-    ):
+            result,
+            allow_direct=True,
+            exclude=None,
+            progress_cb=None,
+        ):
         resolve_calls.append((allow_direct, set(exclude or set())))
         if allow_direct:
             return "10.bad/first"
@@ -100,3 +102,31 @@ def test_capture_retries_alternate_doi_through_crossref(monkeypatch, tmp_path):
     ]
     assert "bad DOI failed" in result.notes
     assert "good DOI retrieved" in result.notes
+
+
+def test_bibtex_title_extraction_handles_single_line_crossref_bibtex():
+    one_line = (
+        "@article{Mohaidat_2024, title={A Survey on Neural Network Hardware "
+        "Accelerators}, volume={5}, ISSN={2691-4581}, "
+        "url={http://dx.doi.org/10.1109/TAI.2024.3377147}, "
+        "DOI={10.1109/tai.2024.3377147}, number={8}, journal={IEEE "
+        "Transactions on Artificial Intelligence}, publisher={Institute of "
+        "Electrical and Electronics Engineers (IEEE)}, author={Mohaidat, "
+        "Tamador and Khalil, Kasem}, year={2024}, month=aug, pages={3801-3822} }"
+    )
+
+    assert (
+        bibtex.extract_bibtex_title(one_line)
+        == "A Survey on Neural Network Hardware Accelerators"
+    )
+    assert (
+        bibtex.normalize_title_to_filename(bibtex.extract_bibtex_title(one_line))
+        == "a_survey_on_neural_network_hardware_accelerators.bib"
+    )
+
+
+def test_normalized_bibtex_filename_is_length_capped():
+    filename = bibtex.normalize_title_to_filename("x" * 400)
+
+    assert filename.endswith(".bib")
+    assert len(filename.removesuffix(".bib")) <= 160

@@ -25,7 +25,9 @@ import html
 import json
 import logging
 import re
+import time
 import urllib.parse
+from collections.abc import Callable
 
 from citation.crossref import extract_doi
 from citation.models import PaperCandidate
@@ -37,6 +39,7 @@ from citation.runtime import (
 )
 
 logger = logging.getLogger("citation.discovery")
+ProgressCallback = Callable[[str], None]
 
 # Anchors for parsing the mrkrsl/web-search-mcp text format:
 #   **1. Title**
@@ -53,6 +56,11 @@ _SCHOLAR_HINT = "research paper (site:scholar.google.com/scholar_lookup OR arxiv
 _LLM_DISCOVERY_TIMEOUT_SECONDS = 60.0
 _LLM_RANK_TIMEOUT_SECONDS = 30.0
 _TOOL_TIMEOUT_SECONDS = 30.0
+
+
+def _emit(progress_cb: ProgressCallback | None, message: str) -> None:
+    if progress_cb is not None:
+        progress_cb(message)
 
 
 def build_scholar_query(topic: str) -> str:
@@ -272,6 +280,7 @@ async def _enrich_with_llm(
     llm,
     topic: str,
     candidates: list[PaperCandidate],
+    progress_cb: ProgressCallback | None = None,
 ) -> None:
     """Best-effort: ask the LLM to fill authors/year and a relevance reason.
 
@@ -298,6 +307,8 @@ async def _enrich_with_llm(
         '{"index": int, "authors": [str], "year": int|null, "reason": str}.'
     )
     human = f"Topic: {topic}\n\nResults:\n{json.dumps(payload, ensure_ascii=False)}"
+    _emit(progress_cb, f"enrichment: asking model to annotate {len(candidates)} candidate(s)")
+    started = time.perf_counter()
     try:
         resp = await asyncio.wait_for(
             llm.ainvoke([("system", system), ("human", human)]),
@@ -307,7 +318,9 @@ async def _enrich_with_llm(
         data = json.loads(content)
     except Exception as exc:  # noqa: BLE001 - enrichment is optional
         logger.warning("LLM enrichment failed (%s); using parsed fields only", exc)
+        _emit(progress_cb, f"enrichment: failed/timed out after {time.perf_counter() - started:.1f}s; using parsed fields")
         return
+    _emit(progress_cb, f"enrichment: model returned in {time.perf_counter() - started:.1f}s")
     by_index = {item.get("index"): item for item in data if isinstance(item, dict)}
     for i, cand in enumerate(candidates):
         item = by_index.get(i)
@@ -329,6 +342,7 @@ async def discover_candidates(
     topic: str,
     *,
     limit: int = 6,
+    progress_cb: ProgressCallback | None = None,
 ) -> list[PaperCandidate]:
     """Run one scholar-oriented search and return parsed, enriched candidates.
 
@@ -339,10 +353,14 @@ async def discover_candidates(
     query = build_scholar_query(topic)
     limit = max(1, min(int(limit), 10))
     logger.info("discovery query: %s (limit=%d)", query, limit)
+    _emit(progress_cb, f"discovery: running fallback web search query={query!r}")
+    started = time.perf_counter()
     result = await tool.ainvoke({"query": query, "limit": limit})
+    _emit(progress_cb, f"discovery: fallback web search returned in {time.perf_counter() - started:.1f}s")
     text = _coerce_text(result)
     candidates = parse_summaries(text)
-    await _enrich_with_llm(runtime.llm, topic, candidates)
+    _emit(progress_cb, f"discovery: parsed {len(candidates)} candidate(s)")
+    await _enrich_with_llm(runtime.llm, topic, candidates, progress_cb=progress_cb)
     return candidates
 
 
@@ -397,6 +415,7 @@ async def _run_search_agent(
     *,
     max_rounds: int,
     max_tool_calls: int,
+    progress_cb: ProgressCallback | None,
 ) -> tuple[list[str], list[str]]:
     """Tool-calling loop: the LLM picks queries and runs the web-search tools.
 
@@ -422,6 +441,8 @@ async def _run_search_agent(
     calls = 0
 
     for _round in range(max_rounds):
+        _emit(progress_cb, f"discovery: asking model for search step {_round + 1}")
+        started = time.perf_counter()
         try:
             ai = await asyncio.wait_for(
                 llm_with_tools.ainvoke(messages),
@@ -429,7 +450,9 @@ async def _run_search_agent(
             )
         except Exception as exc:  # noqa: BLE001 - fall back to collected results
             logger.warning("search-agent LLM call failed/timed out: %s", exc)
+            _emit(progress_cb, f"discovery: model search step failed/timed out after {time.perf_counter() - started:.1f}s")
             break
+        _emit(progress_cb, f"discovery: model search step returned in {time.perf_counter() - started:.1f}s")
         messages.append(ai)
         tool_calls = getattr(ai, "tool_calls", None) or []
         if not tool_calls:
@@ -452,6 +475,12 @@ async def _run_search_agent(
                 ))
                 continue
             calls += 1
+            query = args.get("query")
+            if query:
+                _emit(progress_cb, f"discovery: running {name} query={str(query)!r}")
+            else:
+                _emit(progress_cb, f"discovery: running {name}")
+            started = time.perf_counter()
             try:
                 text = _coerce_text(
                     await asyncio.wait_for(
@@ -461,6 +490,9 @@ async def _run_search_agent(
                 )
             except Exception as exc:  # noqa: BLE001 - one bad call must not abort
                 text = f"(search failed: {type(exc).__name__}: {exc})"
+                _emit(progress_cb, f"discovery: {name} failed after {time.perf_counter() - started:.1f}s")
+            else:
+                _emit(progress_cb, f"discovery: {name} returned in {time.perf_counter() - started:.1f}s")
             messages.append(ToolMessage(
                 content=text[:8000], tool_call_id=tc_id, name=name,
             ))
@@ -481,6 +513,7 @@ async def _annotate_and_rank(
     user_request: str,
     candidates: list[PaperCandidate],
     limit: int,
+    progress_cb: ProgressCallback | None,
 ) -> list[PaperCandidate]:
     """Annotate (author/year/reason) and rank candidates against the request.
 
@@ -502,6 +535,8 @@ async def _annotate_and_rank(
         '"relevance": float}.'
     )
     human = f"Request: {user_request}\n\nResults:\n{json.dumps(payload, ensure_ascii=False)}"
+    _emit(progress_cb, f"ranking: asking model to rank {len(candidates)} candidate(s)")
+    started = time.perf_counter()
     try:
         resp = await asyncio.wait_for(
             llm.ainvoke([("system", system), ("human", human)]),
@@ -510,7 +545,9 @@ async def _annotate_and_rank(
         data = json.loads(_strip_code_fence(getattr(resp, "content", "") or ""))
     except Exception as exc:  # noqa: BLE001
         logger.warning("annotate/rank failed (%s); using discovery order", exc)
+        _emit(progress_cb, f"ranking: failed/timed out after {time.perf_counter() - started:.1f}s; using discovery order")
         return candidates[:limit]
+    _emit(progress_cb, f"ranking: model returned in {time.perf_counter() - started:.1f}s")
 
     scored: list[tuple[float, PaperCandidate]] = []
     by_index = {item.get("index"): item for item in data if isinstance(item, dict)}
@@ -547,6 +584,7 @@ async def agentic_discover(
     max_rounds: int = 6,
     max_tool_calls: int = 8,
     pool_cap: int = 20,
+    progress_cb: ProgressCallback | None = None,
 ) -> list[PaperCandidate]:
     """LLM-driven discovery: the model chooses the queries, we ground the result.
 
@@ -559,19 +597,32 @@ async def agentic_discover(
     runtime.require_web_tool(SUMMARIES_TOOL)
     if runtime.llm is None:
         logger.info("no LLM configured; using single-query discovery")
-        return await discover_candidates(runtime, user_request, limit=limit)
+        _emit(progress_cb, "discovery: no LLM configured; using fallback search")
+        return await discover_candidates(
+            runtime, user_request, limit=limit, progress_cb=progress_cb
+        )
 
     result_texts, _queries = await _run_search_agent(
-        runtime, user_request, max_rounds=max_rounds, max_tool_calls=max_tool_calls
+        runtime,
+        user_request,
+        max_rounds=max_rounds,
+        max_tool_calls=max_tool_calls,
+        progress_cb=progress_cb,
     )
 
     pool: list[PaperCandidate] = []
     for text in result_texts:
         pool.extend(parse_summaries(text))
     pool = _dedupe_candidates(pool)[:pool_cap]
+    _emit(progress_cb, f"discovery: collected {len(pool)} unique candidate(s)")
 
     if not pool:
         logger.info("agent issued no usable searches; falling back to single query")
-        return await discover_candidates(runtime, user_request, limit=limit)
+        _emit(progress_cb, "discovery: agent search produced no parseable candidates; using fallback search")
+        return await discover_candidates(
+            runtime, user_request, limit=limit, progress_cb=progress_cb
+        )
 
-    return await _annotate_and_rank(runtime.llm, user_request, pool, limit)
+    return await _annotate_and_rank(
+        runtime.llm, user_request, pool, limit, progress_cb=progress_cb
+    )
